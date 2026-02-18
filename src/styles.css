@@ -1,0 +1,210 @@
+:root {
+  font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #132230;
+  background: #f5f7f9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  min-height: 100vh;
+  padding: 1rem;
+}
+
+header h1 {
+  margin: 0;
+}
+
+header p {
+  margin-top: 0.4rem;
+  color: #465b6d;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.panel {
+  background: white;
+  border-radius: 12px;
+  padding: 1rem;
+  border: 1px solid #dbe3ea;
+}
+
+.import-box {
+  background: #f7fbff;
+  border: 1px solid #d5e6f8;
+  border-radius: 10px;
+  padding: 0.6rem;
+  margin-bottom: 0.8rem;
+}
+
+.import-url-form {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.file-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #b8c8d6;
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+  background: #edf6ff;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.file-label input {
+  display: none;
+}
+
+.import-status {
+  margin: 0.5rem 0 0;
+  color: #33556f;
+  font-size: 0.9rem;
+}
+
+.add-gear-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 0.8rem;
+}
+
+input,
+select,
+button {
+  border: 1px solid #b8c8d6;
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.95rem;
+}
+
+button {
+  background: #e9f4ff;
+  cursor: pointer;
+}
+
+.gear-list {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.gear-card {
+  border: 1px solid #dbe3ea;
+  border-radius: 10px;
+  padding: 0.7rem;
+  background: #fafcfe;
+}
+
+.card-top {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.variant-list {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.variant-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.6rem;
+}
+
+.weight-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.weight-cards div {
+  background: #f1f7ff;
+  border: 1px solid #d0e3f8;
+  border-radius: 10px;
+  padding: 0.6rem;
+}
+
+.weight-cards small {
+  display: block;
+  color: #4b6175;
+}
+
+.weight-cards strong {
+  font-size: 1.1rem;
+}
+
+.pack-list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.pack-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1.4fr 80px 100px auto;
+  gap: 0.5rem;
+  align-items: center;
+  border: 1px solid #dbe3ea;
+  border-radius: 10px;
+  padding: 0.55rem;
+}
+
+.pack-row.drag-over {
+  border-color: #1776d2;
+  background: #f0f8ff;
+}
+
+.pack-row.inactive {
+  opacity: 0.65;
+}
+
+.pack-main small {
+  display: block;
+  color: #5f7385;
+}
+
+.line-weight {
+  font-weight: 600;
+}
+
+.hint {
+  color: #5f7385;
+  font-style: italic;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .pack-row {
+    grid-template-columns: 1fr;
+  }
+
+  .import-url-form {
+    grid-template-columns: 1fr;
+  }
+}
