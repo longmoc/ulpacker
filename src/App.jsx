@@ -1,13 +1,276 @@
 import React, { useEffect, useMemo, useState } from "react";
 
-const STORAGE_KEY = "ulpacker.v1";
+const STORAGE_KEY = "ulpacker.v3";
+const PIE_COLORS = ["#1d4ed8", "#059669", "#d97706", "#dc2626", "#7c3aed", "#0e7490", "#a16207"];
+
+function id() {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function parseNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function normalizeWeightType(value) {
+  return value === "worn" || value === "consumable" ? value : "base";
+}
+
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeCategories(value) {
+  const list = Array.isArray(value)
+    ? value
+    : String(value || "")
+        .split(",")
+        .map((item) => item.trim());
+  const cleaned = list.filter(Boolean);
+  return cleaned.length > 0 ? [...new Set(cleaned)] : ["Uncategorized"];
+}
+
+function primaryCategory(gearOrCategories) {
+  if (Array.isArray(gearOrCategories)) return normalizeCategories(gearOrCategories)[0];
+  return normalizeCategories(gearOrCategories?.categories || gearOrCategories?.category || [])[0];
+}
+
+function gearMergeKey(name, itemType) {
+  return `${normalizeText(name)}||${normalizeText(itemType)}`;
+}
+
+function variantsFromWeights(weights) {
+  return weights.map((weight, idx) => ({
+    id: id(),
+    name: idx === 0 ? "Default" : `Variant ${idx + 1}`,
+    weight
+  }));
+}
+
+function normalizeVariants(variants) {
+  const raw = Array.isArray(variants) && variants.length > 0 ? variants : [{ weight: 0 }];
+  const nonZeroWeights = [];
+  for (const variant of raw) {
+    const weight = Math.max(0, Math.round(parseNumber(variant?.weight, 0)));
+    if (weight > 0 && !nonZeroWeights.includes(weight)) nonZeroWeights.push(weight);
+  }
+  if (nonZeroWeights.length > 0) {
+    return variantsFromWeights(nonZeroWeights);
+  }
+  return [{ id: id(), name: "Default", weight: 0 }];
+}
+
+function mergeVariants(existingVariants, incomingVariants) {
+  return normalizeVariants([...(existingVariants || []), ...(incomingVariants || [])]);
+}
+
+function mergeGears(gears) {
+  const byKey = new Map();
+  const idMap = new Map();
+
+  for (const gear of gears) {
+    const key = gearMergeKey(gear.name, gear.itemType);
+    const normalized = {
+      ...gear,
+      categories: normalizeCategories(gear.categories || gear.category || []),
+      variants: normalizeVariants(gear.variants || [])
+    };
+
+    if (!byKey.has(key)) {
+      byKey.set(key, normalized);
+      idMap.set(gear.id, normalized.id);
+      continue;
+    }
+
+    const existing = byKey.get(key);
+    existing.categories = normalizeCategories([...existing.categories, ...normalized.categories]);
+    existing.variants = mergeVariants(existing.variants, normalized.variants);
+    if (!existing.description && normalized.description) existing.description = normalized.description;
+    if (!existing.notes && normalized.notes) existing.notes = normalized.notes;
+    idMap.set(gear.id, existing.id);
+  }
+
+  return {
+    gears: [...byKey.values()],
+    idMap
+  };
+}
+
+function mergeOrCreateGear(prevGears, incoming) {
+  const normalizedIncoming = {
+    id: incoming.id || id(),
+    name: (incoming.name || "").trim() || "Unnamed gear",
+    categories: normalizeCategories(incoming.categories || incoming.category || []),
+    itemType: (incoming.itemType || "").trim(),
+    description: (incoming.description || "").trim(),
+    notes: incoming.notes || "",
+    variants: normalizeVariants(incoming.variants || [])
+  };
+
+  const key = gearMergeKey(normalizedIncoming.name, normalizedIncoming.itemType);
+  const index = prevGears.findIndex((gear) => gearMergeKey(gear.name, gear.itemType) === key);
+  if (index === -1) {
+    return { gears: [...prevGears, normalizedIncoming], gear: normalizedIncoming };
+  }
+
+  const existing = prevGears[index];
+  const merged = {
+    ...existing,
+    categories: normalizeCategories([...(existing.categories || []), ...normalizedIncoming.categories]),
+    description: existing.description || normalizedIncoming.description,
+    notes: existing.notes || normalizedIncoming.notes,
+    variants: mergeVariants(existing.variants, normalizedIncoming.variants)
+  };
+
+  const next = [...prevGears];
+  next[index] = merged;
+  return { gears: next, gear: merged };
+}
+
+function gramsToKg(grams) {
+  return `${(grams / 1000).toFixed(2)} kg`;
+}
+
+function textContent(node, fallback = "") {
+  return (node?.textContent || fallback).replace(/\s+/g, " ").trim();
+}
+
+function createEmptyDraft(category = "") {
+  return {
+    name: "",
+    itemType: "",
+    quantity: 1,
+    weight: 0,
+    weightType: "base",
+    gearId: "",
+    variantId: "",
+    category
+  };
+}
+
+function CategoryChipsInput({ categories, onChange, placeholder = "Type and press Enter" }) {
+  const [input, setInput] = useState("");
+  const tags = normalizeCategories(categories);
+
+  function addTag(raw) {
+    const trimmed = String(raw || "").trim();
+    if (!trimmed) return;
+    const lower = normalizeText(trimmed);
+    if (tags.some((tag) => normalizeText(tag) === lower)) return;
+    onChange([...tags, trimmed]);
+  }
+
+  function removeTag(tag) {
+    const next = tags.filter((item) => item !== tag);
+    onChange(next.length > 0 ? next : ["Uncategorized"]);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addTag(input);
+      setInput("");
+    }
+    if (e.key === "Backspace" && !input && tags.length > 0) {
+      removeTag(tags[tags.length - 1]);
+    }
+  }
+
+  return (
+    <div className="chips-input">
+      <div className="chips-list">
+        {tags.map((tag) => (
+          <span key={tag} className="chip-tag">
+            {tag}
+            <button type="button" onClick={() => removeTag(tag)}>
+              ×
+            </button>
+          </span>
+        ))}
+      </div>
+      <input
+        value={input}
+        placeholder={placeholder}
+        onChange={(e) => setInput(e.target.value)}
+        onBlur={() => {
+          addTag(input);
+          setInput("");
+        }}
+        onKeyDown={handleKeyDown}
+      />
+    </div>
+  );
+}
+
+function ConsumableIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <path
+        d="M9 3h6l1 3v4a4 4 0 0 1 4 4v3h-2v4H6v-4H4v-3a4 4 0 0 1 4-4V6l1-3Zm2 3v4h2V6h-2Zm-3 6a2 2 0 0 0-2 2v1h12v-1a2 2 0 0 0-2-2H8Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function WornIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <path
+        d="M9 3h6l1 2 3 1v4h-2v11H7V10H5V6l3-1 1-2Zm1.2 2-.6 1.2-1.6.5v1.3h8V6.7l-1.6-.5L13.8 5h-3.6Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function ensurePackDefaults(data) {
+  const packs = Array.isArray(data.packs) && data.packs.length > 0
+    ? data.packs.map((pack) => ({
+        id: pack.id || id(),
+        name: pack.name || "Unnamed Pack",
+        description: pack.description || "",
+        createdAt: pack.createdAt || new Date().toISOString()
+      }))
+    : [
+        {
+          id: id(),
+          name: "My First Pack",
+          description: "",
+          createdAt: new Date().toISOString()
+        }
+      ];
+
+  const primaryPackId = packs[0].id;
+
+  const packItems = Array.isArray(data.packItems)
+    ? data.packItems
+        .map((item) => ({
+          id: item.id || id(),
+          packId: item.packId || primaryPackId,
+          gearId: item.gearId,
+          variantId: item.variantId || "",
+          category: item.category || "",
+          quantity: Math.max(0, parseNumber(item.quantity, 1)),
+          weight: item.weight,
+          weightType: normalizeWeightType(item.weightType)
+        }))
+        .filter((item) => Boolean(item.gearId))
+    : [];
+
+  return { packs, packItems };
+}
 
 const defaultData = {
   gears: [
     {
       id: id(),
       name: "Balo",
-      category: "Pack",
+      categories: ["Pack"],
+      itemType: "",
+      description: "",
       notes: "",
       variants: [
         { id: id(), name: "40L", weight: 920 },
@@ -17,100 +280,109 @@ const defaultData = {
     {
       id: id(),
       name: "Áo mưa",
-      category: "Clothing",
+      categories: ["Clothing"],
+      itemType: "",
+      description: "",
       notes: "",
       variants: [{ id: id(), name: "Mặc định", weight: 180 }]
     }
   ],
+  packs: [
+    {
+      id: id(),
+      name: "My First Pack",
+      description: "",
+      createdAt: new Date().toISOString()
+    }
+  ],
   packItems: []
 };
-
-function id() {
-  return typeof crypto !== "undefined" && crypto.randomUUID
-    ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
 
 function readStorage() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaultData;
     const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.gears) || !Array.isArray(parsed.packItems)) {
-      return defaultData;
-    }
-    const gears = parsed.gears
+    if (!parsed || !Array.isArray(parsed.gears)) return defaultData;
+
+    const parsedGears = parsed.gears
       .map((gear) => {
         if (!gear || typeof gear !== "object") return null;
-        const variants = Array.isArray(gear.variants) && gear.variants.length > 0
-          ? gear.variants
-              .map((variant) => ({
-                id: variant?.id || id(),
-                name: variant?.name || "Mặc định",
-                weight: Math.max(0, parseNumber(variant?.weight, 0))
-              }))
-              .filter(Boolean)
-          : [{ id: id(), name: "Mặc định", weight: 0 }];
         return {
           id: gear.id || id(),
           name: gear.name || "Unnamed gear",
-          category: gear.category || "",
+          categories: normalizeCategories(gear.categories || gear.category || []),
+          itemType: gear.itemType || "",
+          description: gear.description || "",
           notes: gear.notes || "",
-          variants
+          variants: normalizeVariants(gear.variants)
         };
       })
       .filter(Boolean);
 
+    const merged = mergeGears(parsedGears);
+    const gears = merged.gears;
+
+    const withPackDefaults = ensurePackDefaults(parsed);
     const validGearIds = new Set(gears.map((gear) => gear.id));
-    const packItems = parsed.packItems
+    const validPackIds = new Set(withPackDefaults.packs.map((pack) => pack.id));
+
+    const packItems = withPackDefaults.packItems
       .map((item) => {
-        if (!item || typeof item !== "object" || !validGearIds.has(item.gearId)) return null;
+        const remappedGearId = merged.idMap.get(item.gearId) || item.gearId;
+        if (!validGearIds.has(remappedGearId)) return null;
+        if (!validPackIds.has(item.packId)) return null;
+        const gear = gears.find((g) => g.id === remappedGearId);
+        const fallbackVariant = gear?.variants?.[0];
         return {
-          id: item.id || id(),
-          gearId: item.gearId,
-          variantId: item.variantId || "",
-          quantity: Math.max(0, parseNumber(item.quantity, 1))
+          ...item,
+          gearId: remappedGearId,
+          variantId:
+            item.variantId && gear?.variants?.some((v) => v.id === item.variantId)
+              ? item.variantId
+              : fallbackVariant?.id || "",
+          category: item.category || primaryCategory(gear),
+          weight: Number.isFinite(Number(item.weight))
+            ? Math.max(0, parseNumber(item.weight, 0))
+            : Math.max(0, parseNumber(fallbackVariant?.weight, 0))
         };
       })
       .filter(Boolean);
 
-    return { gears, packItems };
+    return {
+      gears,
+      packs: withPackDefaults.packs,
+      packItems
+    };
   } catch {
     return defaultData;
   }
 }
 
-function gramsToKg(grams) {
-  return `${(grams / 1000).toFixed(2)} kg`;
-}
-
 function reorder(array, fromIndex, toIndex) {
-  if (toIndex < 0 || toIndex >= array.length) return array;
+  if (fromIndex < 0 || toIndex < 0 || fromIndex >= array.length || toIndex >= array.length) {
+    return array;
+  }
   const next = [...array];
   const [moved] = next.splice(fromIndex, 1);
   next.splice(toIndex, 0, moved);
   return next;
 }
 
-function textContent(node, fallback = "") {
-  return (node?.textContent || fallback).replace(/\s+/g, " ").trim();
-}
-
-function parseNumber(value, fallback = 0) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+function mutatePackItemsForPack(prev, packId, mutate) {
+  const items = prev.filter((item) => item.packId === packId);
+  const others = prev.filter((item) => item.packId !== packId);
+  return [...others, ...mutate(items)];
 }
 
 function unitToGrams(weight, unit) {
   const normalizedUnit = String(unit || "").toLowerCase().trim();
   const num = parseNumber(weight, 0);
   if (!num) return 0;
-  if (normalizedUnit === "g" || normalizedUnit === "gram" || normalizedUnit === "grams") return num;
-  if (normalizedUnit === "kg" || normalizedUnit === "kilogram" || normalizedUnit === "kilograms") return num * 1000;
-  if (normalizedUnit === "oz" || normalizedUnit === "ounce" || normalizedUnit === "ounces")
-    return num * 28.3495;
-  if (normalizedUnit === "lb" || normalizedUnit === "lbs" || normalizedUnit === "pound" || normalizedUnit === "pounds")
-    return num * 453.592;
+  if (normalizedUnit === "g") return num;
+  if (normalizedUnit === "kg") return num * 1000;
+  if (normalizedUnit === "oz") return num * 28.3495;
+  if (normalizedUnit === "lb") return num * 453.592;
   return num;
 }
 
@@ -140,12 +412,20 @@ function parseCsvLine(line) {
   return cols;
 }
 
+function extractVariantFromName(name) {
+  const source = (name || "").trim();
+  const match = source.match(/\(([^)]+)\)\s*$/);
+  return match ? match[1].trim() : "";
+}
+
 function parseLighterpackCsv(text) {
-  const lines = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  const lines = text.split(/\r?\n/).filter((line) => line.trim());
   if (lines.length < 2) return [];
+
   const headers = parseCsvLine(lines[0]).map((h) => h.toLowerCase());
   const idx = {
     name: headers.findIndex((h) => h.includes("name") || h.includes("item")),
+    description: headers.findIndex((h) => h.includes("description")),
     category: headers.findIndex((h) => h.includes("category")),
     qty: headers.findIndex((h) => h === "qty" || h.includes("quantity")),
     weight: headers.findIndex((h) => h.includes("weight")),
@@ -156,19 +436,23 @@ function parseLighterpackCsv(text) {
 
   return lines
     .slice(1)
-    .map((line) => parseCsvLine(line))
+    .map(parseCsvLine)
     .map((cols) => {
       const name = (cols[idx.name] || "").trim();
-      if (!name) return null;
-      const grams = Math.round(unitToGrams(cols[idx.weight], cols[idx.unit]));
-      const rawQty = Math.max(0, parseNumber(cols[idx.qty], 1));
+      const description = (cols[idx.description] || "").trim();
+      if (!name && !description) return null;
+
       const isWorn = /(yes|true|1)/i.test(cols[idx.worn] || "");
       const isConsumable = /(yes|true|1)/i.test(cols[idx.consumable] || "");
+
       return {
         name,
+        description,
         category: (cols[idx.category] || "").trim(),
-        grams,
-        quantity: isWorn || isConsumable ? 0 : rawQty
+        grams: Math.round(unitToGrams(cols[idx.weight], cols[idx.unit])),
+        quantity: Math.max(0, parseNumber(cols[idx.qty], 1)),
+        weightType: isWorn ? "worn" : isConsumable ? "consumable" : "base",
+        variant: extractVariantFromName(name)
       };
     })
     .filter(Boolean);
@@ -180,21 +464,24 @@ function parseLighterpackHtml(html) {
   const categories = [...doc.querySelectorAll(".lpCategory")];
   const items = categories.flatMap((categoryNode) => {
     const category = textContent(categoryNode.querySelector(".lpCategoryName"), "");
-    const rows = [...categoryNode.querySelectorAll(".lpItem")];
-    return rows
+    return [...categoryNode.querySelectorAll(".lpItem")]
       .map((row) => {
         const name = textContent(row.querySelector(".lpName"), "");
-        if (!name) return null;
-        const quantity = Math.max(0, parseNumber(textContent(row.querySelector(".lpQtyCell")), 1));
+        const description = textContent(row.querySelector(".lpDescription"), "");
+        if (!name && !description) return null;
+
         const mg = parseNumber(row.querySelector(".lpWeightCell .lpMG")?.value, 0);
-        const grams = Math.max(0, Math.round(mg / 1000));
         const isWorn = Boolean(row.querySelector(".lpWorn.lpActive"));
         const isConsumable = Boolean(row.querySelector(".lpConsumable.lpActive"));
+
         return {
           name,
+          description,
           category,
-          grams,
-          quantity: isWorn || isConsumable ? 0 : quantity
+          grams: Math.round(mg / 1000),
+          quantity: Math.max(0, parseNumber(textContent(row.querySelector(".lpQtyCell")), 1)),
+          weightType: isWorn ? "worn" : isConsumable ? "consumable" : "base",
+          variant: extractVariantFromName(name)
         };
       })
       .filter(Boolean);
@@ -202,161 +489,520 @@ function parseLighterpackHtml(html) {
   return { title, items };
 }
 
+function mapImportedEntry(entry, importConfig) {
+  const originalName = (entry.name || "").trim();
+  const originalDescription = (entry.description || "").trim();
+  const category = (entry.category || "").trim();
+
+  if (importConfig.mappingMode === "description_to_name") {
+    return {
+      name: originalDescription || originalName || "Unnamed",
+      category,
+      itemType: originalName || (importConfig.autoFillItemTypeFromCategory ? category : ""),
+      description: importConfig.descriptionSource === "variant" ? (entry.variant || "") : "",
+      grams: Math.max(0, parseNumber(entry.grams, 0)),
+      quantity: Math.max(0, parseNumber(entry.quantity, 1)),
+      weightType: normalizeWeightType(entry.weightType)
+    };
+  }
+
+  return {
+    name: originalName || originalDescription || "Unnamed",
+    category,
+    itemType: importConfig.autoFillItemTypeFromCategory ? category : "",
+    description: originalDescription,
+    grams: Math.max(0, parseNumber(entry.grams, 0)),
+    quantity: Math.max(0, parseNumber(entry.quantity, 1)),
+    weightType: normalizeWeightType(entry.weightType)
+  };
+}
+
+function buildPieSegments(categoryRows) {
+  const total = categoryRows.reduce((sum, row) => sum + row.weight, 0);
+  if (!total) return [];
+
+  let cursor = 0;
+  return categoryRows.map((row, index) => {
+    const value = (row.weight / total) * 100;
+    const from = cursor;
+    const to = cursor + value;
+    cursor = to;
+    return {
+      ...row,
+      color: PIE_COLORS[index % PIE_COLORS.length],
+      from,
+      to,
+      percent: value
+    };
+  });
+}
+
+function polarToCartesian(cx, cy, r, angleDeg) {
+  const angle = (angleDeg - 90) * (Math.PI / 180);
+  return {
+    x: cx + r * Math.cos(angle),
+    y: cy + r * Math.sin(angle)
+  };
+}
+
+function describeDonutArc(cx, cy, outerR, innerR, startDeg, endDeg) {
+  const clampedEnd = Math.max(startDeg + 0.01, endDeg);
+  const outerStart = polarToCartesian(cx, cy, outerR, startDeg);
+  const outerEnd = polarToCartesian(cx, cy, outerR, clampedEnd);
+  const innerStart = polarToCartesian(cx, cy, innerR, clampedEnd);
+  const innerEnd = polarToCartesian(cx, cy, innerR, startDeg);
+  const largeArc = clampedEnd - startDeg > 180 ? 1 : 0;
+
+  return [
+    `M ${outerStart.x} ${outerStart.y}`,
+    `A ${outerR} ${outerR} 0 ${largeArc} 1 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${innerStart.x} ${innerStart.y}`,
+    `A ${innerR} ${innerR} 0 ${largeArc} 0 ${innerEnd.x} ${innerEnd.y}`,
+    "Z"
+  ].join(" ");
+}
+
 export default function App() {
   const initial = readStorage();
+
   const [gears, setGears] = useState(initial.gears);
+  const [packs, setPacks] = useState(initial.packs);
   const [packItems, setPackItems] = useState(initial.packItems);
+  const [activePackId, setActivePackId] = useState(initial.packs[0]?.id || "");
   const [dragOverIndex, setDragOverIndex] = useState(null);
-  const [importUrl, setImportUrl] = useState("");
-  const [importStatus, setImportStatus] = useState("");
-  const [importing, setImporting] = useState(false);
+
+  const [newPack, setNewPack] = useState({ name: "", description: "" });
   const [newGear, setNewGear] = useState({
     name: "",
-    category: "",
-    variantName: "Mặc định",
+    categories: ["Uncategorized"],
+    itemType: "",
+    description: "",
+    variantName: "Default",
     variantWeight: ""
   });
 
+  const [importUrl, setImportUrl] = useState("");
+  const [importStatus, setImportStatus] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [view, setView] = useState("packs");
+  const [chartHover, setChartHover] = useState(null);
+  const [categoryDrafts, setCategoryDrafts] = useState({});
+  const [libraryQuery, setLibraryQuery] = useState("");
+  const [expandedGears, setExpandedGears] = useState({});
+  const [libraryPackTarget, setLibraryPackTarget] = useState({});
+  const [importConfig, setImportConfig] = useState({
+    mappingMode: "name_to_name",
+    autoFillItemTypeFromCategory: true,
+    descriptionSource: "empty"
+  });
+
+  const activePack = packs.find((pack) => pack.id === activePackId) || packs[0] || null;
+
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ gears, packItems }));
-  }, [gears, packItems]);
+    if (!activePack && packs.length > 0) {
+      setActivePackId(packs[0].id);
+    }
+  }, [packs, activePack]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ gears, packs, packItems }));
+  }, [gears, packs, packItems]);
 
   useEffect(() => {
     setPackItems((prev) => {
+      const validPackIds = new Set(packs.map((pack) => pack.id));
       let changed = false;
       const next = prev
         .map((item) => {
           const gear = gears.find((g) => g.id === item.gearId);
-          if (!gear || gear.variants.length === 0) {
+          if (!gear || gear.variants.length === 0 || !validPackIds.has(item.packId)) {
             changed = true;
             return null;
           }
-          const variantExists = gear.variants.some((v) => v.id === item.variantId);
-          if (!variantExists) {
+          const fallbackVariantId =
+            item.variantId && gear.variants.some((v) => v.id === item.variantId)
+              ? item.variantId
+              : gear.variants[0].id;
+          const fallbackCategory = item.category || primaryCategory(gear);
+          const fallbackWeight = Number.isFinite(Number(item.weight))
+            ? Math.max(0, parseNumber(item.weight, 0))
+            : Math.max(0, parseNumber(gear.variants.find((v) => v.id === fallbackVariantId)?.weight, 0));
+          if (fallbackVariantId !== item.variantId) {
             changed = true;
-            return { ...item, variantId: gear.variants[0].id };
+            return { ...item, variantId: fallbackVariantId, category: fallbackCategory, weight: fallbackWeight };
+          }
+          const normalized = normalizeWeightType(item.weightType);
+          if (normalized !== item.weightType || fallbackWeight !== item.weight || fallbackCategory !== item.category) {
+            changed = true;
+            return { ...item, weightType: normalized, weight: fallbackWeight, category: fallbackCategory };
           }
           return item;
         })
         .filter(Boolean);
+
       return changed ? next : prev;
     });
-  }, [gears]);
+  }, [gears, packs]);
 
-  const packRows = useMemo(() => {
+  const activePackRows = useMemo(() => {
+    if (!activePack) return [];
     return packItems
+      .filter((item) => item.packId === activePack.id)
       .map((item) => {
         const gear = gears.find((g) => g.id === item.gearId);
         if (!gear) return null;
-        const variant = gear.variants.find((v) => v.id === item.variantId) || gear.variants[0];
         return {
           ...item,
           gear,
-          variant,
-          lineWeight: (variant?.weight || 0) * Number(item.quantity || 0)
+          category: item.category || primaryCategory(gear),
+          lineWeight: Math.max(0, Number(item.quantity || 0)) * Math.max(0, parseNumber(item.weight, 0))
         };
       })
       .filter(Boolean);
-  }, [packItems, gears]);
+  }, [packItems, gears, activePack]);
 
-  const totalWeight = packRows.reduce((sum, row) => sum + row.lineWeight, 0);
-  const carriedWeight = packRows
-    .filter((row) => Number(row.quantity) > 0)
-    .reduce((sum, row) => sum + row.lineWeight, 0);
+  const carriedRows = activePackRows.filter((row) => Number(row.quantity) > 0);
+  const totals = {
+    list: activePackRows.reduce((sum, row) => sum + row.lineWeight, 0),
+    carried: carriedRows.reduce((sum, row) => sum + row.lineWeight, 0),
+    base: carriedRows.filter((row) => row.weightType === "base").reduce((sum, row) => sum + row.lineWeight, 0),
+    worn: carriedRows.filter((row) => row.weightType === "worn").reduce((sum, row) => sum + row.lineWeight, 0),
+    consumable: carriedRows
+      .filter((row) => row.weightType === "consumable")
+      .reduce((sum, row) => sum + row.lineWeight, 0)
+  };
+
+  const categoryRows = useMemo(() => {
+    const grouped = new Map();
+    for (const row of carriedRows) {
+      const key = row.category || primaryCategory(row.gear);
+      grouped.set(key, (grouped.get(key) || 0) + row.lineWeight);
+    }
+    return [...grouped.entries()]
+      .map(([category, weight]) => ({ category, weight }))
+      .sort((a, b) => b.weight - a.weight);
+  }, [carriedRows]);
+
+  const pieSegments = buildPieSegments(categoryRows);
+  const packGroups = useMemo(() => {
+    const grouped = new Map();
+    for (const row of activePackRows) {
+      const category = row.category || primaryCategory(row.gear);
+      if (!grouped.has(category)) {
+        grouped.set(category, { category, rows: [], totalWeight: 0, gearIds: new Set() });
+      }
+      const group = grouped.get(category);
+      group.rows.push(row);
+      group.totalWeight += row.lineWeight;
+      group.gearIds.add(row.gear.id);
+    }
+    const sorted = [...grouped.values()].sort((a, b) => b.totalWeight - a.totalWeight);
+    if (sorted.length === 0) {
+      return [{ category: "Uncategorized", rows: [], totalWeight: 0, gearIds: new Set() }];
+    }
+    return sorted;
+  }, [activePackRows]);
+  const filteredGears = useMemo(() => {
+    const q = normalizeText(libraryQuery);
+    if (!q) return gears;
+    return gears.filter((gear) => {
+      const categories = (gear.categories || []).join(" ");
+      return normalizeText(`${gear.name} ${gear.itemType} ${gear.description} ${categories}`).includes(q);
+    });
+  }, [gears, libraryQuery]);
+
+  function createPack(e) {
+    e.preventDefault();
+    if (!newPack.name.trim()) return;
+    const pack = {
+      id: id(),
+      name: newPack.name.trim(),
+      description: newPack.description.trim(),
+      createdAt: new Date().toISOString()
+    };
+    setPacks((prev) => [pack, ...prev]);
+    setActivePackId(pack.id);
+    setNewPack({ name: "", description: "" });
+  }
+
+  function updateActivePack(patch) {
+    if (!activePack) return;
+    setPacks((prev) => prev.map((pack) => (pack.id === activePack.id ? { ...pack, ...patch } : pack)));
+  }
+
+  function deleteActivePack() {
+    if (!activePack || packs.length <= 1) return;
+    const targetId = activePack.id;
+    const nextPacks = packs.filter((pack) => pack.id !== targetId);
+    setPacks(nextPacks);
+    setPackItems((prev) => prev.filter((item) => item.packId !== targetId));
+    setActivePackId(nextPacks[0]?.id || "");
+  }
+
+  function renameGroupCategory(oldCategory, nextCategory) {
+    const trimmed = (nextCategory || "").trim() || "Uncategorized";
+    const targetGroup = packGroups.find((group) => group.category === oldCategory);
+    if (!targetGroup) return;
+    const ids = targetGroup.gearIds;
+    setPackItems((prev) =>
+      prev.map((item) =>
+        item.packId === activePack?.id && item.category === oldCategory ? { ...item, category: trimmed } : item
+      )
+    );
+    setGears((prev) =>
+      prev.map((gear) =>
+        ids.has(gear.id) ? { ...gear, categories: normalizeCategories([...(gear.categories || []), trimmed]) } : gear
+      )
+    );
+  }
+
+  function toggleWeightFlag(itemId, targetType) {
+    setPackItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== itemId) return item;
+        const current = normalizeWeightType(item.weightType);
+        return { ...item, weightType: current === targetType ? "base" : targetType };
+      })
+    );
+  }
+
+  function getDraft(category) {
+    return categoryDrafts[category] || createEmptyDraft(category);
+  }
+
+  function updateDraft(category, patch) {
+    setCategoryDrafts((prev) => {
+      const current = prev[category] || createEmptyDraft(category);
+      return { ...prev, [category]: { ...current, ...patch, category } };
+    });
+  }
+
+  function resetDraft(category) {
+    setCategoryDrafts((prev) => ({ ...prev, [category]: createEmptyDraft(category) }));
+  }
+
+  function matchingGears(keyword) {
+    const lower = (keyword || "").trim().toLowerCase();
+    if (!lower) return [];
+    return gears
+      .filter((gear) => gear.name.toLowerCase().includes(lower))
+      .slice(0, 5);
+  }
+
+  function applyGearSuggestion(category, gearId) {
+    const gear = gears.find((item) => item.id === gearId);
+    if (!gear) return;
+    const variant = gear.variants[0];
+    updateDraft(category, {
+      gearId: gear.id,
+      variantId: variant?.id || "",
+      name: gear.name,
+      itemType: gear.itemType || "",
+      weight: Math.max(0, parseNumber(variant?.weight, 0))
+    });
+  }
+
+  function applyDraftVariant(category, variantId) {
+    const draft = getDraft(category);
+    const gear = gears.find((item) => item.id === draft.gearId);
+    if (!gear) return;
+    const variant = gear.variants.find((item) => item.id === variantId);
+    updateDraft(category, {
+      variantId,
+      weight: Math.max(0, parseNumber(variant?.weight, draft.weight))
+    });
+  }
+
+  function addItemFromDraft(category) {
+    if (!activePack) return;
+    const normalizedCategory = (category || "").trim() || "Uncategorized";
+    const draft = getDraft(normalizedCategory);
+    const itemName = (draft.name || "").trim();
+    if (!itemName) return;
+
+    const merged = mergeOrCreateGear(gears, {
+      id: draft.gearId || id(),
+      name: itemName,
+      categories: [normalizedCategory],
+      itemType: (draft.itemType || "").trim(),
+      description: "",
+      variants: [{ id: draft.variantId || id(), name: "Default", weight: Math.max(0, parseNumber(draft.weight, 0)) }]
+    });
+    const gear = merged.gear;
+    setGears(merged.gears);
+
+    const variantId = gear.variants.find((variant) => variant.id === draft.variantId)?.id || gear.variants[0]?.id || "";
+
+    const item = {
+      id: id(),
+      packId: activePack.id,
+      gearId: gear.id,
+      variantId,
+      category: normalizedCategory,
+      quantity: Math.max(0, parseNumber(draft.quantity, 1)),
+      weight: Math.max(0, parseNumber(draft.weight, 0)),
+      weightType: normalizeWeightType(draft.weightType)
+    };
+    setPackItems((prev) => [...prev, item]);
+    resetDraft(normalizedCategory);
+  }
 
   function addGear(e) {
     e.preventDefault();
     if (!newGear.name.trim()) return;
-    const weight = Number(newGear.variantWeight);
-    const gear = {
-      id: id(),
-      name: newGear.name.trim(),
-      category: newGear.category.trim(),
-      notes: "",
-      variants: [
-        {
-          id: id(),
-          name: newGear.variantName.trim() || "Mặc định",
-          weight: Number.isFinite(weight) && weight >= 0 ? weight : 0
-        }
-      ]
-    };
-    setGears((prev) => [gear, ...prev]);
-    setNewGear({ name: "", category: "", variantName: "Mặc định", variantWeight: "" });
+    const weight = Math.max(0, parseNumber(newGear.variantWeight, 0));
+    setGears((prev) =>
+      mergeOrCreateGear(prev, {
+        id: id(),
+        name: newGear.name.trim(),
+        categories: normalizeCategories(newGear.categories),
+        itemType: newGear.itemType.trim(),
+        description: newGear.description.trim(),
+        notes: "",
+        variants: [{ id: id(), name: newGear.variantName.trim() || "Default", weight }]
+      }).gears
+    );
+    setNewGear({
+      name: "",
+      categories: ["Uncategorized"],
+      itemType: "",
+      description: "",
+      variantName: "Default",
+      variantWeight: ""
+    });
+  }
+
+  function toggleGearExpanded(gearId) {
+    setExpandedGears((prev) => ({ ...prev, [gearId]: !prev[gearId] }));
+  }
+
+  function removeGearFromLibrary(gearId) {
+    setGears((prev) => prev.filter((gear) => gear.id !== gearId));
+    setPackItems((prev) => prev.filter((item) => item.gearId !== gearId));
+    setExpandedGears((prev) => {
+      const next = { ...prev };
+      delete next[gearId];
+      return next;
+    });
+    setLibraryPackTarget((prev) => {
+      const next = { ...prev };
+      delete next[gearId];
+      return next;
+    });
   }
 
   function updateGear(gearId, patch) {
-    setGears((prev) => prev.map((g) => (g.id === gearId ? { ...g, ...patch } : g)));
+    setGears((prev) => prev.map((gear) => (gear.id === gearId ? { ...gear, ...patch } : gear)));
   }
 
   function addVariant(gearId) {
     setGears((prev) =>
-      prev.map((g) =>
-        g.id === gearId
+      prev.map((gear) =>
+        gear.id === gearId
           ? {
-              ...g,
-              variants: [...g.variants, { id: id(), name: `Biến thể ${g.variants.length + 1}`, weight: 0 }]
+              ...gear,
+              variants: [
+                ...gear.variants,
+                { id: id(), name: `Variant ${gear.variants.length + 1}`, weight: 0 }
+              ]
             }
-          : g
+          : gear
       )
     );
   }
 
   function updateVariant(gearId, variantId, patch) {
     setGears((prev) =>
-      prev.map((g) =>
-        g.id === gearId
+      prev.map((gear) =>
+        gear.id === gearId
           ? {
-              ...g,
-              variants: g.variants.map((v) => (v.id === variantId ? { ...v, ...patch } : v))
+              ...gear,
+              variants: gear.variants.map((variant) =>
+                variant.id === variantId ? { ...variant, ...patch } : variant
+              )
             }
-          : g
+          : gear
       )
     );
   }
 
   function removeVariant(gearId, variantId) {
     setGears((prev) =>
-      prev.map((g) => {
-        if (g.id !== gearId) return g;
-        if (g.variants.length <= 1) return g;
-        return { ...g, variants: g.variants.filter((v) => v.id !== variantId) };
+      prev.map((gear) => {
+        if (gear.id !== gearId || gear.variants.length <= 1) return gear;
+        return {
+          ...gear,
+          variants: gear.variants.filter((variant) => variant.id !== variantId)
+        };
       })
     );
   }
 
   function addToPack(gearId, insertIndex = null) {
-    const gear = gears.find((g) => g.id === gearId);
+    if (!activePack) return;
+    const gear = gears.find((item) => item.id === gearId);
     if (!gear || gear.variants.length === 0) return;
-    const nextItem = {
+
+    setPackItems((prev) =>
+      mutatePackItemsForPack(prev, activePack.id, (items) => {
+        const nextItem = {
+          id: id(),
+          packId: activePack.id,
+          gearId,
+          variantId: gear.variants[0].id,
+          category: primaryCategory(gear),
+          quantity: 1,
+          weight: Math.max(0, parseNumber(gear.variants[0]?.weight, 0)),
+          weightType: "base"
+        };
+        if (insertIndex === null || insertIndex < 0 || insertIndex > items.length - 1) {
+          return [...items, nextItem];
+        }
+        const next = [...items];
+        next.splice(insertIndex, 0, nextItem);
+        return next;
+      })
+    );
+  }
+
+  function addToSpecificPack(gearId, packId) {
+    const target = packs.find((pack) => pack.id === packId);
+    if (!target) return;
+    const gear = gears.find((item) => item.id === gearId);
+    if (!gear || gear.variants.length === 0) return;
+    const newItem = {
       id: id(),
+      packId: target.id,
       gearId,
       variantId: gear.variants[0].id,
-      quantity: 1
+      category: primaryCategory(gear),
+      quantity: 1,
+      weight: Math.max(0, parseNumber(gear.variants[0]?.weight, 0)),
+      weightType: "base"
     };
-    setPackItems((prev) => {
-      if (insertIndex === null || insertIndex > prev.length - 1) {
-        return [...prev, nextItem];
-      }
-      const next = [...prev];
-      next.splice(insertIndex, 0, nextItem);
-      return next;
-    });
+    setPackItems((prev) => [...prev, newItem]);
   }
 
   function onPackDrop(e) {
     e.preventDefault();
+    if (!activePack) return;
     const payload = e.dataTransfer.getData("application/json");
     if (!payload) return;
+
     try {
       const data = JSON.parse(payload);
       if (data.type === "library") {
         addToPack(data.gearId, dragOverIndex);
       }
+
       if (data.type === "pack") {
-        const fromIndex = packItems.findIndex((i) => i.id === data.itemId);
+        const fromIndex = activePackRows.findIndex((row) => row.id === data.itemId);
         if (fromIndex === -1 || dragOverIndex === null) return;
-        setPackItems((prev) => reorder(prev, fromIndex, dragOverIndex));
+
+        setPackItems((prev) =>
+          mutatePackItemsForPack(prev, activePack.id, (items) => reorder(items, fromIndex, dragOverIndex))
+        );
       }
     } catch {
       return;
@@ -366,72 +1012,74 @@ export default function App() {
   }
 
   function importEntries(entries, sourceLabel) {
-    if (!entries.length) {
-      setImportStatus("Không tìm thấy gear hợp lệ để import.");
+    if (!activePack) {
+      setImportStatus("Hãy tạo pack trước khi import.");
       return;
     }
 
-    const nextGears = gears.map((gear) => ({ ...gear, variants: [...gear.variants] }));
+    if (!entries.length) {
+      setImportStatus("Không tìm thấy dữ liệu để import.");
+      return;
+    }
+
+    const mappedEntries = entries.map((entry) => mapImportedEntry(entry, importConfig));
+    let nextGears = gears.map((gear) => ({ ...gear, variants: [...gear.variants], categories: [...(gear.categories || [])] }));
     const importedPackItems = [];
 
-    for (const entry of entries) {
+    for (const entry of mappedEntries) {
       const name = (entry.name || "").trim();
       if (!name) continue;
 
-      const category = (entry.category || "").trim();
-      const grams = Math.max(0, Math.round(parseNumber(entry.grams, 0)));
-      const quantity = Math.max(0, parseNumber(entry.quantity, 1));
-
-      let gear = nextGears.find(
-        (g) => g.name.trim().toLowerCase() === name.toLowerCase() && (g.category || "") === category
-      );
-
-      if (!gear) {
-        gear = {
-          id: id(),
-          name,
-          category,
-          notes: sourceLabel || "",
-          variants: [{ id: id(), name: "Imported", weight: grams }]
-        };
-        nextGears.push(gear);
-      }
-
-      let variant = gear.variants.find((v) => Math.round(v.weight) === grams);
-      if (!variant) {
-        variant = { id: id(), name: `Imported ${gear.variants.length + 1}`, weight: grams };
-        gear.variants = [...gear.variants, variant];
-      }
+      const merged = mergeOrCreateGear(nextGears, {
+        id: id(),
+        name,
+        categories: normalizeCategories(entry.category || []),
+        itemType: (entry.itemType || "").trim(),
+        description: (entry.description || "").trim(),
+        notes: sourceLabel || "",
+        variants: [{ id: id(), name: "Imported", weight: Math.max(0, parseNumber(entry.grams, 0)) }]
+      });
+      nextGears = merged.gears;
+      const gear = merged.gear;
+      const desiredWeight = Math.max(0, parseNumber(entry.grams, 0));
+      const variant = gear.variants.find((v) => Math.round(v.weight) === Math.round(desiredWeight)) || gear.variants[0];
 
       importedPackItems.push({
         id: id(),
+        packId: activePack.id,
         gearId: gear.id,
         variantId: variant.id,
-        quantity
+        category: normalizeCategories(entry.category || [])[0],
+        quantity: entry.quantity,
+        weight: desiredWeight,
+        weightType: normalizeWeightType(entry.weightType)
       });
     }
 
     setGears(nextGears);
     setPackItems((prev) => [...prev, ...importedPackItems]);
-    setImportStatus(`Đã import ${importedPackItems.length} items từ ${sourceLabel || "source"}.`);
+    setImportStatus(`Imported ${importedPackItems.length} items to ${activePack.name}.`);
+    setImportModalOpen(false);
   }
 
   async function handleImportUrl(e) {
     e.preventDefault();
     if (!importUrl.trim()) return;
+
     setImporting(true);
     setImportStatus("");
+
     try {
       const query = new URLSearchParams({ url: importUrl.trim() });
       const response = await fetch(`/api/lighterpack?${query.toString()}`);
       const payload = await response.json();
       if (!response.ok) {
-        throw new Error(payload?.error || "Không fetch được URL.");
+        throw new Error(payload?.error || "Cannot fetch URL.");
       }
       const parsed = parseLighterpackHtml(payload.html || "");
       importEntries(parsed.items, parsed.title);
     } catch (error) {
-      setImportStatus(error.message || "Import URL thất bại.");
+      setImportStatus(error.message || "Import failed.");
     } finally {
       setImporting(false);
     }
@@ -445,7 +1093,7 @@ export default function App() {
       const entries = parseLighterpackCsv(text);
       importEntries(entries, `CSV: ${file.name}`);
     } catch {
-      setImportStatus("Không đọc được file CSV.");
+      setImportStatus("Cannot read CSV.");
     } finally {
       e.target.value = "";
     }
@@ -453,208 +1101,723 @@ export default function App() {
 
   return (
     <div className="app">
-      <header>
+      <header className="topbar">
         <h1>ULPacker</h1>
-        <p>Lưu toàn bộ gear theo thư viện, kéo-thả vào danh sách mang theo, quantity = 0 để tạm không mang.</p>
+        <p>Pack dashboard with reusable gear library, drag-and-drop, and pie-chart analytics.</p>
+        <div className="view-tabs">
+          <button
+            type="button"
+            className={view === "packs" ? "active" : ""}
+            onClick={() => setView("packs")}
+          >
+            Packs
+          </button>
+          <button
+            type="button"
+            className={view === "library" ? "active" : ""}
+            onClick={() => setView("library")}
+          >
+            Gear Library
+          </button>
+        </div>
       </header>
 
-      <main className="layout">
-        <section className="panel">
-          <h2>Thư viện gear</h2>
-          <div className="import-box">
-            <form className="import-url-form" onSubmit={handleImportUrl}>
-              <input
-                placeholder="https://lighterpack.com/r/..."
-                value={importUrl}
-                onChange={(e) => setImportUrl(e.target.value)}
-              />
-              <button type="submit" disabled={importing}>
-                {importing ? "Đang import..." : "Import URL"}
-              </button>
-              <label className="file-label">
-                Import CSV
-                <input type="file" accept=".csv,text/csv" onChange={handleImportCsv} />
-              </label>
-            </form>
-            {importStatus && <p className="import-status">{importStatus}</p>}
+      <main className={`dashboard ${view === "library" ? "library-layout" : ""}`}>
+        {view === "packs" && (
+        <aside className="panel packs-panel">
+          <div className="panel-head">
+            <h2>Packs</h2>
+            <span>{packs.length} total</span>
           </div>
 
-          <form className="add-gear-form" onSubmit={addGear}>
+          <form className="new-pack-form" onSubmit={createPack}>
             <input
-              placeholder="Tên gear"
-              value={newGear.name}
-              onChange={(e) => setNewGear((v) => ({ ...v, name: e.target.value }))}
+              placeholder="Pack name"
+              value={newPack.name}
+              onChange={(e) => setNewPack((prev) => ({ ...prev, name: e.target.value }))}
             />
             <input
-              placeholder="Category"
-              value={newGear.category}
-              onChange={(e) => setNewGear((v) => ({ ...v, category: e.target.value }))}
+              placeholder="Short description"
+              value={newPack.description}
+              onChange={(e) => setNewPack((prev) => ({ ...prev, description: e.target.value }))}
             />
-            <input
-              placeholder="Variant mặc định"
-              value={newGear.variantName}
-              onChange={(e) => setNewGear((v) => ({ ...v, variantName: e.target.value }))}
-            />
-            <input
-              type="number"
-              min="0"
-              placeholder="Weight (gram)"
-              value={newGear.variantWeight}
-              onChange={(e) => setNewGear((v) => ({ ...v, variantWeight: e.target.value }))}
-            />
-            <button type="submit">Thêm gear</button>
+            <button type="submit">Create Pack</button>
           </form>
 
-          <div className="gear-list">
-            {gears.map((gear) => (
-              <article
-                key={gear.id}
-                className="gear-card"
-                draggable
-                onDragStart={(e) =>
-                  e.dataTransfer.setData(
-                    "application/json",
-                    JSON.stringify({ type: "library", gearId: gear.id })
-                  )
-                }
-              >
-                <div className="card-top">
-                  <input
-                    className="name"
-                    value={gear.name}
-                    onChange={(e) => updateGear(gear.id, { name: e.target.value })}
-                  />
-                  <input
-                    className="category"
-                    value={gear.category}
-                    onChange={(e) => updateGear(gear.id, { category: e.target.value })}
-                    placeholder="Category"
-                  />
-                </div>
+          <div className="pack-cards">
+            {packs.map((pack) => {
+              const packWeight = packItems
+                .filter((item) => item.packId === pack.id)
+                .reduce((sum, item) => {
+                  return (
+                    sum +
+                    Math.max(0, parseNumber(item.quantity, 0)) * Math.max(0, parseNumber(item.weight, 0))
+                  );
+                }, 0);
 
-                <div className="variant-list">
-                  {gear.variants.map((variant) => (
-                    <div className="variant-row" key={variant.id}>
-                      <input
-                        value={variant.name}
-                        onChange={(e) => updateVariant(gear.id, variant.id, { name: e.target.value })}
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        value={variant.weight}
-                        onChange={(e) =>
-                          updateVariant(gear.id, variant.id, {
-                            weight: Math.max(0, Number(e.target.value || 0))
-                          })
-                        }
-                      />
-                      <span>g</span>
-                      <button
-                        type="button"
-                        disabled={gear.variants.length <= 1}
-                        onClick={() => removeVariant(gear.id, variant.id)}
-                      >
-                        Xóa
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="card-actions">
-                  <button type="button" onClick={() => addVariant(gear.id)}>
-                    + Variant
-                  </button>
-                  <button type="button" onClick={() => addToPack(gear.id)}>
-                    Thêm vào pack
-                  </button>
-                </div>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <section
-          className="panel dropzone"
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={onPackDrop}
-        >
-          <h2>Pack list (kéo gear từ trái qua)</h2>
-          <div className="weight-cards">
-            <div>
-              <small>Tổng hiện có trong list</small>
-              <strong>{gramsToKg(totalWeight)}</strong>
-            </div>
-            <div>
-              <small>Đang mang (quantity &gt; 0)</small>
-              <strong>{gramsToKg(carriedWeight)}</strong>
-            </div>
-          </div>
-
-          <div className="pack-list">
-            {packRows.length === 0 && <p className="hint">Chưa có gear trong pack list.</p>}
-            {packRows.map((row, index) => (
-              <div
-                key={row.id}
-                className={`pack-row ${dragOverIndex === index ? "drag-over" : ""} ${
-                  Number(row.quantity) === 0 ? "inactive" : ""
-                }`}
-                draggable
-                onDragStart={(e) =>
-                  e.dataTransfer.setData(
-                    "application/json",
-                    JSON.stringify({ type: "pack", itemId: row.id })
-                  )
-                }
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOverIndex(index);
-                }}
-              >
-                <div className="pack-main">
-                  <strong>{row.gear.name}</strong>
-                  <small>{row.gear.category || "Uncategorized"}</small>
-                </div>
-                <select
-                  value={row.variant.id}
-                  onChange={(e) =>
-                    setPackItems((prev) =>
-                      prev.map((item) =>
-                        item.id === row.id ? { ...item, variantId: e.target.value } : item
-                      )
-                    )
-                  }
-                >
-                  {row.gear.variants.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.name} ({v.weight}g)
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  min="0"
-                  value={row.quantity}
-                  onChange={(e) =>
-                    setPackItems((prev) =>
-                      prev.map((item) =>
-                        item.id === row.id
-                          ? { ...item, quantity: Math.max(0, Number(e.target.value || 0)) }
-                          : item
-                      )
-                    )
-                  }
-                />
-                <div className="line-weight">{gramsToKg(row.lineWeight)}</div>
+              return (
                 <button
                   type="button"
-                  onClick={() => setPackItems((prev) => prev.filter((item) => item.id !== row.id))}
+                  key={pack.id}
+                  className={`pack-card ${activePack?.id === pack.id ? "active" : ""}`}
+                  onClick={() => setActivePackId(pack.id)}
                 >
-                  Bỏ khỏi list
+                  <strong>{pack.name}</strong>
+                  <small>{pack.description || "No description"}</small>
+                  <span>{gramsToKg(packWeight)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+        )}
+
+        <section className="panel workspace">
+          {view === "library" && (
+            <>
+              <div className="panel-head">
+                <h2>Gear Library</h2>
+                <span>{gears.length} items</span>
+              </div>
+
+              <section className="library-create">
+                <h3>Add New Gear</h3>
+                <form className="new-gear-form" onSubmit={addGear}>
+                  <label>
+                    <span>Name</span>
+                    <input
+                      value={newGear.name}
+                      onChange={(e) => setNewGear((prev) => ({ ...prev, name: e.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Categories</span>
+                    <CategoryChipsInput
+                      categories={newGear.categories}
+                      onChange={(next) => setNewGear((prev) => ({ ...prev, categories: next }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Item Type</span>
+                    <input
+                      value={newGear.itemType}
+                      onChange={(e) => setNewGear((prev) => ({ ...prev, itemType: e.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Description</span>
+                    <input
+                      value={newGear.description}
+                      onChange={(e) => setNewGear((prev) => ({ ...prev, description: e.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Default Variant</span>
+                    <input
+                      value={newGear.variantName}
+                      onChange={(e) => setNewGear((prev) => ({ ...prev, variantName: e.target.value }))}
+                    />
+                  </label>
+                  <label>
+                    <span>Weight (g)</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={newGear.variantWeight}
+                      onChange={(e) => setNewGear((prev) => ({ ...prev, variantWeight: e.target.value }))}
+                    />
+                  </label>
+                  <button type="submit">Add Gear</button>
+                </form>
+              </section>
+
+              <section className="library-list">
+                <div className="library-toolbar">
+                  <input
+                    value={libraryQuery}
+                    onChange={(e) => setLibraryQuery(e.target.value)}
+                    placeholder="Search by name, category, type"
+                  />
+                </div>
+                <div className="library-table-head">
+                  <span>Name</span>
+                  <span>Item Type</span>
+                  <span>Description</span>
+                  <span>Categories</span>
+                  <span>Variants</span>
+                  <span />
+                </div>
+                <div className="gear-list compact">
+                  {filteredGears.map((gear) => (
+                    <article
+                      key={gear.id}
+                      className="gear-row"
+                      draggable
+                      onDragStart={(e) =>
+                        e.dataTransfer.setData(
+                          "application/json",
+                          JSON.stringify({ type: "library", gearId: gear.id })
+                        )
+                      }
+                    >
+                      <input
+                        value={gear.name}
+                        onChange={(e) => updateGear(gear.id, { name: e.target.value })}
+                      />
+                      <input
+                        value={gear.itemType}
+                        onChange={(e) => updateGear(gear.id, { itemType: e.target.value })}
+                      />
+                      <input
+                        value={gear.description}
+                        onChange={(e) => updateGear(gear.id, { description: e.target.value })}
+                      />
+                      <CategoryChipsInput
+                        categories={gear.categories}
+                        onChange={(next) => updateGear(gear.id, { categories: next })}
+                        placeholder="Add category"
+                      />
+                      <button type="button" className="variant-toggle" onClick={() => toggleGearExpanded(gear.id)}>
+                        {gear.variants.length} variants
+                      </button>
+                      <div className="library-actions">
+                        <select
+                          value={libraryPackTarget[gear.id] || activePackId || packs[0]?.id || ""}
+                          onChange={(e) =>
+                            setLibraryPackTarget((prev) => ({ ...prev, [gear.id]: e.target.value }))
+                          }
+                        >
+                          {packs.map((pack) => (
+                            <option key={pack.id} value={pack.id}>
+                              {pack.name}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            addToSpecificPack(
+                              gear.id,
+                              libraryPackTarget[gear.id] || activePackId || packs[0]?.id || ""
+                            )
+                          }
+                        >
+                          Add to Pack
+                        </button>
+                        <button type="button" className="danger" onClick={() => removeGearFromLibrary(gear.id)}>
+                          Delete
+                        </button>
+                      </div>
+
+                      {expandedGears[gear.id] && (
+                        <div className="variant-editor">
+                          {gear.variants.map((variant) => (
+                            <div className="variant-row compact" key={variant.id}>
+                              <input
+                                value={variant.name}
+                                onChange={(e) => updateVariant(gear.id, variant.id, { name: e.target.value })}
+                              />
+                              <input
+                                type="number"
+                                min="0"
+                                value={variant.weight}
+                                onChange={(e) =>
+                                  updateVariant(gear.id, variant.id, {
+                                    weight: Math.max(0, parseNumber(e.target.value, 0))
+                                  })
+                                }
+                              />
+                              <span>g</span>
+                              <button
+                                type="button"
+                                disabled={gear.variants.length <= 1}
+                                onClick={() => removeVariant(gear.id, variant.id)}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                          <button type="button" onClick={() => addVariant(gear.id)}>
+                            + Variant
+                          </button>
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              </section>
+            </>
+          )}
+
+          {view === "packs" && (
+            <>
+              {!activePack && <p>Create a pack to start.</p>}
+
+              {activePack && (
+                <>
+              <div className="workspace-head">
+                <input
+                  className="pack-name-input"
+                  value={activePack.name}
+                  onChange={(e) => updateActivePack({ name: e.target.value })}
+                />
+                <input
+                  className="pack-desc-input"
+                  value={activePack.description}
+                  onChange={(e) => updateActivePack({ description: e.target.value })}
+                  placeholder="Pack description"
+                />
+                <button type="button" onClick={() => setImportModalOpen(true)}>
+                  Import Pack
+                </button>
+                <button type="button" onClick={() => setView("library")}>
+                  Gear Library
+                </button>
+                <button type="button" disabled={packs.length <= 1} onClick={deleteActivePack}>
+                  Delete Pack
                 </button>
               </div>
-            ))}
-          </div>
+
+              <div className="summary-grid">
+                <div className="summary-card">
+                  <small>Total Carried</small>
+                  <strong>{gramsToKg(totals.carried)}</strong>
+                </div>
+                <div className="summary-card">
+                  <small>Base</small>
+                  <strong>{gramsToKg(totals.base)}</strong>
+                </div>
+                <div className="summary-card">
+                  <small>Consumable</small>
+                  <strong>{gramsToKg(totals.consumable)}</strong>
+                </div>
+                <div className="summary-card">
+                  <small>Worn</small>
+                  <strong>{gramsToKg(totals.worn)}</strong>
+                </div>
+                <div className="summary-card">
+                  <small>Total In List</small>
+                  <strong>{gramsToKg(totals.list)}</strong>
+                </div>
+              </div>
+
+              <section className="analytics">
+                <div className="pie-wrap">
+                  <svg className="pie-svg" viewBox="0 0 220 220" role="img" aria-label="Weight by category">
+                    {pieSegments.length === 0 && (
+                      <circle cx="110" cy="110" r="78" fill="none" stroke="#dbe3ea" strokeWidth="56" />
+                    )}
+                    {pieSegments.map((seg) => {
+                      const startDeg = (seg.from / 100) * 360;
+                      const endDeg = (seg.to / 100) * 360;
+                      return (
+                        <path
+                          key={seg.category}
+                          d={describeDonutArc(110, 110, 105, 52, startDeg, endDeg)}
+                          fill={seg.color}
+                          onMouseEnter={(e) => {
+                            const rect = e.currentTarget.ownerSVGElement.getBoundingClientRect();
+                            setChartHover({
+                              ...seg,
+                              x: e.clientX - rect.left,
+                              y: e.clientY - rect.top
+                            });
+                          }}
+                          onMouseMove={(e) => {
+                            const rect = e.currentTarget.ownerSVGElement.getBoundingClientRect();
+                            setChartHover((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    x: e.clientX - rect.left,
+                                    y: e.clientY - rect.top
+                                  }
+                                : null
+                            );
+                          }}
+                          onMouseLeave={() => setChartHover(null)}
+                        />
+                      );
+                    })}
+                  </svg>
+                  {chartHover && (
+                    <div className="chart-tooltip" style={{ left: chartHover.x + 8, top: chartHover.y - 10 }}>
+                      {chartHover.category}: {gramsToKg(chartHover.weight)} ({chartHover.percent.toFixed(1)}%)
+                    </div>
+                  )}
+                </div>
+                <div className="legend">
+                  <h3>Category breakdown</h3>
+                  {pieSegments.length === 0 && <p className="hint">No carried items yet.</p>}
+                  <div className="legend-table">
+                    <div className="legend-table-head">
+                      <span>Category</span>
+                      <span>Weight</span>
+                      <span>%</span>
+                    </div>
+                    {pieSegments.map((seg) => (
+                      <div key={seg.category} className="legend-row">
+                        <span className="legend-category">
+                          <span className="dot" style={{ background: seg.color }} /> {seg.category}
+                        </span>
+                        <span className="legend-weight">{gramsToKg(seg.weight)}</span>
+                        <span className="legend-percent">{seg.percent.toFixed(1)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="breakdown-table">
+                    <div className="breakdown-row">
+                      <span>Total</span>
+                      <strong>{gramsToKg(totals.carried)}</strong>
+                    </div>
+                    <div className="breakdown-row">
+                      <span>Consumable</span>
+                      <strong>{gramsToKg(totals.consumable)}</strong>
+                    </div>
+                    <div className="breakdown-row">
+                      <span>Worn</span>
+                      <strong>{gramsToKg(totals.worn)}</strong>
+                    </div>
+                    <div className="breakdown-row">
+                      <span>Base Weight</span>
+                      <strong>{gramsToKg(totals.base)}</strong>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <div className="work-columns">
+                <section
+                  className="column column-wide"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={onPackDrop}
+                >
+                  <h3>Pack Items by Category</h3>
+                  <div className="pack-list">
+                    {activePackRows.length === 0 && <p className="hint">Use + Add to create your first item.</p>}
+                    {packGroups.map((group) => (
+                      <section key={group.category} className="category-group">
+                        <div className="category-group-head">
+                          <input
+                            defaultValue={group.category}
+                            onBlur={(e) => renameGroupCategory(group.category, e.target.value)}
+                            className="category-edit"
+                          />
+                          <span>{gramsToKg(group.totalWeight)}</span>
+                        </div>
+                        <div className="group-table-head">
+                          <span className="cell-drag" />
+                          <span className="cell-item-type">Item Type</span>
+                          <span className="cell-name">Name</span>
+                          <span className="cell-flags">Flags</span>
+                          <span className="cell-weight">Weight (g)</span>
+                          <span className="cell-qty">Qty</span>
+                          <span className="cell-remove" />
+                        </div>
+                        {group.rows.map((row) => {
+                          const index = activePackRows.findIndex((item) => item.id === row.id);
+                          return (
+                            <div
+                              key={row.id}
+                              className={`pack-row ${dragOverIndex === index ? "drag-over" : ""} ${
+                                Number(row.quantity) === 0 ? "inactive" : ""
+                              }`}
+                              draggable
+                              onDragStart={(e) =>
+                                e.dataTransfer.setData(
+                                  "application/json",
+                                  JSON.stringify({ type: "pack", itemId: row.id })
+                                )
+                              }
+                              onDragEnd={() => setDragOverIndex(null)}
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                setDragOverIndex(index);
+                              }}
+                            >
+                              <span className="drag-handle cell-drag" title="Drag to reorder">
+                                ::
+                              </span>
+                              <input
+                                className="cell-item-type"
+                                value={row.gear.itemType}
+                                onChange={(e) => updateGear(row.gear.id, { itemType: e.target.value })}
+                              />
+                              <input
+                                className="cell-name"
+                                value={row.gear.name}
+                                onChange={(e) => updateGear(row.gear.id, { name: e.target.value })}
+                              />
+
+                              <div className="flag-buttons cell-flags">
+                                <button
+                                  type="button"
+                                  className={`flag-btn ${row.weightType === "consumable" ? "active" : ""}`}
+                                  title="Consumable"
+                                  aria-label="Consumable"
+                                  onClick={() => toggleWeightFlag(row.id, "consumable")}
+                                >
+                                  <ConsumableIcon />
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`flag-btn ${row.weightType === "worn" ? "active" : ""}`}
+                                  title="Worn"
+                                  aria-label="Worn"
+                                  onClick={() => toggleWeightFlag(row.id, "worn")}
+                                >
+                                  <WornIcon />
+                                </button>
+                              </div>
+
+                              <input
+                                className="cell-weight"
+                                type="number"
+                                min="0"
+                                value={Math.max(0, parseNumber(row.weight, 0))}
+                                onChange={(e) =>
+                                  setPackItems((prev) =>
+                                    prev.map((item) =>
+                                      item.id === row.id
+                                        ? { ...item, weight: Math.max(0, parseNumber(e.target.value, 0)) }
+                                        : item
+                                    )
+                                  )
+                                }
+                              />
+
+                              <input
+                                className="cell-qty"
+                                type="number"
+                                min="0"
+                                value={row.quantity}
+                                onChange={(e) =>
+                                  setPackItems((prev) =>
+                                    prev.map((item) =>
+                                      item.id === row.id
+                                        ? { ...item, quantity: Math.max(0, parseNumber(e.target.value, 0)) }
+                                        : item
+                                    )
+                                  )
+                                }
+                              />
+
+                              <button
+                                className="cell-remove"
+                                type="button"
+                                onClick={() =>
+                                  setPackItems((prev) => prev.filter((item) => item.id !== row.id))
+                                }
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {(() => {
+                          const draft = getDraft(group.category);
+                          const suggestions = matchingGears(draft.name);
+                          const suggestedGear = gears.find((gear) => gear.id === draft.gearId);
+                          return (
+                            <div className="category-group-actions">
+                              <div className="group-table-head add-head">
+                                <span className="cell-drag" />
+                                <span className="cell-item-type" />
+                                <span className="cell-name" />
+                                <span className="cell-flags" />
+                                <span className="cell-weight" />
+                                <span className="cell-qty" />
+                                <span className="cell-remove" />
+                              </div>
+                              <div className="pack-row add-row">
+                                <span className="drag-handle muted">+</span>
+                                <input
+                                  className="cell-item-type"
+                                  value={draft.itemType}
+                                  onChange={(e) => updateDraft(group.category, { itemType: e.target.value })}
+                                />
+                                <div className="name-cell">
+                                  <input
+                                    className="cell-name"
+                                    value={draft.name}
+                                    onChange={(e) =>
+                                      updateDraft(group.category, {
+                                        name: e.target.value,
+                                        gearId: "",
+                                        variantId: ""
+                                      })
+                                    }
+                                  />
+                                  {suggestions.length > 0 && (
+                                    <div className="suggestions">
+                                      {suggestions.map((gear) => (
+                                        <button
+                                          key={gear.id}
+                                          type="button"
+                                          className="suggestion-btn"
+                                          onClick={() => applyGearSuggestion(group.category, gear.id)}
+                                        >
+                                          {gear.name}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flag-buttons cell-flags">
+                                  <button
+                                    type="button"
+                                    className={`flag-btn ${draft.weightType === "consumable" ? "active" : ""}`}
+                                    aria-label="Consumable"
+                                    onClick={() =>
+                                      updateDraft(group.category, {
+                                        weightType:
+                                          draft.weightType === "consumable" ? "base" : "consumable"
+                                      })
+                                    }
+                                  >
+                                    <ConsumableIcon />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`flag-btn ${draft.weightType === "worn" ? "active" : ""}`}
+                                    aria-label="Worn"
+                                    onClick={() =>
+                                      updateDraft(group.category, {
+                                        weightType: draft.weightType === "worn" ? "base" : "worn"
+                                      })
+                                    }
+                                  >
+                                    <WornIcon />
+                                  </button>
+                                </div>
+                                <input
+                                  className="cell-weight"
+                                  type="number"
+                                  min="0"
+                                  value={Math.max(0, parseNumber(draft.weight, 0))}
+                                  onChange={(e) =>
+                                    updateDraft(group.category, { weight: Math.max(0, parseNumber(e.target.value, 0)) })
+                                  }
+                                />
+                                <input
+                                  className="cell-qty"
+                                  type="number"
+                                  min="0"
+                                  value={Math.max(0, parseNumber(draft.quantity, 1))}
+                                  onChange={(e) =>
+                                    updateDraft(group.category, {
+                                      quantity: Math.max(0, parseNumber(e.target.value, 0))
+                                    })
+                                  }
+                                />
+                                <button className="cell-remove" type="button" onClick={() => addItemFromDraft(group.category)}>
+                                  + Add
+                                </button>
+                              </div>
+                              {suggestedGear && suggestedGear.variants.length > 1 && (
+                                <div className="variant-hint">
+                                  <span>Variant</span>
+                                  <select
+                                    value={draft.variantId || suggestedGear.variants[0].id}
+                                    onChange={(e) => applyDraftVariant(group.category, e.target.value)}
+                                  >
+                                    {suggestedGear.variants.map((variant) => (
+                                      <option key={variant.id} value={variant.id}>
+                                        {variant.name} ({variant.weight}g)
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </section>
+                    ))}
+                  </div>
+                </section>
+              </div>
+
+                  {importModalOpen && (
+                    <div className="modal-overlay" onClick={() => setImportModalOpen(false)}>
+                      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-head">
+                          <h3>Import Pack</h3>
+                          <button type="button" onClick={() => setImportModalOpen(false)}>
+                            ✕
+                          </button>
+                        </div>
+
+                        <form className="import-url-form" onSubmit={handleImportUrl}>
+                          <input
+                            placeholder="https://lighterpack.com/r/..."
+                            value={importUrl}
+                            onChange={(e) => setImportUrl(e.target.value)}
+                          />
+                          <button type="submit" disabled={importing}>
+                            {importing ? "Importing..." : "Import URL"}
+                          </button>
+                        </form>
+
+                        <div className="import-options">
+                          <label>
+                            Mapping
+                            <select
+                              value={importConfig.mappingMode}
+                              onChange={(e) =>
+                                setImportConfig((prev) => ({ ...prev, mappingMode: e.target.value }))
+                              }
+                            >
+                              <option value="name_to_name">Name -&gt; Name, Description -&gt; Description</option>
+                              <option value="description_to_name">
+                                Description -&gt; Name, Name -&gt; Item Type
+                              </option>
+                            </select>
+                          </label>
+
+                          <label className="checkbox-inline">
+                            <input
+                              type="checkbox"
+                              checked={importConfig.autoFillItemTypeFromCategory}
+                              onChange={(e) =>
+                                setImportConfig((prev) => ({
+                                  ...prev,
+                                  autoFillItemTypeFromCategory: e.target.checked
+                                }))
+                              }
+                            />
+                            Autofill item type from category
+                          </label>
+
+                          {importConfig.mappingMode === "description_to_name" && (
+                            <label>
+                              Description field
+                              <select
+                                value={importConfig.descriptionSource}
+                                onChange={(e) =>
+                                  setImportConfig((prev) => ({ ...prev, descriptionSource: e.target.value }))
+                                }
+                              >
+                                <option value="empty">Empty</option>
+                                <option value="variant">Variant (if available)</option>
+                              </select>
+                            </label>
+                          )}
+
+                          <label className="file-label">
+                            Import CSV
+                            <input type="file" accept=".csv,text/csv" onChange={handleImportCsv} />
+                          </label>
+                        </div>
+
+                        {importStatus && <p className="status">{importStatus}</p>}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
         </section>
       </main>
     </div>
