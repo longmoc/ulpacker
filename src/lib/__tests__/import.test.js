@@ -58,6 +58,21 @@ describe("parseLighterpackCsv", () => {
   it("returns [] for input without data rows", () => {
     expect(parseLighterpackCsv("just one line")).toEqual([]);
   });
+
+  it("reads LighterPack's `desc` column (not just `description`)", () => {
+    const lpCsv = [
+      "Item Name,Category,desc,qty,weight,unit,url,price,worn,consumable",
+      "Tent,Big 4,Durston X-Mid Pro 2,1,654,gram,,0,,",
+      "Rain Coat,Packed Clothing,Montbell Versalite,1,143,gram,,0,Worn,"
+    ].join("\n");
+    const out = parseLighterpackCsv(lpCsv);
+    expect(out[0].description).toBe("Durston X-Mid Pro 2");
+    expect(out[1]).toMatchObject({ description: "Montbell Versalite", weightType: "worn", grams: 143 });
+
+    // In description_to_name mode the product (desc) becomes the item name.
+    const mapped = mapImportedEntry(out[0], { mappingMode: "description_to_name", autoFillItemTypeFromCategory: false });
+    expect(mapped).toMatchObject({ name: "Durston X-Mid Pro 2", itemType: "Tent" });
+  });
 });
 
 describe("parseLighterpackHtml", () => {

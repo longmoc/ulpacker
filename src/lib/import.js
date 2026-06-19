@@ -26,6 +26,15 @@ export function parseCsvLine(line) {
   return cols;
 }
 
+// LighterPack stamps the literal word "Worn"/"Consumable" in those columns when
+// checked (empty when not). Other exports may use yes/true/1. Treat any non-empty
+// value as set unless it is an explicit negative token.
+export function isTruthyFlag(value) {
+  const v = String(value || "").trim().toLowerCase();
+  if (!v) return false;
+  return !["no", "false", "0", "n"].includes(v);
+}
+
 export function extractVariantFromName(name) {
   const source = (name || "").trim();
   const match = source.match(/\(([^)]+)\)\s*$/);
@@ -39,7 +48,8 @@ export function parseLighterpackCsv(text) {
   const headers = parseCsvLine(lines[0]).map((h) => h.toLowerCase());
   const idx = {
     name: headers.findIndex((h) => h.includes("name") || h.includes("item")),
-    description: headers.findIndex((h) => h.includes("description")),
+    // LighterPack exports the description column as "desc"; also match "description".
+    description: headers.findIndex((h) => h.includes("desc")),
     category: headers.findIndex((h) => h.includes("category")),
     qty: headers.findIndex((h) => h === "qty" || h.includes("quantity")),
     weight: headers.findIndex((h) => h.includes("weight")),
@@ -56,8 +66,8 @@ export function parseLighterpackCsv(text) {
       const description = (cols[idx.description] || "").trim();
       if (!name && !description) return null;
 
-      const isWorn = /(yes|true|1)/i.test(cols[idx.worn] || "");
-      const isConsumable = /(yes|true|1)/i.test(cols[idx.consumable] || "");
+      const isWorn = isTruthyFlag(cols[idx.worn]);
+      const isConsumable = isTruthyFlag(cols[idx.consumable]);
 
       return {
         name,
