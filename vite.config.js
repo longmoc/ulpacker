@@ -63,7 +63,13 @@ function lighterpackProxyMiddleware() {
   };
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // GitHub Pages serves the site under /<repo>/, so built asset URLs need that
+  // prefix. Local dev/preview stays at "/" so the import proxy keeps working.
+  base: command === "build" ? "/ulpacker/" : "/",
+  test: {
+    environment: "node"
+  },
   plugins: [
     {
       name: "lighterpack-import-proxy",
@@ -75,4 +81,4 @@ export default defineConfig({
       }
     }
   ]
-});
+}));
