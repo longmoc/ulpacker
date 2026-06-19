@@ -47,6 +47,28 @@ body {
   color: #ffffff;
 }
 
+.data-tools {
+  display: inline-flex;
+  gap: 8px;
+  margin: 0 0 8px 12px;
+  vertical-align: top;
+}
+
+.data-tools button,
+.import-backup {
+  width: auto;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.import-backup input {
+  display: none;
+}
+
 .dashboard {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -794,6 +816,46 @@ button:hover {
   background: #111827;
   color: #e5e7eb;
   border-color: #374151;
+}
+
+.import-section {
+  border-top: 1px solid #1e293b;
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+.import-section:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.import-section h4 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.import-hint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.csv-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.csv-row button {
+  width: auto;
+  padding: 8px 14px;
+}
+
+.csv-staged {
+  font-size: 13px;
+  color: #cbd5e1;
 }
 
 @media (max-width: 1200px) {

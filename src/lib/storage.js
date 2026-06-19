@@ -90,14 +90,13 @@ export function defaultData() {
   };
 }
 
-export function readStorage() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultData();
-    const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.gears)) return defaultData();
+// Validate + normalize a raw data object (from localStorage or an imported
+// backup file) into the shape the app expects. Returns null when the input is
+// not recognizable so callers can decide how to handle the failure.
+export function normalizeData(parsed) {
+  if (!parsed || !Array.isArray(parsed.gears)) return null;
 
-    const parsedGears = parsed.gears
+  const parsedGears = parsed.gears
       .map((gear) => {
         if (!gear || typeof gear !== "object") return null;
         return {
@@ -145,11 +144,18 @@ export function readStorage() {
       })
       .filter(Boolean);
 
-    return {
-      gears,
-      packs: withPackDefaults.packs,
-      packItems
-    };
+  return {
+    gears,
+    packs: withPackDefaults.packs,
+    packItems
+  };
+}
+
+export function readStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return defaultData();
+    return normalizeData(JSON.parse(raw)) || defaultData();
   } catch {
     return defaultData();
   }

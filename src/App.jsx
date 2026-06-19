@@ -3,7 +3,7 @@ import { id, parseNumber, normalizeWeightType, normalizeText, gramsToKg, reorder
 import { normalizeCategories, primaryCategory, mergeOrCreateGear } from "./lib/gear.js";
 import { parseLighterpackCsv, parseLighterpackHtml, mapImportedEntry } from "./lib/import.js";
 import { buildPieSegments, describeDonutArc } from "./lib/chart.js";
-import { STORAGE_KEY, readStorage } from "./lib/storage.js";
+import { STORAGE_KEY, readStorage, normalizeData } from "./lib/storage.js";
 
 function createEmptyDraft(category = "") {
   return {
@@ -117,6 +117,7 @@ export default function App() {
   const [importStatus, setImportStatus] = useState("");
   const [importing, setImporting] = useState(false);
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [csvStaged, setCsvStaged] = useState(null);
   const [view, setView] = useState("packs");
   const [chartHover, setChartHover] = useState(null);
   const [categoryDrafts, setCategoryDrafts] = useState({});
@@ -264,12 +265,21 @@ export default function App() {
   }
 
   function deleteActivePack() {
-    if (!activePack || packs.length <= 1) return;
+    if (!activePack) return;
+    if (!window.confirm(`Xoá pack "${activePack.name}"? Các item trong pack sẽ bị xoá.`)) return;
     const targetId = activePack.id;
-    const nextPacks = packs.filter((pack) => pack.id !== targetId);
-    setPacks(nextPacks);
     setPackItems((prev) => prev.filter((item) => item.packId !== targetId));
-    setActivePackId(nextPacks[0]?.id || "");
+    const remaining = packs.filter((pack) => pack.id !== targetId);
+    if (remaining.length === 0) {
+      // Deleting the last pack resets to a fresh empty one instead of leaving
+      // the app with no pack at all.
+      const fresh = { id: id(), name: "My First Pack", description: "", createdAt: new Date().toISOString() };
+      setPacks([fresh]);
+      setActivePackId(fresh.id);
+      return;
+    }
+    setPacks(remaining);
+    setActivePackId(remaining[0].id);
   }
 
   function renameGroupCategory(oldCategory, nextCategory) {
@@ -617,15 +627,65 @@ export default function App() {
     }
   }
 
-  async function handleImportCsv(e) {
+  async function handleCsvFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const text = await file.text();
-      const entries = parseLighterpackCsv(text);
-      importEntries(entries, `CSV: ${file.name}`);
+      const entries = parseLighterpackCsv(await file.text());
+      if (!entries.length) {
+        setImportStatus("Không tìm thấy dữ liệu trong file CSV.");
+        setCsvStaged(null);
+        return;
+      }
+      setCsvStaged({ entries, fileName: file.name });
+      setImportStatus("");
     } catch {
-      setImportStatus("Cannot read CSV.");
+      setImportStatus("Không đọc được file CSV.");
+    } finally {
+      e.target.value = "";
+    }
+  }
+
+  function confirmCsvImport() {
+    if (!csvStaged) return;
+    importEntries(csvStaged.entries, `CSV: ${csvStaged.fileName}`);
+    setCsvStaged(null);
+  }
+
+  function closeImportModal() {
+    setImportModalOpen(false);
+    setCsvStaged(null);
+    setImportStatus("");
+  }
+
+  function exportBackup() {
+    const blob = new Blob([JSON.stringify({ gears, packs, packItems }, null, 2)], {
+      type: "application/json"
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `ulpacker-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importBackup(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const data = normalizeData(JSON.parse(await file.text()));
+      if (!data) {
+        window.alert("File backup không hợp lệ.");
+        return;
+      }
+      if (!window.confirm("Thay toàn bộ gear/pack hiện tại bằng dữ liệu trong file?")) return;
+      setGears(data.gears);
+      setPacks(data.packs);
+      setPackItems(data.packItems);
+      setActivePackId(data.packs[0]?.id || "");
+    } catch {
+      window.alert("Không đọc được file backup.");
     } finally {
       e.target.value = "";
     }
@@ -651,6 +711,15 @@ export default function App() {
           >
             Gear Library
           </button>
+        </div>
+        <div className="data-tools">
+          <button type="button" onClick={exportBackup}>
+            Export JSON
+          </button>
+          <label className="import-backup">
+            Import JSON
+            <input type="file" accept=".json,application/json" onChange={importBackup} />
+          </label>
         </div>
       </header>
 
@@ -905,7 +974,7 @@ export default function App() {
                 <button type="button" onClick={() => setView("library")}>
                   Gear Library
                 </button>
-                <button type="button" disabled={packs.length <= 1} onClick={deleteActivePack}>
+                <button type="button" className="danger" onClick={deleteActivePack}>
                   Delete Pack
                 </button>
               </div>
@@ -1271,76 +1340,96 @@ export default function App() {
               </div>
 
                   {importModalOpen && (
-                    <div className="modal-overlay" onClick={() => setImportModalOpen(false)}>
+                    <div className="modal-overlay" onClick={closeImportModal}>
                       <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-head">
                           <h3>Import Pack</h3>
-                          <button type="button" onClick={() => setImportModalOpen(false)}>
+                          <button type="button" onClick={closeImportModal}>
                             ✕
                           </button>
                         </div>
 
-                        <form className="import-url-form" onSubmit={handleImportUrl}>
-                          <input
-                            placeholder="https://lighterpack.com/r/..."
-                            value={importUrl}
-                            onChange={(e) => setImportUrl(e.target.value)}
-                          />
-                          <button type="submit" disabled={importing}>
-                            {importing ? "Importing..." : "Import URL"}
-                          </button>
-                        </form>
-
-                        <div className="import-options">
-                          <label>
-                            Mapping
-                            <select
-                              value={importConfig.mappingMode}
-                              onChange={(e) =>
-                                setImportConfig((prev) => ({ ...prev, mappingMode: e.target.value }))
-                              }
-                            >
-                              <option value="name_to_name">Name -&gt; Name, Description -&gt; Description</option>
-                              <option value="description_to_name">
-                                Description -&gt; Name, Name -&gt; Item Type
-                              </option>
-                            </select>
-                          </label>
-
-                          <label className="checkbox-inline">
-                            <input
-                              type="checkbox"
-                              checked={importConfig.autoFillItemTypeFromCategory}
-                              onChange={(e) =>
-                                setImportConfig((prev) => ({
-                                  ...prev,
-                                  autoFillItemTypeFromCategory: e.target.checked
-                                }))
-                              }
-                            />
-                            Autofill item type from category
-                          </label>
-
-                          {importConfig.mappingMode === "description_to_name" && (
+                        <section className="import-section">
+                          <h4>Mapping</h4>
+                          <p className="import-hint">Áp dụng cho cả import URL và CSV.</p>
+                          <div className="import-options">
                             <label>
-                              Description field
+                              Tên / mô tả
                               <select
-                                value={importConfig.descriptionSource}
+                                value={importConfig.mappingMode}
                                 onChange={(e) =>
-                                  setImportConfig((prev) => ({ ...prev, descriptionSource: e.target.value }))
+                                  setImportConfig((prev) => ({ ...prev, mappingMode: e.target.value }))
                                 }
                               >
-                                <option value="empty">Empty</option>
-                                <option value="variant">Variant (if available)</option>
+                                <option value="name_to_name">Name → Name, Description → Description</option>
+                                <option value="description_to_name">Description → Name, Name → Item Type</option>
                               </select>
                             </label>
-                          )}
 
-                          <label className="file-label">
-                            Import CSV
-                            <input type="file" accept=".csv,text/csv" onChange={handleImportCsv} />
-                          </label>
-                        </div>
+                            <label className="checkbox-inline">
+                              <input
+                                type="checkbox"
+                                checked={importConfig.autoFillItemTypeFromCategory}
+                                onChange={(e) =>
+                                  setImportConfig((prev) => ({
+                                    ...prev,
+                                    autoFillItemTypeFromCategory: e.target.checked
+                                  }))
+                                }
+                              />
+                              Autofill item type from category
+                            </label>
+
+                            {importConfig.mappingMode === "description_to_name" && (
+                              <label>
+                                Description field
+                                <select
+                                  value={importConfig.descriptionSource}
+                                  onChange={(e) =>
+                                    setImportConfig((prev) => ({ ...prev, descriptionSource: e.target.value }))
+                                  }
+                                >
+                                  <option value="empty">Empty</option>
+                                  <option value="variant">Variant (if available)</option>
+                                </select>
+                              </label>
+                            )}
+                          </div>
+                        </section>
+
+                        <section className="import-section">
+                          <h4>Từ URL LighterPack</h4>
+                          <form className="import-url-form" onSubmit={handleImportUrl}>
+                            <input
+                              placeholder="https://lighterpack.com/r/..."
+                              value={importUrl}
+                              onChange={(e) => setImportUrl(e.target.value)}
+                            />
+                            <button type="submit" disabled={importing}>
+                              {importing ? "Importing..." : "Import URL"}
+                            </button>
+                          </form>
+                        </section>
+
+                        <section className="import-section">
+                          <h4>Từ file CSV</h4>
+                          <div className="csv-row">
+                            <label className="file-label">
+                              {csvStaged ? "Chọn file khác" : "Chọn file CSV"}
+                              <input type="file" accept=".csv,text/csv" onChange={handleCsvFile} />
+                            </label>
+                            {csvStaged && (
+                              <>
+                                <span className="csv-staged">
+                                  {csvStaged.fileName} — {csvStaged.entries.length} dòng
+                                </span>
+                                <button type="button" onClick={confirmCsvImport}>
+                                  Import {csvStaged.entries.length} items
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </section>
 
                         {importStatus && <p className="status">{importStatus}</p>}
                       </div>

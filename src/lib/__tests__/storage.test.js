@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { STORAGE_KEY, readStorage, defaultData } from "../storage.js";
+import { STORAGE_KEY, readStorage, normalizeData, defaultData } from "../storage.js";
 
 beforeEach(() => {
   const store = new Map();
@@ -89,6 +89,24 @@ describe("readStorage", () => {
       { id: "v40", name: "40L", weight: 920 },
       { id: "v55", name: "55L", weight: 1100 }
     ]);
+  });
+});
+
+describe("normalizeData", () => {
+  it("returns null for unrecognizable input (so import can reject it)", () => {
+    expect(normalizeData(null)).toBeNull();
+    expect(normalizeData({})).toBeNull();
+    expect(normalizeData({ gears: "nope" })).toBeNull();
+  });
+
+  it("normalizes a valid backup object without touching localStorage", () => {
+    const data = normalizeData({
+      gears: [{ id: "g1", name: "Quilt", categories: ["Sleep"], variants: [{ weight: 600 }] }],
+      packs: [{ id: "p1", name: "Trip" }],
+      packItems: [{ id: "i1", packId: "p1", gearId: "g1", quantity: 1, weight: 600 }]
+    });
+    expect(data.gears.map((g) => g.name)).toEqual(["Quilt"]);
+    expect(data.packItems).toHaveLength(1);
   });
 });
 
