@@ -6,3 +6,6 @@ dist/
 .env.*
 !.env.example
 CLAUDE.md
+
+# Local LighterPack CSV exports
+*.csv
