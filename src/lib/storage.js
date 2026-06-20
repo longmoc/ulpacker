@@ -21,14 +21,18 @@ export function ensurePackDefaults(data) {
         id: pack.id || id(),
         name: pack.name || "Unnamed Pack",
         description: pack.description || "",
-        createdAt: pack.createdAt || new Date().toISOString()
+        createdAt: pack.createdAt || new Date().toISOString(),
+        categoryOrder: Array.isArray(pack.categoryOrder)
+          ? pack.categoryOrder.filter((c) => typeof c === "string")
+          : []
       }))
     : [
         {
           id: id(),
           name: "My First Pack",
           description: "",
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          categoryOrder: []
         }
       ];
 
@@ -83,7 +87,8 @@ export function defaultData() {
         id: id(),
         name: "My First Pack",
         description: "",
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        categoryOrder: []
       }
     ],
     packItems: []

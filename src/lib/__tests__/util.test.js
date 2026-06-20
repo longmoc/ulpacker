@@ -6,7 +6,8 @@ import {
   gramsToKg,
   reorder,
   mutatePackItemsForPack,
-  unitToGrams
+  unitToGrams,
+  applyOrder
 } from "../util.js";
 
 describe("parseNumber", () => {
@@ -77,6 +78,20 @@ describe("mutatePackItemsForPack", () => {
     );
     expect(result.find((i) => i.id === 2).touched).toBeUndefined();
     expect(result.filter((i) => i.packId === "a").every((i) => i.touched)).toBe(true);
+  });
+});
+
+describe("applyOrder", () => {
+  it("orders items by the preference list", () => {
+    expect(applyOrder(["a", "b", "c"], ["c", "a"])).toEqual(["c", "a", "b"]);
+  });
+
+  it("appends unlisted items at the end in original order", () => {
+    expect(applyOrder(["x", "y", "z"], ["z"])).toEqual(["z", "x", "y"]);
+  });
+
+  it("ignores order entries that are not present", () => {
+    expect(applyOrder(["a", "b"], ["ghost", "b", "a"])).toEqual(["b", "a"]);
   });
 });
 

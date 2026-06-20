@@ -41,6 +41,14 @@ export function mutatePackItemsForPack(prev, packId, mutate) {
   return [...others, ...mutate(items)];
 }
 
+// Order `items` by a preferred `order` list; anything not listed keeps its
+// original relative position at the end. Used for manual category ordering.
+export function applyOrder(items, order) {
+  const inOrder = order.filter((x) => items.includes(x));
+  const rest = items.filter((x) => !order.includes(x));
+  return [...inOrder, ...rest];
+}
+
 export function unitToGrams(weight, unit) {
   const normalizedUnit = String(unit || "").toLowerCase().trim();
   const num = parseNumber(weight, 0);

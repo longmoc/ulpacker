@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { id, parseNumber, normalizeWeightType, normalizeText, gramsToKg, reorder, mutatePackItemsForPack } from "./lib/util.js";
+import { id, parseNumber, normalizeWeightType, normalizeText, gramsToKg, reorder, mutatePackItemsForPack, applyOrder } from "./lib/util.js";
 import { normalizeCategories, primaryCategory, mergeOrCreateGear } from "./lib/gear.js";
 import { parseLighterpackCsv, parseLighterpackHtml, mapImportedEntry } from "./lib/import.js";
 import { buildPieSegments, describeDonutArc } from "./lib/chart.js";
@@ -203,10 +203,13 @@ export default function App() {
   const [csvStaged, setCsvStaged] = useState(null);
   const [view, setView] = useState("packs");
   const [chartHover, setChartHover] = useState(null);
+  const [selectedCategory, setSelectedCategory] = useState(null);
   const [categoryDrafts, setCategoryDrafts] = useState({});
   const [libraryQuery, setLibraryQuery] = useState("");
   const [expandedGears, setExpandedGears] = useState({});
   const [libraryPackTarget, setLibraryPackTarget] = useState({});
+  const [categoryDragSource, setCategoryDragSource] = useState(null);
+  const [categoryDragOver, setCategoryDragOver] = useState(null);
   const [importConfig, setImportConfig] = useState({
     mappingMode: "name_to_name",
     autoFillItemTypeFromCategory: true,
@@ -220,6 +223,10 @@ export default function App() {
       setActivePackId(packs[0].id);
     }
   }, [packs, activePack]);
+
+  useEffect(() => {
+    setSelectedCategory(null);
+  }, [activePackId]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ gears, packs, packItems }));
@@ -313,12 +320,25 @@ export default function App() {
       group.totalWeight += row.lineWeight;
       group.gearIds.add(row.gear.id);
     }
-    const sorted = [...grouped.values()].sort((a, b) => b.totalWeight - a.totalWeight);
-    if (sorted.length === 0) {
+    if (grouped.size === 0) {
       return [{ category: "Uncategorized", rows: [], totalWeight: 0, gearIds: new Set() }];
     }
-    return sorted;
-  }, [activePackRows]);
+    // Manual category order (per pack); new categories fall to the end.
+    return applyOrder([...grouped.keys()], activePack?.categoryOrder || []).map((c) => grouped.get(c));
+  }, [activePackRows, activePack]);
+
+  // Only treat the filter as active while its category still exists in the pack.
+  const activeFilter =
+    selectedCategory && packGroups.some((group) => group.category === selectedCategory)
+      ? selectedCategory
+      : null;
+  const visibleGroups = activeFilter
+    ? packGroups.filter((group) => group.category === activeFilter)
+    : packGroups;
+
+  function toggleCategoryFilter(category) {
+    setSelectedCategory((prev) => (prev === category ? null : category));
+  }
   const filteredGears = useMemo(() => {
     const q = normalizeText(libraryQuery);
     if (!q) return gears;
@@ -335,7 +355,8 @@ export default function App() {
       id: id(),
       name: newPack.name.trim(),
       description: newPack.description.trim(),
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      categoryOrder: []
     };
     setPacks((prev) => [pack, ...prev]);
     setActivePackId(pack.id);
@@ -356,7 +377,7 @@ export default function App() {
     if (remaining.length === 0) {
       // Deleting the last pack resets to a fresh empty one instead of leaving
       // the app with no pack at all.
-      const fresh = { id: id(), name: "My First Pack", description: "", createdAt: new Date().toISOString() };
+      const fresh = { id: id(), name: "My First Pack", description: "", createdAt: new Date().toISOString(), categoryOrder: [] };
       setPacks([fresh]);
       setActivePackId(fresh.id);
       return;
@@ -380,6 +401,39 @@ export default function App() {
         ids.has(gear.id) ? { ...gear, categories: normalizeCategories([...(gear.categories || []), trimmed]) } : gear
       )
     );
+    // Keep the manual order in sync so the renamed category stays in place.
+    if (activePack?.categoryOrder?.length) {
+      const next = activePack.categoryOrder.map((c) => (c === oldCategory ? trimmed : c));
+      updateActivePack({ categoryOrder: [...new Set(next)] });
+    }
+  }
+
+  function moveCategory(from, target) {
+    if (!activePack || from === target) return;
+    const order = packGroups.map((group) => group.category);
+    const fromIdx = order.indexOf(from);
+    const targetIdx = order.indexOf(target);
+    if (fromIdx === -1 || targetIdx === -1) return;
+    const next = [...order];
+    next.splice(fromIdx, 1);
+    next.splice(targetIdx, 0, from);
+    updateActivePack({ categoryOrder: next });
+  }
+
+  function onCategoryDrop(e, targetCategory) {
+    const payload = e.dataTransfer.getData("application/json");
+    if (!payload) return;
+    let data;
+    try {
+      data = JSON.parse(payload);
+    } catch {
+      return;
+    }
+    if (data.type !== "category") return; // let item/library drops bubble to the column
+    e.stopPropagation();
+    moveCategory(data.category, targetCategory);
+    setCategoryDragSource(null);
+    setCategoryDragOver(null);
   }
 
   function toggleWeightFlag(itemId, targetType) {
@@ -1131,8 +1185,12 @@ export default function App() {
                       return (
                         <path
                           key={seg.category}
+                          className={`pie-segment${activeFilter === seg.category ? " selected" : ""}${
+                            activeFilter && activeFilter !== seg.category ? " dimmed" : ""
+                          }`}
                           d={describeDonutArc(110, 110, 105, 52, startDeg, endDeg)}
                           fill={seg.color}
+                          onClick={() => toggleCategoryFilter(seg.category)}
                           onMouseEnter={(e) => {
                             const rect = e.currentTarget.ownerSVGElement.getBoundingClientRect();
                             setChartHover({
@@ -1174,13 +1232,18 @@ export default function App() {
                       <span>%</span>
                     </div>
                     {pieSegments.map((seg) => (
-                      <div key={seg.category} className="legend-row">
+                      <button
+                        type="button"
+                        key={seg.category}
+                        className={`legend-row ${activeFilter === seg.category ? "selected" : ""}`}
+                        onClick={() => toggleCategoryFilter(seg.category)}
+                      >
                         <span className="legend-category">
                           <span className="dot" style={{ background: seg.color }} /> {seg.category}
                         </span>
                         <span className="legend-weight">{gramsToKg(seg.weight)}</span>
                         <span className="legend-percent">{seg.percent.toFixed(1)}%</span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                   <div className="breakdown-table">
@@ -1211,16 +1274,58 @@ export default function App() {
                   onDrop={onPackDrop}
                 >
                   <h3>Pack Items by Category</h3>
+                  {activeFilter && (
+                    <div className="filter-chip">
+                      <span>
+                        Filtering: <strong>{activeFilter}</strong>
+                      </span>
+                      <button type="button" onClick={() => setSelectedCategory(null)}>
+                        ✕ Show all
+                      </button>
+                    </div>
+                  )}
                   <div className="pack-list">
                     {activePackRows.length === 0 && <p className="hint">Use + Add to create your first item.</p>}
-                    {packGroups.map((group) => (
+                    {visibleGroups.map((group) => (
                       <section key={group.category} className="category-group">
-                        <div className="category-group-head">
-                          <input
-                            defaultValue={group.category}
-                            onBlur={(e) => renameGroupCategory(group.category, e.target.value)}
-                            className="category-edit"
-                          />
+                        <div
+                          className={`category-group-head ${
+                            categoryDragSource && categoryDragSource !== group.category && categoryDragOver === group.category
+                              ? "cat-over"
+                              : ""
+                          }`}
+                          onDragOver={(e) => {
+                            if (!categoryDragSource) return;
+                            e.preventDefault();
+                            setCategoryDragOver(group.category);
+                          }}
+                          onDrop={(e) => onCategoryDrop(e, group.category)}
+                        >
+                          <div className="cat-head-left">
+                            <span
+                              className="drag-handle cat-drag"
+                              title="Drag to reorder category"
+                              draggable
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData(
+                                  "application/json",
+                                  JSON.stringify({ type: "category", category: group.category })
+                                );
+                                setCategoryDragSource(group.category);
+                              }}
+                              onDragEnd={() => {
+                                setCategoryDragSource(null);
+                                setCategoryDragOver(null);
+                              }}
+                            >
+                              ::
+                            </span>
+                            <input
+                              defaultValue={group.category}
+                              onBlur={(e) => renameGroupCategory(group.category, e.target.value)}
+                              className="category-edit"
+                            />
+                          </div>
                           <span>{gramsToKg(group.totalWeight)}</span>
                         </div>
                         <div className="group-table-head">
