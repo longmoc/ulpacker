@@ -4,6 +4,7 @@ import { normalizeCategories, primaryCategory, mergeOrCreateGear } from "./lib/g
 import { parseLighterpackCsv, parseLighterpackHtml, mapImportedEntry } from "./lib/import.js";
 import { buildPieSegments, describeDonutArc } from "./lib/chart.js";
 import { STORAGE_KEY, readStorage, normalizeData } from "./lib/storage.js";
+import logoUrl from "./logo.png";
 
 function createEmptyDraft(category = "") {
   return {
@@ -94,6 +95,88 @@ function WornIcon() {
   );
 }
 
+function ExportIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 15V3" />
+      <path d="m8 7 4-4 4 4" />
+      <path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" />
+    </svg>
+  );
+}
+
+function ImportIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 3v12" />
+      <path d="m8 11 4 4 4-4" />
+      <path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" />
+    </svg>
+  );
+}
+
+function CloudDownloadIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" />
+      <path d="M12 12v9" />
+      <path d="m8 17 4 4 4-4" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+    </svg>
+  );
+}
+
 export default function App() {
   const initial = readStorage();
 
@@ -116,7 +199,7 @@ export default function App() {
   const [importUrl, setImportUrl] = useState("");
   const [importStatus, setImportStatus] = useState("");
   const [importing, setImporting] = useState(false);
-  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importModal, setImportModal] = useState(null);
   const [csvStaged, setCsvStaged] = useState(null);
   const [view, setView] = useState("packs");
   const [chartHover, setChartHover] = useState(null);
@@ -266,7 +349,7 @@ export default function App() {
 
   function deleteActivePack() {
     if (!activePack) return;
-    if (!window.confirm(`Xoá pack "${activePack.name}"? Các item trong pack sẽ bị xoá.`)) return;
+    if (!window.confirm(`Delete pack "${activePack.name}"? Its items will be removed.`)) return;
     const targetId = activePack.id;
     setPackItems((prev) => prev.filter((item) => item.packId !== targetId));
     const remaining = packs.filter((pack) => pack.id !== targetId);
@@ -555,12 +638,12 @@ export default function App() {
 
   function importEntries(entries, sourceLabel) {
     if (!activePack) {
-      setImportStatus("Hãy tạo pack trước khi import.");
+      setImportStatus("Create a pack before importing.");
       return;
     }
 
     if (!entries.length) {
-      setImportStatus("Không tìm thấy dữ liệu để import.");
+      setImportStatus("No data found to import.");
       return;
     }
 
@@ -601,7 +684,7 @@ export default function App() {
     setGears(nextGears);
     setPackItems((prev) => [...prev, ...importedPackItems]);
     setImportStatus(`Imported ${importedPackItems.length} items to ${activePack.name}.`);
-    setImportModalOpen(false);
+    setImportModal(null);
   }
 
   async function handleImportUrl(e) {
@@ -633,14 +716,14 @@ export default function App() {
     try {
       const entries = parseLighterpackCsv(await file.text());
       if (!entries.length) {
-        setImportStatus("Không tìm thấy dữ liệu trong file CSV.");
+        setImportStatus("No data found in the CSV file.");
         setCsvStaged(null);
         return;
       }
       setCsvStaged({ entries, fileName: file.name });
       setImportStatus("");
     } catch {
-      setImportStatus("Không đọc được file CSV.");
+      setImportStatus("Could not read the CSV file.");
     } finally {
       e.target.value = "";
     }
@@ -652,8 +735,14 @@ export default function App() {
     setCsvStaged(null);
   }
 
+  function openImport(kind) {
+    setImportStatus("");
+    setCsvStaged(null);
+    setImportModal(kind);
+  }
+
   function closeImportModal() {
-    setImportModalOpen(false);
+    setImportModal(null);
     setCsvStaged(null);
     setImportStatus("");
   }
@@ -676,16 +765,16 @@ export default function App() {
     try {
       const data = normalizeData(JSON.parse(await file.text()));
       if (!data) {
-        window.alert("File backup không hợp lệ.");
+        window.alert("Invalid backup file.");
         return;
       }
-      if (!window.confirm("Thay toàn bộ gear/pack hiện tại bằng dữ liệu trong file?")) return;
+      if (!window.confirm("Replace all current gear and packs with the data from this file?")) return;
       setGears(data.gears);
       setPacks(data.packs);
       setPackItems(data.packItems);
       setActivePackId(data.packs[0]?.id || "");
     } catch {
-      window.alert("Không đọc được file backup.");
+      window.alert("Could not read the backup file.");
     } finally {
       e.target.value = "";
     }
@@ -694,32 +783,49 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <h1>ULPacker</h1>
-        <p>Pack dashboard with reusable gear library, drag-and-drop, and pie-chart analytics.</p>
-        <div className="view-tabs">
-          <button
-            type="button"
-            className={view === "packs" ? "active" : ""}
-            onClick={() => setView("packs")}
-          >
-            Packs
-          </button>
-          <button
-            type="button"
-            className={view === "library" ? "active" : ""}
-            onClick={() => setView("library")}
-          >
-            Gear Library
-          </button>
-        </div>
-        <div className="data-tools">
-          <button type="button" onClick={exportBackup}>
-            Export JSON
-          </button>
-          <label className="import-backup">
-            Import JSON
-            <input type="file" accept=".json,application/json" onChange={importBackup} />
-          </label>
+        <img className="brand-logo" src={logoUrl} alt="ULPacker" />
+        <div className="topbar-row">
+          <div className="view-tabs">
+            <button
+              type="button"
+              className={view === "packs" ? "active" : ""}
+              onClick={() => setView("packs")}
+            >
+              Packs
+            </button>
+            <button
+              type="button"
+              className={view === "library" ? "active" : ""}
+              onClick={() => setView("library")}
+            >
+              Gear Library
+            </button>
+          </div>
+          <div className="data-tools">
+            <div className="menu">
+              <button type="button" className="menu-trigger">
+                <ExportIcon />
+                Export
+              </button>
+              <div className="menu-list">
+                <button type="button" onClick={exportBackup}>
+                  Backup to JSON
+                </button>
+              </div>
+            </div>
+            <div className="menu">
+              <button type="button" className="menu-trigger">
+                <ImportIcon />
+                Import
+              </button>
+              <div className="menu-list">
+                <label className="menu-file">
+                  Restore from JSON
+                  <input type="file" accept=".json,application/json" onChange={importBackup} />
+                </label>
+              </div>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -968,15 +1074,26 @@ export default function App() {
                   onChange={(e) => updateActivePack({ description: e.target.value })}
                   placeholder="Pack description"
                 />
-                <button type="button" onClick={() => setImportModalOpen(true)}>
-                  Import Pack
-                </button>
-                <button type="button" onClick={() => setView("library")}>
-                  Gear Library
-                </button>
-                <button type="button" className="danger" onClick={deleteActivePack}>
-                  Delete Pack
-                </button>
+                <div className="workspace-actions">
+                  <div className="menu">
+                    <button type="button" className="menu-trigger">
+                      <CloudDownloadIcon />
+                      Import from LighterPack
+                    </button>
+                    <div className="menu-list">
+                      <button type="button" onClick={() => openImport("url")}>
+                        From URL
+                      </button>
+                      <button type="button" onClick={() => openImport("csv")}>
+                        From CSV file
+                      </button>
+                    </div>
+                  </div>
+                  <button type="button" className="action-danger" onClick={deleteActivePack}>
+                    <TrashIcon />
+                    Delete Pack
+                  </button>
+                </div>
               </div>
 
               <div className="summary-grid">
@@ -1339,11 +1456,15 @@ export default function App() {
                 </section>
               </div>
 
-                  {importModalOpen && (
+                  {importModal && (
                     <div className="modal-overlay" onClick={closeImportModal}>
                       <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
                         <div className="modal-head">
-                          <h3>Import Pack</h3>
+                          <h3>
+                            {importModal === "url"
+                              ? "Import from LighterPack URL"
+                              : "Import from CSV file"}
+                          </h3>
                           <button type="button" onClick={closeImportModal}>
                             ✕
                           </button>
@@ -1351,10 +1472,9 @@ export default function App() {
 
                         <section className="import-section">
                           <h4>Mapping</h4>
-                          <p className="import-hint">Áp dụng cho cả import URL và CSV.</p>
                           <div className="import-options">
                             <label>
-                              Tên / mô tả
+                              Name / description
                               <select
                                 value={importConfig.mappingMode}
                                 onChange={(e) =>
@@ -1397,39 +1517,43 @@ export default function App() {
                           </div>
                         </section>
 
-                        <section className="import-section">
-                          <h4>Từ URL LighterPack</h4>
-                          <form className="import-url-form" onSubmit={handleImportUrl}>
-                            <input
-                              placeholder="https://lighterpack.com/r/..."
-                              value={importUrl}
-                              onChange={(e) => setImportUrl(e.target.value)}
-                            />
-                            <button type="submit" disabled={importing}>
-                              {importing ? "Importing..." : "Import URL"}
-                            </button>
-                          </form>
-                        </section>
+                        {importModal === "url" && (
+                          <section className="import-section">
+                            <h4>LighterPack URL</h4>
+                            <form className="import-url-form" onSubmit={handleImportUrl}>
+                              <input
+                                placeholder="https://lighterpack.com/r/..."
+                                value={importUrl}
+                                onChange={(e) => setImportUrl(e.target.value)}
+                              />
+                              <button type="submit" disabled={importing}>
+                                {importing ? "Importing..." : "Import URL"}
+                              </button>
+                            </form>
+                          </section>
+                        )}
 
-                        <section className="import-section">
-                          <h4>Từ file CSV</h4>
-                          <div className="csv-row">
-                            <label className="file-label">
-                              {csvStaged ? "Chọn file khác" : "Chọn file CSV"}
-                              <input type="file" accept=".csv,text/csv" onChange={handleCsvFile} />
-                            </label>
-                            {csvStaged && (
-                              <>
-                                <span className="csv-staged">
-                                  {csvStaged.fileName} — {csvStaged.entries.length} dòng
-                                </span>
-                                <button type="button" onClick={confirmCsvImport}>
-                                  Import {csvStaged.entries.length} items
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </section>
+                        {importModal === "csv" && (
+                          <section className="import-section">
+                            <h4>CSV file</h4>
+                            <div className="csv-row">
+                              <label className="file-label">
+                                {csvStaged ? "Choose another file" : "Choose CSV file"}
+                                <input type="file" accept=".csv,text/csv" onChange={handleCsvFile} />
+                              </label>
+                              {csvStaged && (
+                                <>
+                                  <span className="csv-staged">
+                                    {csvStaged.fileName} — {csvStaged.entries.length} rows
+                                  </span>
+                                  <button type="button" onClick={confirmCsvImport}>
+                                    Import {csvStaged.entries.length} items
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </section>
+                        )}
 
                         {importStatus && <p className="status">{importStatus}</p>}
                       </div>

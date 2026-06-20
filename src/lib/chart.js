@@ -1,4 +1,4 @@
-export const PIE_COLORS = ["#1d4ed8", "#059669", "#d97706", "#dc2626", "#7c3aed", "#0e7490", "#a16207"];
+export const PIE_COLORS = ["#1b5e3f", "#d97706", "#dc2626", "#7c3aed", "#0e7490", "#059669", "#a16207"];
 
 export function buildPieSegments(categoryRows) {
   const total = categoryRows.reduce((sum, row) => sum + row.weight, 0);

@@ -57,7 +57,7 @@ export function defaultData() {
     gears: [
       {
         id: id(),
-        name: "Balo",
+        name: "Backpack",
         categories: ["Pack"],
         itemType: "",
         description: "",
@@ -69,12 +69,12 @@ export function defaultData() {
       },
       {
         id: id(),
-        name: "Áo mưa",
+        name: "Rain jacket",
         categories: ["Clothing"],
         itemType: "",
         description: "",
         notes: "",
-        variants: [{ id: id(), name: "Mặc định", weight: 180 }]
+        variants: [{ id: id(), name: "Default", weight: 180 }]
       },
       eggSeed()
     ],
