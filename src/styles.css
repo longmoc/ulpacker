@@ -1434,4 +1434,57 @@ button[type="submit"]:active {
     width: 24px;
     height: 24px;
   }
+
+  /* ---- Gear Library: card per gear ---- */
+  .library-table-head {
+    display: none;
+  }
+
+  .gear-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+
+  .gear-row input {
+    border: 1px solid var(--border-2);
+    border-radius: 8px;
+    background: var(--surface);
+    padding: 8px 9px;
+  }
+
+  .gear-row input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-ring);
+  }
+
+  .gear-row .gear-cell-name {
+    font-weight: 600;
+  }
+
+  .gear-row .variant-toggle {
+    width: auto;
+    align-self: flex-start;
+  }
+
+  .gear-row .library-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .gear-row .library-actions select {
+    flex: 1;
+    min-width: 130px;
+    width: auto;
+  }
+
+  /* Expanded variant editor */
+  .variant-row.compact {
+    grid-template-columns: 1fr auto auto auto;
+  }
 }

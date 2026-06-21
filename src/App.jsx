@@ -1057,14 +1057,18 @@ export default function App() {
                       }
                     >
                       <input
+                        className="gear-cell-name"
+                        placeholder="Name"
                         value={gear.name}
                         onChange={(e) => updateGear(gear.id, { name: e.target.value })}
                       />
                       <input
+                        placeholder="Item type"
                         value={gear.itemType}
                         onChange={(e) => updateGear(gear.id, { itemType: e.target.value })}
                       />
                       <input
+                        placeholder="Description"
                         value={gear.description}
                         onChange={(e) => updateGear(gear.id, { description: e.target.value })}
                       />
@@ -1100,7 +1104,19 @@ export default function App() {
                         >
                           Add to Pack
                         </button>
-                        <button type="button" className="danger" onClick={() => removeGearFromLibrary(gear.id)}>
+                        <button
+                          type="button"
+                          className="danger"
+                          onClick={() => {
+                            if (
+                              !window.confirm(
+                                `Delete "${gear.name}" from the library? It will also be removed from every pack.`
+                              )
+                            )
+                              return;
+                            removeGearFromLibrary(gear.id);
+                          }}
+                        >
                           Delete
                         </button>
                       </div>
