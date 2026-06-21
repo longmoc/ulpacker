@@ -848,7 +848,7 @@ button[type="submit"]:active {
 
 .pack-row {
   display: grid;
-  grid-template-columns: 24px minmax(120px, 1fr) minmax(260px, 2fr) 92px 92px 70px 92px;
+  grid-template-columns: 24px minmax(86px, 0.7fr) minmax(240px, 2fr) 60px 84px 60px 34px;
   gap: 6px;
   align-items: center;
   border: 0;
@@ -981,7 +981,7 @@ button[type="submit"]:active {
 
 .group-table-head {
   display: grid;
-  grid-template-columns: 24px minmax(120px, 1fr) minmax(260px, 2fr) 92px 92px 70px 92px;
+  grid-template-columns: 24px minmax(86px, 0.7fr) minmax(240px, 2fr) 60px 84px 60px 34px;
   gap: 6px;
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -992,32 +992,69 @@ button[type="submit"]:active {
 
 .flag-buttons {
   display: flex;
-  gap: 6px;
+  gap: 4px;
+  align-items: center;
+  justify-content: center;
 }
 
-.flag-btn {
-  width: 38px;
-  padding: 3px 0;
-  text-align: center;
-  font-weight: 700;
-  background: var(--surface-2);
-  color: var(--text-2);
-  border: 1px solid var(--border-2) !important;
+/* Quiet by default; revealed on row hover. Active flags stay visible + tinted. */
+.pack-row .flag-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-3);
+  border: 0 !important;
   border-radius: 6px !important;
   box-shadow: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
 
-.flag-btn:hover {
-  background: #eef0f3;
+.pack-row:hover .flag-btn {
+  opacity: 1;
 }
 
-.flag-btn.active {
-  background: var(--amber-bg);
-  color: var(--amber-text);
-  border-color: var(--amber-border) !important;
+.pack-row .flag-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.pack-row .flag-btn.active {
+  opacity: 1;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.pack-row.add-row .flag-btn {
+  opacity: 1;
+}
+
+.pack-row .row-remove {
+  width: auto;
+  padding: 4px;
+  background: transparent;
+  color: var(--text-3);
+  border: 0;
+  border-radius: 6px;
+  box-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.pack-row:hover .row-remove {
+  opacity: 1;
+}
+
+.pack-row .row-remove:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .line-weight {
@@ -1231,6 +1268,7 @@ button[type="submit"]:active {
 .field-unit-wrap input {
   flex: 1;
   min-width: 0;
+  text-align: right;
 }
 
 /* Unit hints (g / ×) only matter on mobile where the column header is hidden. */
@@ -1332,6 +1370,12 @@ button[type="submit"]:active {
 
   .field-unit {
     display: inline;
+  }
+
+  /* Touch has no hover, so always show flags and the remove icon on mobile. */
+  .pack-row .flag-btn,
+  .pack-row .row-remove {
+    opacity: 1;
   }
 
   .pack-row .cell-remove {

@@ -75,22 +75,57 @@ function CategoryChipsInput({ categories, onChange, placeholder = "Type and pres
 
 function ConsumableIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-      <path
-        d="M9 3h6l1 3v4a4 4 0 0 1 4 4v3h-2v4H6v-4H4v-3a4 4 0 0 1 4-4V6l1-3Zm2 3v4h2V6h-2Zm-3 6a2 2 0 0 0-2 2v1h12v-1a2 2 0 0 0-2-2H8Z"
-        fill="currentColor"
-      />
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 2v7c0 1.1.9 2 2 2h0a2 2 0 0 0 2-2V2" />
+      <path d="M7 2v20" />
+      <path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7" />
     </svg>
   );
 }
 
 function WornIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-      <path
-        d="M9 3h6l1 2 3 1v4h-2v11H7V10H5V6l3-1 1-2Zm1.2 2-.6 1.2-1.6.5v1.3h8V6.7l-1.6-.5L13.8 5h-3.6Z"
-        fill="currentColor"
-      />
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z" />
+    </svg>
+  );
+}
+
+function RemoveItemIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
     </svg>
   );
 }
@@ -1430,13 +1465,15 @@ export default function App() {
                               </div>
 
                               <button
-                                className="cell-remove"
+                                className="cell-remove row-remove"
                                 type="button"
+                                title="Remove item"
+                                aria-label="Remove item"
                                 onClick={() =>
                                   setPackItems((prev) => prev.filter((item) => item.id !== row.id))
                                 }
                               >
-                                Remove
+                                <RemoveItemIcon />
                               </button>
                             </div>
                           );
