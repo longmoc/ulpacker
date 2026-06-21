@@ -1469,9 +1469,10 @@ export default function App() {
                                 type="button"
                                 title="Remove item"
                                 aria-label="Remove item"
-                                onClick={() =>
-                                  setPackItems((prev) => prev.filter((item) => item.id !== row.id))
-                                }
+                                onClick={() => {
+                                  if (!window.confirm(`Remove "${row.gear.name}" from this pack?`)) return;
+                                  setPackItems((prev) => prev.filter((item) => item.id !== row.id));
+                                }}
                               >
                                 <RemoveItemIcon />
                               </button>
