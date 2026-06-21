@@ -1309,33 +1309,37 @@ button[type="submit"]:active {
 
 @media (max-width: 768px) {
   .app {
-    padding: 12px;
+    padding: 10px;
+    overflow-x: hidden;
   }
 
   .brand-logo {
-    height: 78px;
+    height: 72px;
   }
 
   .summary-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  /* Column header row is meaningless once rows reflow; hide it. */
+  /* Column header row is meaningless once rows become cards. */
   .group-table-head {
     display: none;
   }
 
-  /* Stack each pack item into a compact 3-line block. */
+  /* Each pack item becomes a compact 2-line card. */
   .pack-row {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
     grid-template-areas:
-      "name name remove"
-      "type type type"
-      "flags weight qty";
+      "name  name   name    remove"
+      "type  flags  weight  qty";
     column-gap: 8px;
-    row-gap: 8px;
-    padding: 12px 2px;
-    border-top: 1px solid var(--border);
+    row-gap: 6px;
+    align-items: center;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
   }
 
   .pack-row .drag-handle {
@@ -1345,52 +1349,80 @@ button[type="submit"]:active {
   .pack-row .cell-name,
   .pack-row .name-cell {
     grid-area: name;
+    min-width: 0;
+  }
+
+  /* Name reads as the item title; type as a quiet subline. */
+  .pack-row .cell-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    border: 0;
+    background: transparent;
+    padding: 0;
   }
 
   .pack-row .cell-item-type {
     grid-area: type;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    color: var(--text-2);
+    font-size: 0.82rem;
+  }
+
+  .pack-row .cell-name:focus,
+  .pack-row .cell-item-type:focus {
+    border: 0;
+    box-shadow: none;
   }
 
   .pack-row .cell-flags {
     grid-area: flags;
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
 
   .pack-row .cell-weight {
     grid-area: weight;
     justify-self: end;
-    width: 104px;
+    width: 76px;
   }
 
   .pack-row .cell-qty {
     grid-area: qty;
     justify-self: end;
-    width: 84px;
+    width: 58px;
+  }
+
+  .pack-row .cell-remove {
+    grid-area: remove;
+    justify-self: end;
   }
 
   .field-unit {
     display: inline;
   }
 
-  /* Touch has no hover, so always show flags and the remove icon on mobile. */
+  /* Bordered fields only for the numeric inputs. */
+  .pack-row .field-unit-wrap input {
+    border: 1px solid var(--border-2);
+    border-radius: 8px;
+    padding: 6px 7px;
+    background: var(--surface);
+  }
+
+  .pack-row .field-unit-wrap input:focus {
+    border-color: var(--accent);
+  }
+
+  /* Touch has no hover: keep flags + remove visible. */
   .pack-row .flag-btn,
   .pack-row .row-remove {
     opacity: 1;
   }
 
-  .pack-row .cell-remove {
-    grid-area: remove;
-  }
-
-  /* Give the inline table inputs a visible field on mobile. */
-  .pack-row input {
-    border: 1px solid var(--border-2);
-    border-radius: 8px;
-    padding: 8px 9px;
-    background: var(--surface);
-  }
-
-  .pack-row input:focus {
-    border-color: var(--accent);
+  .pack-row .flag-btn {
+    width: 24px;
+    height: 24px;
   }
 }

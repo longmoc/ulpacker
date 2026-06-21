@@ -1503,6 +1503,7 @@ export default function App() {
                                 <div className="name-cell">
                                   <input
                                     className="cell-name"
+                                    placeholder="Add item…"
                                     value={draft.name}
                                     onChange={(e) =>
                                       updateDraft(group.category, {
