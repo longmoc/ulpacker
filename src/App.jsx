@@ -1393,37 +1393,41 @@ export default function App() {
                                 </button>
                               </div>
 
-                              <input
-                                className="cell-weight"
-                                type="number"
-                                min="0"
-                                value={Math.max(0, parseNumber(row.weight, 0))}
-                                onChange={(e) =>
-                                  setPackItems((prev) =>
-                                    prev.map((item) =>
-                                      item.id === row.id
-                                        ? { ...item, weight: Math.max(0, parseNumber(e.target.value, 0)) }
-                                        : item
+                              <div className="cell-weight field-unit-wrap">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={Math.max(0, parseNumber(row.weight, 0))}
+                                  onChange={(e) =>
+                                    setPackItems((prev) =>
+                                      prev.map((item) =>
+                                        item.id === row.id
+                                          ? { ...item, weight: Math.max(0, parseNumber(e.target.value, 0)) }
+                                          : item
+                                      )
                                     )
-                                  )
-                                }
-                              />
+                                  }
+                                />
+                                <span className="field-unit">g</span>
+                              </div>
 
-                              <input
-                                className="cell-qty"
-                                type="number"
-                                min="0"
-                                value={row.quantity}
-                                onChange={(e) =>
-                                  setPackItems((prev) =>
-                                    prev.map((item) =>
-                                      item.id === row.id
-                                        ? { ...item, quantity: Math.max(0, parseNumber(e.target.value, 0)) }
-                                        : item
+                              <div className="cell-qty field-unit-wrap">
+                                <span className="field-unit">×</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={row.quantity}
+                                  onChange={(e) =>
+                                    setPackItems((prev) =>
+                                      prev.map((item) =>
+                                        item.id === row.id
+                                          ? { ...item, quantity: Math.max(0, parseNumber(e.target.value, 0)) }
+                                          : item
+                                      )
                                     )
-                                  )
-                                }
-                              />
+                                  }
+                                />
+                              </div>
 
                               <button
                                 className="cell-remove"
@@ -1513,26 +1517,30 @@ export default function App() {
                                     <WornIcon />
                                   </button>
                                 </div>
-                                <input
-                                  className="cell-weight"
-                                  type="number"
-                                  min="0"
-                                  value={Math.max(0, parseNumber(draft.weight, 0))}
-                                  onChange={(e) =>
-                                    updateDraft(group.category, { weight: Math.max(0, parseNumber(e.target.value, 0)) })
-                                  }
-                                />
-                                <input
-                                  className="cell-qty"
-                                  type="number"
-                                  min="0"
-                                  value={Math.max(0, parseNumber(draft.quantity, 1))}
-                                  onChange={(e) =>
-                                    updateDraft(group.category, {
-                                      quantity: Math.max(0, parseNumber(e.target.value, 0))
-                                    })
-                                  }
-                                />
+                                <div className="cell-weight field-unit-wrap">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={Math.max(0, parseNumber(draft.weight, 0))}
+                                    onChange={(e) =>
+                                      updateDraft(group.category, { weight: Math.max(0, parseNumber(e.target.value, 0)) })
+                                    }
+                                  />
+                                  <span className="field-unit">g</span>
+                                </div>
+                                <div className="cell-qty field-unit-wrap">
+                                  <span className="field-unit">×</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={Math.max(0, parseNumber(draft.quantity, 1))}
+                                    onChange={(e) =>
+                                      updateDraft(group.category, {
+                                        quantity: Math.max(0, parseNumber(e.target.value, 0))
+                                      })
+                                    }
+                                  />
+                                </div>
                                 <button className="cell-remove" type="button" onClick={() => addItemFromDraft(group.category)}>
                                   + Add
                                 </button>

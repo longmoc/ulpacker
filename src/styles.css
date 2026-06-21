@@ -1222,6 +1222,24 @@ button[type="submit"]:active {
   color: var(--text-2);
 }
 
+.field-unit-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field-unit-wrap input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Unit hints (g / ×) only matter on mobile where the column header is hidden. */
+.field-unit {
+  display: none;
+  color: var(--text-3);
+  font-size: 0.82rem;
+}
+
 @media (max-width: 1200px) {
   .summary-grid {
     grid-template-columns: repeat(3, 1fr);
@@ -1242,13 +1260,93 @@ button[type="submit"]:active {
   .library-table-head,
   .gear-row,
   .gear-top,
-  .group-table-head,
-  .pack-row,
   .variant-row {
     grid-template-columns: 1fr;
   }
 
   .summary-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .app {
+    padding: 12px;
+  }
+
+  .brand-logo {
+    height: 78px;
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Column header row is meaningless once rows reflow; hide it. */
+  .group-table-head {
+    display: none;
+  }
+
+  /* Stack each pack item into a compact 3-line block. */
+  .pack-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "name name remove"
+      "type type type"
+      "flags weight qty";
+    column-gap: 8px;
+    row-gap: 8px;
+    padding: 12px 2px;
+    border-top: 1px solid var(--border);
+  }
+
+  .pack-row .drag-handle {
+    display: none;
+  }
+
+  .pack-row .cell-name,
+  .pack-row .name-cell {
+    grid-area: name;
+  }
+
+  .pack-row .cell-item-type {
+    grid-area: type;
+  }
+
+  .pack-row .cell-flags {
+    grid-area: flags;
+    justify-content: flex-start;
+  }
+
+  .pack-row .cell-weight {
+    grid-area: weight;
+    justify-self: end;
+    width: 104px;
+  }
+
+  .pack-row .cell-qty {
+    grid-area: qty;
+    justify-self: end;
+    width: 84px;
+  }
+
+  .field-unit {
+    display: inline;
+  }
+
+  .pack-row .cell-remove {
+    grid-area: remove;
+  }
+
+  /* Give the inline table inputs a visible field on mobile. */
+  .pack-row input {
+    border: 1px solid var(--border-2);
+    border-radius: 8px;
+    padding: 8px 9px;
+    background: var(--surface);
+  }
+
+  .pack-row input:focus {
+    border-color: var(--accent);
   }
 }
