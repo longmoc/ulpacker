@@ -45,8 +45,11 @@
   box-sizing: border-box;
 }
 
+html,
 body {
   margin: 0;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 .app {
@@ -1311,6 +1314,12 @@ button[type="submit"]:active {
   .app {
     padding: 10px;
     overflow-x: hidden;
+  }
+
+  /* Let the tabs + Export/Import wrap instead of overflowing on narrow phones. */
+  .topbar-row {
+    flex-wrap: wrap;
+    row-gap: 8px;
   }
 
   .brand-logo {
