@@ -851,7 +851,7 @@ button[type="submit"]:active {
 
 .pack-row {
   display: grid;
-  grid-template-columns: 24px minmax(86px, 0.7fr) minmax(240px, 2fr) 60px 84px 60px 34px;
+  grid-template-columns: 24px minmax(86px, 0.7fr) minmax(240px, 2fr) 52px 84px 56px 34px;
   gap: 6px;
   align-items: center;
   border: 0;
@@ -984,7 +984,7 @@ button[type="submit"]:active {
 
 .group-table-head {
   display: grid;
-  grid-template-columns: 24px minmax(86px, 0.7fr) minmax(240px, 2fr) 60px 84px 60px 34px;
+  grid-template-columns: 24px minmax(86px, 0.7fr) minmax(240px, 2fr) 52px 84px 56px 34px;
   gap: 6px;
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -1002,8 +1002,8 @@ button[type="submit"]:active {
 
 /* Quiet by default; revealed on row hover. Active flags stay visible + tinted. */
 .pack-row .flag-btn {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   padding: 0;
   background: transparent;
   color: var(--text-3);
@@ -1262,6 +1262,77 @@ button[type="submit"]:active {
   color: var(--text-2);
 }
 
+/* Collapsible "Add New Gear" */
+.collapsible-head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 2px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.collapsible-head:hover {
+  background: transparent;
+  color: var(--accent);
+}
+
+.collapsible-head .chev {
+  color: var(--text-3);
+  font-size: 0.7rem;
+}
+
+.new-gear-form {
+  grid-template-columns: 1fr 1fr;
+  margin-top: 12px;
+}
+
+.new-gear-form > button[type="submit"] {
+  grid-column: 1 / -1;
+}
+
+/* Library row actions */
+.add-to-pack {
+  white-space: nowrap;
+}
+
+.library-actions .icon-only {
+  width: auto;
+  padding: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Quiet "+ Add item" affordance in each category */
+.add-item-toggle {
+  width: auto;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--accent);
+  font-weight: 500;
+  padding: 6px 2px;
+  cursor: pointer;
+}
+
+.add-item-toggle:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+
+.add-item-toggle.done {
+  color: var(--text-3);
+  font-weight: 400;
+  margin-top: 4px;
+}
+
 .field-unit-wrap {
   display: flex;
   align-items: center;
@@ -1436,6 +1507,10 @@ button[type="submit"]:active {
   }
 
   /* ---- Gear Library: card per gear ---- */
+  .new-gear-form {
+    grid-template-columns: 1fr;
+  }
+
   .library-table-head {
     display: none;
   }

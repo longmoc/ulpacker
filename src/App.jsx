@@ -242,6 +242,8 @@ export default function App() {
   const [categoryDrafts, setCategoryDrafts] = useState({});
   const [libraryQuery, setLibraryQuery] = useState("");
   const [expandedGears, setExpandedGears] = useState({});
+  const [addGearOpen, setAddGearOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState({});
   const [libraryPackTarget, setLibraryPackTarget] = useState({});
   const [categoryDragSource, setCategoryDragSource] = useState(null);
   const [categoryDragOver, setCategoryDragOver] = useState(null);
@@ -977,7 +979,16 @@ export default function App() {
               </div>
 
               <section className="library-create">
-                <h3>Add New Gear</h3>
+                <button
+                  type="button"
+                  className="collapsible-head"
+                  onClick={() => setAddGearOpen((open) => !open)}
+                  aria-expanded={addGearOpen}
+                >
+                  <span>Add New Gear</span>
+                  <span className="chev">{addGearOpen ? "▲" : "▼"}</span>
+                </button>
+                {addGearOpen && (
                 <form className="new-gear-form" onSubmit={addGear}>
                   <label>
                     <span>Name</span>
@@ -1025,6 +1036,7 @@ export default function App() {
                   </label>
                   <button type="submit">Add Gear</button>
                 </form>
+                )}
               </section>
 
               <section className="library-list">
@@ -1078,7 +1090,7 @@ export default function App() {
                         placeholder="Add category"
                       />
                       <button type="button" className="variant-toggle" onClick={() => toggleGearExpanded(gear.id)}>
-                        {gear.variants.length} variants
+                        {gear.variants.length} {gear.variants.length === 1 ? "variant" : "variants"}
                       </button>
                       <div className="library-actions">
                         <select
@@ -1095,6 +1107,7 @@ export default function App() {
                         </select>
                         <button
                           type="button"
+                          className="add-to-pack"
                           onClick={() =>
                             addToSpecificPack(
                               gear.id,
@@ -1106,7 +1119,9 @@ export default function App() {
                         </button>
                         <button
                           type="button"
-                          className="danger"
+                          className="danger icon-only"
+                          title="Delete gear"
+                          aria-label="Delete gear"
                           onClick={() => {
                             if (
                               !window.confirm(
@@ -1117,7 +1132,7 @@ export default function App() {
                             removeGearFromLibrary(gear.id);
                           }}
                         >
-                          Delete
+                          <TrashIcon />
                         </button>
                       </div>
 
@@ -1501,15 +1516,16 @@ export default function App() {
                           const suggestedGear = gears.find((gear) => gear.id === draft.gearId);
                           return (
                             <div className="category-group-actions">
-                              <div className="group-table-head add-head">
-                                <span className="cell-drag" />
-                                <span className="cell-item-type" />
-                                <span className="cell-name" />
-                                <span className="cell-flags" />
-                                <span className="cell-weight" />
-                                <span className="cell-qty" />
-                                <span className="cell-remove" />
-                              </div>
+                              {!addOpen[group.category] ? (
+                                <button
+                                  type="button"
+                                  className="add-item-toggle"
+                                  onClick={() => setAddOpen((prev) => ({ ...prev, [group.category]: true }))}
+                                >
+                                  + Add item
+                                </button>
+                              ) : (
+                                <>
                               <div className="pack-row add-row">
                                 <span className="drag-handle muted">+</span>
                                 <input
@@ -1614,6 +1630,15 @@ export default function App() {
                                     ))}
                                   </select>
                                 </div>
+                              )}
+                              <button
+                                type="button"
+                                className="add-item-toggle done"
+                                onClick={() => setAddOpen((prev) => ({ ...prev, [group.category]: false }))}
+                              >
+                                Done
+                              </button>
+                                </>
                               )}
                             </div>
                           );
