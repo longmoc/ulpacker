@@ -317,7 +317,7 @@ export default function App() {
   const [categoryDragSource, setCategoryDragSource] = useState(null);
   const [categoryDragOver, setCategoryDragOver] = useState(null);
   const [importConfig, setImportConfig] = useState({
-    mappingMode: "name_to_name",
+    mappingMode: "description_to_name",
     autoFillItemTypeFromCategory: true,
     descriptionSource: "empty"
   });
