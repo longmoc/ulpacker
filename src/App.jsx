@@ -132,6 +132,26 @@ function BackpackIcon() {
   );
 }
 
+function BoxIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+      <path d="m3.3 7 8.7 5 8.7-5" />
+      <path d="M12 22V12" />
+    </svg>
+  );
+}
+
 function RemoveItemIcon() {
   return (
     <svg
@@ -377,14 +397,15 @@ export default function App() {
 
   const carriedRows = activePackRows.filter((row) => Number(row.quantity) > 0);
   const totals = {
-    list: activePackRows.reduce((sum, row) => sum + row.lineWeight, 0),
-    carried: carriedRows.reduce((sum, row) => sum + row.lineWeight, 0),
+    total: carriedRows.reduce((sum, row) => sum + row.lineWeight, 0),
     base: carriedRows.filter((row) => row.weightType === "base").reduce((sum, row) => sum + row.lineWeight, 0),
     worn: carriedRows.filter((row) => row.weightType === "worn").reduce((sum, row) => sum + row.lineWeight, 0),
     consumable: carriedRows
       .filter((row) => row.weightType === "consumable")
       .reduce((sum, row) => sum + row.lineWeight, 0)
   };
+  // Carried = what's actually in the pack on your back, i.e. everything except worn.
+  totals.carried = totals.total - totals.worn;
 
   const categoryRows = useMemo(() => {
     const grouped = new Map();
@@ -402,7 +423,11 @@ export default function App() {
     const grouped = new Map();
     for (const row of activePackRows) {
       if (hideZeroQty && Number(row.quantity) <= 0) continue;
-      if (selectedWeightType && normalizeWeightType(row.weightType) !== selectedWeightType) continue;
+      if (selectedWeightType) {
+        const type = normalizeWeightType(row.weightType);
+        // "carried" = everything except worn; others match the exact type.
+        if (selectedWeightType === "carried" ? type === "worn" : type !== selectedWeightType) continue;
+      }
       const category = row.category || primaryCategory(row.gear);
       if (!grouped.has(category)) {
         grouped.set(category, { category, rows: [], totalWeight: 0, gearIds: new Set() });
@@ -1292,17 +1317,23 @@ export default function App() {
               </div>
 
               <div className="summary-grid">
-                <div className="summary-card">
-                  <small>Total Carried</small>
+                <button
+                  type="button"
+                  className={`summary-card summary-card-btn ${selectedWeightType === "carried" ? "selected" : ""}`}
+                  onClick={() => toggleWeightTypeFilter("carried")}
+                >
+                  <small>
+                    <BackpackIcon /> Carried
+                  </small>
                   <strong>{gramsToKg(totals.carried)}</strong>
-                </div>
+                </button>
                 <button
                   type="button"
                   className={`summary-card summary-card-btn ${selectedWeightType === "base" ? "selected" : ""}`}
                   onClick={() => toggleWeightTypeFilter("base")}
                 >
                   <small>
-                    <BackpackIcon /> Base
+                    <BoxIcon /> Base
                   </small>
                   <strong>{gramsToKg(totals.base)}</strong>
                 </button>
@@ -1327,8 +1358,8 @@ export default function App() {
                   <strong>{gramsToKg(totals.worn)}</strong>
                 </button>
                 <div className="summary-card">
-                  <small>Total In List</small>
-                  <strong>{gramsToKg(totals.list)}</strong>
+                  <small>Total</small>
+                  <strong>{gramsToKg(totals.total)}</strong>
                 </div>
               </div>
 
@@ -1408,7 +1439,7 @@ export default function App() {
                   <div className="breakdown-table">
                     <div className="breakdown-row">
                       <span>Total</span>
-                      <strong>{gramsToKg(totals.carried)}</strong>
+                      <strong>{gramsToKg(totals.total)}</strong>
                     </div>
                     <div className="breakdown-row">
                       <span>Consumable</span>
