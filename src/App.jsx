@@ -258,6 +258,7 @@ export default function App() {
   const [view, setView] = useState("packs");
   const [chartHover, setChartHover] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [selectedWeightType, setSelectedWeightType] = useState(null);
   const [categoryDrafts, setCategoryDrafts] = useState({});
   const [libraryQuery, setLibraryQuery] = useState("");
   const [expandedGears, setExpandedGears] = useState({});
@@ -289,6 +290,7 @@ export default function App() {
 
   useEffect(() => {
     setSelectedCategory(null);
+    setSelectedWeightType(null);
   }, [activePackId]);
 
   useEffect(() => {
@@ -379,6 +381,7 @@ export default function App() {
     const grouped = new Map();
     for (const row of activePackRows) {
       if (hideZeroQty && Number(row.quantity) <= 0) continue;
+      if (selectedWeightType && normalizeWeightType(row.weightType) !== selectedWeightType) continue;
       const category = row.category || primaryCategory(row.gear);
       if (!grouped.has(category)) {
         grouped.set(category, { category, rows: [], totalWeight: 0, gearIds: new Set() });
@@ -393,7 +396,7 @@ export default function App() {
     }
     // Manual category order (per pack); new categories fall to the end.
     return applyOrder([...grouped.keys()], activePack?.categoryOrder || []).map((c) => grouped.get(c));
-  }, [activePackRows, activePack, hideZeroQty]);
+  }, [activePackRows, activePack, hideZeroQty, selectedWeightType]);
 
   // Only treat the filter as active while its category still exists in the pack.
   const activeFilter =
@@ -406,6 +409,10 @@ export default function App() {
 
   function toggleCategoryFilter(category) {
     setSelectedCategory((prev) => (prev === category ? null : category));
+  }
+
+  function toggleWeightTypeFilter(type) {
+    setSelectedWeightType((prev) => (prev === type ? null : type));
   }
   const filteredGears = useMemo(() => {
     const q = normalizeText(libraryQuery);
@@ -1268,18 +1275,30 @@ export default function App() {
                   <small>Total Carried</small>
                   <strong>{gramsToKg(totals.carried)}</strong>
                 </div>
-                <div className="summary-card">
+                <button
+                  type="button"
+                  className={`summary-card summary-card-btn ${selectedWeightType === "base" ? "selected" : ""}`}
+                  onClick={() => toggleWeightTypeFilter("base")}
+                >
                   <small>Base</small>
                   <strong>{gramsToKg(totals.base)}</strong>
-                </div>
-                <div className="summary-card">
+                </button>
+                <button
+                  type="button"
+                  className={`summary-card summary-card-btn ${selectedWeightType === "consumable" ? "selected" : ""}`}
+                  onClick={() => toggleWeightTypeFilter("consumable")}
+                >
                   <small>Consumable</small>
                   <strong>{gramsToKg(totals.consumable)}</strong>
-                </div>
-                <div className="summary-card">
+                </button>
+                <button
+                  type="button"
+                  className={`summary-card summary-card-btn ${selectedWeightType === "worn" ? "selected" : ""}`}
+                  onClick={() => toggleWeightTypeFilter("worn")}
+                >
                   <small>Worn</small>
                   <strong>{gramsToKg(totals.worn)}</strong>
-                </div>
+                </button>
                 <div className="summary-card">
                   <small>Total In List</small>
                   <strong>{gramsToKg(totals.list)}</strong>
@@ -1387,12 +1406,25 @@ export default function App() {
                   onDrop={onPackDrop}
                 >
                   <h3>Pack Items by Category</h3>
-                  {activeFilter && (
+                  {(activeFilter || selectedWeightType) && (
                     <div className="filter-chip">
                       <span>
-                        Filtering: <strong>{activeFilter}</strong>
+                        Filtering:{" "}
+                        {activeFilter && <strong>{activeFilter}</strong>}
+                        {activeFilter && selectedWeightType && " · "}
+                        {selectedWeightType && (
+                          <strong>
+                            {selectedWeightType.charAt(0).toUpperCase() + selectedWeightType.slice(1)}
+                          </strong>
+                        )}
                       </span>
-                      <button type="button" onClick={() => setSelectedCategory(null)}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCategory(null);
+                          setSelectedWeightType(null);
+                        }}
+                      >
                         ✕ Show all
                       </button>
                     </div>
