@@ -212,6 +212,25 @@ function TrashIcon() {
   );
 }
 
+function SettingsIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
 export default function App() {
   const initial = readStorage();
 
@@ -244,6 +263,13 @@ export default function App() {
   const [expandedGears, setExpandedGears] = useState({});
   const [addGearOpen, setAddGearOpen] = useState(false);
   const [addOpen, setAddOpen] = useState({});
+  const [hideZeroQty, setHideZeroQty] = useState(() => {
+    try {
+      return Boolean(JSON.parse(localStorage.getItem("ulpacker.settings") || "{}").hideZeroQty);
+    } catch {
+      return false;
+    }
+  });
   const [libraryPackTarget, setLibraryPackTarget] = useState({});
   const [categoryDragSource, setCategoryDragSource] = useState(null);
   const [categoryDragOver, setCategoryDragOver] = useState(null);
@@ -268,6 +294,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ gears, packs, packItems }));
   }, [gears, packs, packItems]);
+
+  useEffect(() => {
+    localStorage.setItem("ulpacker.settings", JSON.stringify({ hideZeroQty }));
+  }, [hideZeroQty]);
 
   useEffect(() => {
     setPackItems((prev) => {
@@ -348,6 +378,7 @@ export default function App() {
   const packGroups = useMemo(() => {
     const grouped = new Map();
     for (const row of activePackRows) {
+      if (hideZeroQty && Number(row.quantity) <= 0) continue;
       const category = row.category || primaryCategory(row.gear);
       if (!grouped.has(category)) {
         grouped.set(category, { category, rows: [], totalWeight: 0, gearIds: new Set() });
@@ -362,7 +393,7 @@ export default function App() {
     }
     // Manual category order (per pack); new categories fall to the end.
     return applyOrder([...grouped.keys()], activePack?.categoryOrder || []).map((c) => grouped.get(c));
-  }, [activePackRows, activePack]);
+  }, [activePackRows, activePack, hideZeroQty]);
 
   // Only treat the filter as active while its category still exists in the pack.
   const activeFilter =
@@ -916,6 +947,22 @@ export default function App() {
                 </label>
               </div>
             </div>
+            <div className="menu">
+              <button type="button" className="menu-trigger">
+                <SettingsIcon />
+                Settings
+              </button>
+              <div className="menu-list settings-menu">
+                <label className="menu-check">
+                  <input
+                    type="checkbox"
+                    checked={!hideZeroQty}
+                    onChange={(e) => setHideZeroQty(!e.target.checked)}
+                  />
+                  Show items with quantity 0
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       </header>
@@ -1198,7 +1245,7 @@ export default function App() {
                   <div className="menu">
                     <button type="button" className="menu-trigger">
                       <CloudDownloadIcon />
-                      Import from LighterPack
+                      Import Pack
                     </button>
                     <div className="menu-list">
                       <button type="button" onClick={() => openImport("url")}>

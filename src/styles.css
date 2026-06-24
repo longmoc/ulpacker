@@ -199,6 +199,31 @@ body {
   display: none;
 }
 
+.settings-menu {
+  min-width: 220px;
+}
+
+.menu-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  font-size: 0.86rem;
+  color: var(--text);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.menu-check:hover {
+  background: var(--accent-soft);
+}
+
+.menu-check input {
+  width: auto;
+  accent-color: var(--accent);
+}
+
 .dashboard {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -492,25 +517,26 @@ button[type="submit"]:active {
 
 .analytics {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 28px;
   align-items: center;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 16px;
+  padding: 20px;
   overflow: visible;
 }
 
 .pie-wrap {
   position: relative;
-  width: 220px;
-  height: 220px;
+  width: 250px;
+  height: 250px;
+  justify-self: center;
 }
 
 .pie-svg {
-  width: 220px;
-  height: 220px;
+  width: 250px;
+  height: 250px;
   display: block;
 }
 
@@ -531,6 +557,7 @@ button[type="submit"]:active {
 .legend {
   display: grid;
   gap: 8px;
+  width: 300px;
 }
 
 .legend-table {
@@ -540,7 +567,7 @@ button[type="submit"]:active {
 
 .legend-table-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 90px 56px;
+  grid-template-columns: minmax(0, 1fr) 76px 48px;
   gap: 8px;
   font-size: 0.74rem;
   text-transform: uppercase;
@@ -553,7 +580,7 @@ button[type="submit"]:active {
 
 .legend-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 90px 56px;
+  grid-template-columns: minmax(0, 1fr) 76px 48px;
   gap: 8px;
   align-items: center;
   font-size: 0.84rem;
