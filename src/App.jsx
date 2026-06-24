@@ -305,6 +305,7 @@ export default function App() {
   const [expandedGears, setExpandedGears] = useState({});
   const [addGearOpen, setAddGearOpen] = useState(false);
   const [addOpen, setAddOpen] = useState({});
+  const [newCategories, setNewCategories] = useState([]);
   const [hideZeroQty, setHideZeroQty] = useState(() => {
     try {
       return Boolean(JSON.parse(localStorage.getItem("ulpacker.settings") || "{}").hideZeroQty);
@@ -332,6 +333,7 @@ export default function App() {
   useEffect(() => {
     setSelectedCategory(null);
     setSelectedWeightType(null);
+    setNewCategories([]);
   }, [activePackId]);
 
   useEffect(() => {
@@ -437,12 +439,20 @@ export default function App() {
       group.totalWeight += row.lineWeight;
       group.gearIds.add(row.gear.id);
     }
-    if (grouped.size === 0) {
+    // Manual category order (per pack); new categories fall to the end.
+    const ordered = applyOrder([...grouped.keys()], activePack?.categoryOrder || []);
+    // Empty categories the user just created (no items yet).
+    for (const name of newCategories) {
+      if (!grouped.has(name)) {
+        grouped.set(name, { category: name, rows: [], totalWeight: 0, gearIds: new Set() });
+        ordered.push(name);
+      }
+    }
+    if (ordered.length === 0) {
       return [{ category: "Uncategorized", rows: [], totalWeight: 0, gearIds: new Set() }];
     }
-    // Manual category order (per pack); new categories fall to the end.
-    return applyOrder([...grouped.keys()], activePack?.categoryOrder || []).map((c) => grouped.get(c));
-  }, [activePackRows, activePack, hideZeroQty, selectedWeightType]);
+    return ordered.map((c) => grouped.get(c));
+  }, [activePackRows, activePack, hideZeroQty, selectedWeightType, newCategories]);
 
   // Only treat the filter as active while its category still exists in the pack.
   const activeFilter =
@@ -527,6 +537,18 @@ export default function App() {
       const next = activePack.categoryOrder.map((c) => (c === oldCategory ? trimmed : c));
       updateActivePack({ categoryOrder: [...new Set(next)] });
     }
+    // Track renames of empty (not-yet-used) categories too.
+    setNewCategories((prev) =>
+      prev.includes(oldCategory) ? [...new Set(prev.map((c) => (c === oldCategory ? trimmed : c)))] : prev
+    );
+  }
+
+  function addCategory() {
+    if (!activePack) return;
+    const name = (window.prompt("New category name") || "").trim();
+    if (!name) return;
+    setNewCategories((prev) => (prev.includes(name) ? prev : [...prev, name]));
+    setAddOpen((prev) => ({ ...prev, [name]: true }));
   }
 
   function moveCategory(from, target) {
@@ -1782,6 +1804,9 @@ export default function App() {
                         })()}
                       </section>
                     ))}
+                    <button type="button" className="add-category-btn" onClick={addCategory}>
+                      + Add category
+                    </button>
                   </div>
                 </section>
               </div>

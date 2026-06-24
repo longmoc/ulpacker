@@ -1405,6 +1405,26 @@ button[type="submit"]:active {
   margin-top: 4px;
 }
 
+.add-category-btn {
+  width: auto;
+  justify-self: start;
+  margin-top: 6px;
+  border: 1px dashed var(--border-2);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-2);
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.add-category-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .field-unit-wrap {
   display: flex;
   align-items: center;
