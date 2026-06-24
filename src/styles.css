@@ -538,6 +538,18 @@ button[type="submit"]:active {
   background: #eef0f3;
 }
 
+.summary-card-btn small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.summary-card-btn small svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
 .summary-card-btn.selected {
   border-color: var(--accent);
   background: var(--accent-soft);

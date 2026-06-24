@@ -111,6 +111,27 @@ function WornIcon() {
   );
 }
 
+function BackpackIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 10a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z" />
+      <path d="M9 5V4a3 3 0 0 1 6 0v1" />
+      <path d="M8 11h8" />
+      <path d="M9 21v-4a3 3 0 0 1 6 0v4" />
+    </svg>
+  );
+}
+
 function RemoveItemIcon() {
   return (
     <svg
@@ -1280,7 +1301,9 @@ export default function App() {
                   className={`summary-card summary-card-btn ${selectedWeightType === "base" ? "selected" : ""}`}
                   onClick={() => toggleWeightTypeFilter("base")}
                 >
-                  <small>Base</small>
+                  <small>
+                    <BackpackIcon /> Base
+                  </small>
                   <strong>{gramsToKg(totals.base)}</strong>
                 </button>
                 <button
@@ -1288,7 +1311,9 @@ export default function App() {
                   className={`summary-card summary-card-btn ${selectedWeightType === "consumable" ? "selected" : ""}`}
                   onClick={() => toggleWeightTypeFilter("consumable")}
                 >
-                  <small>Consumable</small>
+                  <small>
+                    <ConsumableIcon /> Consumable
+                  </small>
                   <strong>{gramsToKg(totals.consumable)}</strong>
                 </button>
                 <button
@@ -1296,7 +1321,9 @@ export default function App() {
                   className={`summary-card summary-card-btn ${selectedWeightType === "worn" ? "selected" : ""}`}
                   onClick={() => toggleWeightTypeFilter("worn")}
                 >
-                  <small>Worn</small>
+                  <small>
+                    <WornIcon /> Worn
+                  </small>
                   <strong>{gramsToKg(totals.worn)}</strong>
                 </button>
                 <div className="summary-card">
