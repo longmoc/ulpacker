@@ -457,16 +457,27 @@ button[type="submit"]:active {
 }
 
 .workspace-head {
-  display: grid;
-  grid-template-columns: 2fr 2fr auto;
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   align-items: center;
+}
+
+.pack-name-input {
+  flex: 0 1 240px;
+  min-width: 160px;
+}
+
+.pack-desc-input {
+  flex: 1 1 260px;
+  max-width: 420px;
 }
 
 .workspace-actions {
   display: inline-flex;
   align-items: center;
   gap: 2px;
+  margin-left: auto;
 }
 
 .action-danger {
@@ -1394,13 +1405,28 @@ button[type="submit"]:active {
     grid-template-columns: 1fr;
   }
 
-  .workspace-head,
   .analytics,
   .library-table-head,
   .gear-row,
   .gear-top,
   .variant-row {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .workspace-head .pack-name-input,
+  .workspace-head .pack-desc-input {
+    flex: none;
+    max-width: none;
+    width: 100%;
+  }
+
+  .workspace-actions {
+    margin-left: 0;
   }
 
   .summary-grid {
