@@ -224,6 +224,159 @@ body {
   accent-color: var(--accent);
 }
 
+/* Account / sync UI */
+.account-trigger {
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+.account-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+
+.account-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.sync-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-3);
+}
+
+.sync-saved {
+  background: #16a34a;
+}
+
+.sync-syncing {
+  background: #d97706;
+}
+
+.sync-error {
+  background: var(--danger);
+}
+
+.account-list {
+  min-width: 210px;
+}
+
+.account-info {
+  padding: 8px 9px;
+  display: grid;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.account-info strong {
+  font-size: 0.88rem;
+}
+
+.account-info small {
+  color: var(--text-2);
+  font-size: 0.78rem;
+  word-break: break-all;
+}
+
+.account-info .sync-line {
+  color: var(--text-3);
+  margin-top: 2px;
+}
+
+/* Landing / sign-in page */
+.landing {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.landing-card {
+  width: min(440px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 32px 28px;
+  text-align: center;
+}
+
+.landing-logo {
+  height: 110px;
+  width: auto;
+  display: block;
+  margin: 0 auto 14px;
+}
+
+.landing-tagline {
+  color: var(--text-2);
+  font-size: 0.95rem;
+  line-height: 1.5;
+  margin: 0 0 24px;
+}
+
+.landing-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.google-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 16px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow-xs);
+  cursor: pointer;
+}
+
+.google-btn:hover {
+  background: #f4f4f6;
+}
+
+.landing-local {
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-2);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.landing-local:hover {
+  color: var(--accent);
+  background: transparent;
+  text-decoration: underline;
+}
+
+.landing-note {
+  color: var(--text-3);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 18px 0 0;
+}
+
 .dashboard {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);

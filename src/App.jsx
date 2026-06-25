@@ -1,10 +1,27 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { id, parseNumber, normalizeWeightType, normalizeText, gramsToKg, reorder, mutatePackItemsForPack, applyOrder } from "./lib/util.js";
 import { normalizeCategories, primaryCategory, mergeOrCreateGear } from "./lib/gear.js";
 import { parseLighterpackCsv, parseLighterpackHtml, mapImportedEntry, packToCsv } from "./lib/import.js";
 import { buildPieSegments, describeDonutArc } from "./lib/chart.js";
-import { STORAGE_KEY, readStorage, normalizeData } from "./lib/storage.js";
+import { STORAGE_KEY, readStorage, normalizeData, defaultData } from "./lib/storage.js";
+import { useGoogleSync } from "./hooks/useGoogleSync.js";
+import Landing from "./components/Landing.jsx";
 import logoUrl from "./logo.png";
+
+function syncLabel(status) {
+  if (status === "syncing") return "Saving…";
+  if (status === "saved") return "Synced";
+  if (status === "error") return "Sync error";
+  return "";
+}
+
+function readInitialUpdatedAt() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}").updatedAt || new Date().toISOString();
+  } catch {
+    return new Date().toISOString();
+  }
+}
 
 function createEmptyDraft(category = "") {
   return {
@@ -280,6 +297,15 @@ export default function App() {
   const [packItems, setPackItems] = useState(initial.packItems);
   const [activePackId, setActivePackId] = useState(initial.packs[0]?.id || "");
   const [dragOverIndex, setDragOverIndex] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState(readInitialUpdatedAt);
+  const [entered, setEntered] = useState(
+    () =>
+      localStorage.getItem("ulpacker.entered") === "1" ||
+      localStorage.getItem("ulpacker.googleSignedIn") === "1"
+  );
+  const updatedAtRef = useRef(updatedAt);
+  const lastSavedRef = useRef(JSON.stringify({ gears: initial.gears, packs: initial.packs, packItems: initial.packItems }));
+  const appliedUpdatedAt = useRef(null);
 
   const [newPack, setNewPack] = useState({ name: "", description: "" });
   const [newGear, setNewGear] = useState({
@@ -337,8 +363,33 @@ export default function App() {
   }, [activePackId]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ gears, packs, packItems }));
+    const serialized = JSON.stringify({ gears, packs, packItems });
+    let ts = updatedAtRef.current;
+    if (serialized !== lastSavedRef.current) {
+      // Real change: bump the timestamp (or keep a just-applied cloud one).
+      lastSavedRef.current = serialized;
+      ts = appliedUpdatedAt.current || new Date().toISOString();
+      appliedUpdatedAt.current = null;
+      updatedAtRef.current = ts;
+      setUpdatedAt(ts);
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ gears, packs, packItems, updatedAt: ts }));
   }, [gears, packs, packItems]);
+
+  function applyCloud(cloud) {
+    const norm = normalizeData(cloud) || defaultData();
+    appliedUpdatedAt.current = cloud?.updatedAt || new Date().toISOString();
+    setGears(norm.gears);
+    setPacks(norm.packs);
+    setPackItems(norm.packItems);
+    setActivePackId((prev) => (norm.packs.some((pack) => pack.id === prev) ? prev : norm.packs[0]?.id || ""));
+  }
+
+  const sync = useGoogleSync({
+    buildData: () => ({ gears, packs, packItems, updatedAt }),
+    applyCloud,
+    updatedAt
+  });
 
   useEffect(() => {
     localStorage.setItem("ulpacker.settings", JSON.stringify({ hideZeroQty }));
@@ -999,6 +1050,24 @@ export default function App() {
     }
   }
 
+  function enterApp() {
+    localStorage.setItem("ulpacker.entered", "1");
+    setEntered(true);
+  }
+
+  if (!entered) {
+    return (
+      <Landing
+        configured={sync.configured}
+        onSignIn={() => {
+          enterApp();
+          sync.signIn();
+        }}
+        onContinue={enterApp}
+      />
+    );
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -1063,6 +1132,39 @@ export default function App() {
                 </label>
               </div>
             </div>
+            {sync.account ? (
+              <div className="menu account-menu">
+                <button type="button" className="menu-trigger account-trigger">
+                  {sync.account.picture ? (
+                    <img
+                      className="account-avatar"
+                      src={sync.account.picture}
+                      alt=""
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <span className="account-avatar account-avatar-fallback">
+                      {(sync.account.name || "?").charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <span className={`sync-dot sync-${sync.status}`} title={syncLabel(sync.status)} />
+                </button>
+                <div className="menu-list account-list">
+                  <div className="account-info">
+                    <strong>{sync.account.name}</strong>
+                    <small>{sync.account.email}</small>
+                    <small className="sync-line">{syncLabel(sync.status)}</small>
+                  </div>
+                  <button type="button" onClick={sync.signOut}>
+                    Sign out
+                  </button>
+                </div>
+              </div>
+            ) : sync.configured ? (
+              <button type="button" className="menu-trigger signin-trigger" onClick={sync.signIn}>
+                Sign in
+              </button>
+            ) : null}
           </div>
         </div>
       </header>
