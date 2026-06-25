@@ -5,13 +5,18 @@ const FILE_NAME = "ulpacker.json";
 const API = "https://www.googleapis.com/drive/v3";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
 
+// 401/403 from Drive usually means the appdata scope wasn't granted.
+function permissionError() {
+  return Object.assign(new Error("permission"), { code: "permission" });
+}
+
 async function findFileId(token) {
   const query = encodeURIComponent(`name='${FILE_NAME}'`);
   const res = await fetch(
     `${API}/files?spaces=appDataFolder&q=${query}&fields=files(id,modifiedTime)&pageSize=1`,
     { headers: { Authorization: `Bearer ${token}` } }
   );
-  if (res.status === 401) throw new Error("unauthorized");
+  if (res.status === 401 || res.status === 403) throw permissionError();
   if (!res.ok) throw new Error("Drive list failed");
   const data = await res.json();
   return data.files?.[0]?.id || null;
@@ -23,7 +28,7 @@ export async function downloadData(token) {
   const res = await fetch(`${API}/files/${id}?alt=media`, {
     headers: { Authorization: `Bearer ${token}` }
   });
-  if (res.status === 401) throw new Error("unauthorized");
+  if (res.status === 401 || res.status === 403) throw permissionError();
   if (!res.ok) throw new Error("Drive download failed");
   return res.json();
 }
@@ -38,7 +43,7 @@ export async function uploadData(token, data) {
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body
     });
-    if (res.status === 401) throw new Error("unauthorized");
+    if (res.status === 401 || res.status === 403) throw permissionError();
     if (!res.ok) throw new Error("Drive update failed");
     return id;
   }
@@ -62,7 +67,7 @@ export async function uploadData(token, data) {
     },
     body: multipart
   });
-  if (res.status === 401) throw new Error("unauthorized");
+  if (res.status === 401 || res.status === 403) throw permissionError();
   if (!res.ok) throw new Error("Drive create failed");
   const created = await res.json();
   return created.id;

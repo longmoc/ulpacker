@@ -26,23 +26,37 @@ export function useGoogleSync({ buildData, applyCloud, updatedAt }) {
     return token;
   }, []);
 
+  // Run a Drive call; on failure refresh the token silently once and retry.
+  // A lingering permission error means the Drive scope wasn't granted.
+  const driveCall = useCallback(
+    async (fn) => {
+      try {
+        const token = tokenRef.current || (await getToken(false));
+        return await fn(token);
+      } catch {
+        const token = await getToken(false);
+        return await fn(token);
+      }
+    },
+    [getToken]
+  );
+
   const pull = useCallback(async () => {
     setStatus("syncing");
     try {
-      const token = tokenRef.current || (await getToken(false));
-      const cloud = await downloadData(token);
+      const cloud = await driveCall((token) => downloadData(token));
       const { use, data } = resolveSync(buildRef.current(), cloud);
       if (use === "cloud") {
         skipNextPush.current = true;
         applyRef.current(data);
       } else {
-        await uploadData(token, buildRef.current());
+        await driveCall((token) => uploadData(token, buildRef.current()));
       }
       setStatus("saved");
-    } catch {
-      setStatus("error");
+    } catch (e) {
+      setStatus(e?.code === "permission" ? "permission" : "error");
     }
-  }, [getToken]);
+  }, [driveCall]);
 
   const enterSignedIn = useCallback(
     async (interactive) => {
@@ -92,25 +106,15 @@ export function useGoogleSync({ buildData, applyCloud, updatedAt }) {
     }
     const timer = setTimeout(async () => {
       setStatus("syncing");
-      const attempt = async () => {
-        const token = tokenRef.current || (await getToken(false));
-        await uploadData(token, buildRef.current());
-      };
       try {
-        await attempt();
+        await driveCall((token) => uploadData(token, buildRef.current()));
         setStatus("saved");
-      } catch {
-        try {
-          await getToken(false);
-          await attempt();
-          setStatus("saved");
-        } catch {
-          setStatus("error");
-        }
+      } catch (e) {
+        setStatus(e?.code === "permission" ? "permission" : "error");
       }
     }, 1500);
     return () => clearTimeout(timer);
-  }, [updatedAt, getToken]);
+  }, [updatedAt, driveCall]);
 
   return { account, status, configured: isConfigured(), signIn, signOut };
 }

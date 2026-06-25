@@ -11,6 +11,7 @@ import logoUrl from "./logo.png";
 function syncLabel(status) {
   if (status === "syncing") return "Saving…";
   if (status === "saved") return "Synced";
+  if (status === "permission") return "Drive access needed";
   if (status === "error") return "Sync error";
   return "";
 }
@@ -1137,8 +1138,13 @@ export default function App() {
                   <div className="account-info">
                     <strong>{sync.account.name}</strong>
                     <small>{sync.account.email}</small>
-                    <small className="sync-line">{syncLabel(sync.status)}</small>
+                    <small className={`sync-line sync-line-${sync.status}`}>{syncLabel(sync.status)}</small>
                   </div>
+                  {(sync.status === "permission" || sync.status === "error") && (
+                    <button type="button" onClick={sync.signIn}>
+                      Reconnect Drive
+                    </button>
+                  )}
                   <button type="button" onClick={sync.signOut}>
                     Sign out
                   </button>

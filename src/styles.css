@@ -259,8 +259,20 @@ body {
   background: #d97706;
 }
 
+.sync-permission {
+  background: #d97706;
+}
+
 .sync-error {
   background: var(--danger);
+}
+
+.sync-line-permission {
+  color: #b45309;
+}
+
+.sync-line-error {
+  color: var(--danger-text);
 }
 
 .account-list {
