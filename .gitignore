@@ -9,3 +9,7 @@ CLAUDE.md
 
 # Local LighterPack CSV exports
 *.csv
+
+# Phone screenshots dropped into the repo
+IMG_*.PNG
+IMG_*.png
