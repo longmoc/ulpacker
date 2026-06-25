@@ -1071,24 +1071,8 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <img className="brand-logo" src={logoUrl} alt="ULPacker" />
-        <div className="topbar-row">
-          <div className="view-tabs">
-            <button
-              type="button"
-              className={view === "packs" ? "active" : ""}
-              onClick={() => setView("packs")}
-            >
-              Packs
-            </button>
-            <button
-              type="button"
-              className={view === "library" ? "active" : ""}
-              onClick={() => setView("library")}
-            >
-              Gear Library
-            </button>
-          </div>
+        <div className="topbar-top">
+          <img className="brand-logo" src={logoUrl} alt="ULPacker" />
           <div className="data-tools">
             <div className="menu">
               <button type="button" className="menu-trigger">
@@ -1166,6 +1150,22 @@ export default function App() {
               </button>
             ) : null}
           </div>
+        </div>
+        <div className="view-tabs">
+          <button
+            type="button"
+            className={view === "packs" ? "active" : ""}
+            onClick={() => setView("packs")}
+          >
+            Packs
+          </button>
+          <button
+            type="button"
+            className={view === "library" ? "active" : ""}
+            onClick={() => setView("library")}
+          >
+            Gear Library
+          </button>
         </div>
       </header>
 

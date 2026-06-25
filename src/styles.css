@@ -62,7 +62,6 @@ body {
   display: block;
   height: 114px;
   width: auto;
-  margin: 0 0 14px;
 }
 
 /* Segmented tab control */
@@ -97,20 +96,17 @@ body {
   color: #ffffff;
 }
 
-.topbar-row {
+.topbar-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.topbar-row .view-tabs {
-  margin-bottom: 0;
+  gap: 16px;
+  margin-bottom: 12px;
 }
 
 .data-tools {
   display: inline-flex;
+  align-items: center;
   gap: 2px;
 }
 
@@ -1647,8 +1643,8 @@ button[type="submit"]:active {
     overflow-x: hidden;
   }
 
-  /* Let the tabs + Export/Import wrap instead of overflowing on narrow phones. */
-  .topbar-row {
+  /* Let the logo + Export/Import/account wrap instead of overflowing on narrow phones. */
+  .topbar-top {
     flex-wrap: wrap;
     row-gap: 8px;
   }
