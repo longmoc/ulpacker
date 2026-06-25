@@ -1,5 +1,37 @@
 import { parseNumber, normalizeWeightType, unitToGrams, textContent } from "./util.js";
 
+function csvCell(value) {
+  const s = String(value ?? "");
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Export pack rows to a LighterPack-compatible CSV (Item Name = itemType,
+// desc = product name) so it round-trips with this app's default import mapping.
+export function packToCsv(rows) {
+  const header = ["Item Name", "Category", "desc", "qty", "weight", "unit", "url", "price", "worn", "consumable"];
+  const lines = [header.map(csvCell).join(",")];
+  for (const row of rows || []) {
+    const type = normalizeWeightType(row?.weightType);
+    lines.push(
+      [
+        row?.itemType || "",
+        row?.category || "",
+        row?.name || "",
+        String(Math.max(0, Math.round(parseNumber(row?.quantity, 0)))),
+        String(Math.max(0, Math.round(parseNumber(row?.weight, 0)))),
+        "gram",
+        "",
+        "",
+        type === "worn" ? "worn" : "",
+        type === "consumable" ? "consumable" : ""
+      ]
+        .map(csvCell)
+        .join(",")
+    );
+  }
+  return lines.join("\n");
+}
+
 export function parseCsvLine(line) {
   const cols = [];
   let current = "";

@@ -5,7 +5,8 @@ import {
   extractVariantFromName,
   parseLighterpackCsv,
   parseLighterpackHtml,
-  mapImportedEntry
+  mapImportedEntry,
+  packToCsv
 } from "../import.js";
 
 describe("parseCsvLine", () => {
@@ -99,6 +100,33 @@ describe("parseLighterpackHtml", () => {
       quantity: 1,
       weightType: "worn"
     });
+  });
+});
+
+describe("packToCsv", () => {
+  it("writes a LighterPack-style header and maps itemType->Item Name, name->desc", () => {
+    const csv = packToCsv([
+      { itemType: "Tent", name: "Durston X-Mid Pro 2", category: "Shelter", quantity: 1, weight: 654, weightType: "base" },
+      { itemType: "Food", name: "Trail dinner", category: "Food & Drink", quantity: 2, weight: 700, weightType: "consumable" },
+      { itemType: "Shell", name: "Rain jacket", category: "Clothing", quantity: 1, weight: 180, weightType: "worn" }
+    ]);
+    const lines = csv.split("\n");
+    expect(lines[0]).toBe("Item Name,Category,desc,qty,weight,unit,url,price,worn,consumable");
+    expect(lines[1]).toBe("Tent,Shelter,Durston X-Mid Pro 2,1,654,gram,,,,");
+    expect(lines[2]).toBe("Food,Food & Drink,Trail dinner,2,700,gram,,,,consumable");
+    expect(lines[3]).toBe("Shell,Clothing,Rain jacket,1,180,gram,,,worn,");
+  });
+
+  it("quotes fields containing commas or quotes", () => {
+    const csv = packToCsv([{ itemType: "Cables", name: 'USB-C, USB-A and "tips"', category: "Electronics", quantity: 1, weight: 20 }]);
+    expect(csv.split("\n")[1]).toBe('Cables,Electronics,"USB-C, USB-A and ""tips""",1,20,gram,,,,');
+  });
+
+  it("round-trips through parseLighterpackCsv + description_to_name mapping", () => {
+    const csv = packToCsv([{ itemType: "Tent", name: "X-Mid", category: "Shelter", quantity: 1, weight: 654, weightType: "base" }]);
+    const entry = parseLighterpackCsv(csv)[0];
+    const mapped = mapImportedEntry(entry, { mappingMode: "description_to_name", autoFillItemTypeFromCategory: false });
+    expect(mapped).toMatchObject({ name: "X-Mid", itemType: "Tent" });
   });
 });
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { id, parseNumber, normalizeWeightType, normalizeText, gramsToKg, reorder, mutatePackItemsForPack, applyOrder } from "./lib/util.js";
 import { normalizeCategories, primaryCategory, mergeOrCreateGear } from "./lib/gear.js";
-import { parseLighterpackCsv, parseLighterpackHtml, mapImportedEntry } from "./lib/import.js";
+import { parseLighterpackCsv, parseLighterpackHtml, mapImportedEntry, packToCsv } from "./lib/import.js";
 import { buildPieSegments, describeDonutArc } from "./lib/chart.js";
 import { STORAGE_KEY, readStorage, normalizeData } from "./lib/storage.js";
 import logoUrl from "./logo.png";
@@ -956,6 +956,28 @@ export default function App() {
     URL.revokeObjectURL(url);
   }
 
+  function exportPackCsv() {
+    if (!activePack) return;
+    const csv = packToCsv(
+      activePackRows.map((row) => ({
+        itemType: row.gear.itemType,
+        name: row.gear.name,
+        category: row.category,
+        quantity: row.quantity,
+        weight: row.weight,
+        weightType: row.weightType
+      }))
+    );
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const safeName = (activePack.name || "pack").trim().replace(/[^\w.-]+/g, "_") || "pack";
+    link.href = url;
+    link.download = `${safeName}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   async function importBackup(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1005,6 +1027,9 @@ export default function App() {
                 Export
               </button>
               <div className="menu-list">
+                <button type="button" onClick={exportPackCsv}>
+                  Export pack to CSV
+                </button>
                 <button type="button" onClick={exportBackup}>
                   Backup to JSON
                 </button>
