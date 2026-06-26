@@ -65,6 +65,37 @@ body {
 }
 
 /* Segmented tab control */
+.nav-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.sidebar-toggle {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-2);
+  box-shadow: var(--shadow-xs);
+}
+
+.sidebar-toggle:hover {
+  background: #f4f4f6;
+  color: var(--text);
+}
+
+.sidebar-toggle.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .view-tabs {
   display: inline-flex;
   gap: 2px;
@@ -73,7 +104,6 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow-xs);
-  margin-bottom: 8px;
 }
 
 .view-tabs button {

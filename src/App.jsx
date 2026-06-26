@@ -271,6 +271,25 @@ function TrashIcon() {
   );
 }
 
+function PanelIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="M9 3v18" />
+    </svg>
+  );
+}
+
 function SettingsIcon() {
   return (
     <svg
@@ -340,6 +359,13 @@ export default function App() {
       return false;
     }
   });
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("ulpacker.settings") || "{}").sidebarOpen !== false;
+    } catch {
+      return true;
+    }
+  });
   const [libraryPackTarget, setLibraryPackTarget] = useState({});
   const [categoryDragSource, setCategoryDragSource] = useState(null);
   const [categoryDragOver, setCategoryDragOver] = useState(null);
@@ -393,8 +419,8 @@ export default function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem("ulpacker.settings", JSON.stringify({ hideZeroQty }));
-  }, [hideZeroQty]);
+    localStorage.setItem("ulpacker.settings", JSON.stringify({ hideZeroQty, sidebarOpen }));
+  }, [hideZeroQty, sidebarOpen]);
 
   useEffect(() => {
     setPackItems((prev) => {
@@ -1157,26 +1183,44 @@ export default function App() {
             ) : null}
           </div>
         </div>
-        <div className="view-tabs">
-          <button
-            type="button"
-            className={view === "packs" ? "active" : ""}
-            onClick={() => setView("packs")}
-          >
-            Packs
-          </button>
-          <button
-            type="button"
-            className={view === "library" ? "active" : ""}
-            onClick={() => setView("library")}
-          >
-            Gear Library
-          </button>
+        <div className="nav-row">
+          {view === "packs" && (
+            <button
+              type="button"
+              className={`sidebar-toggle ${sidebarOpen ? "active" : ""}`}
+              onClick={() => setSidebarOpen((open) => !open)}
+              title={sidebarOpen ? "Hide packs sidebar" : "Show packs sidebar"}
+              aria-label="Toggle packs sidebar"
+              aria-pressed={sidebarOpen}
+            >
+              <PanelIcon />
+            </button>
+          )}
+          <div className="view-tabs">
+            <button
+              type="button"
+              className={view === "packs" ? "active" : ""}
+              onClick={() => setView("packs")}
+            >
+              Packs
+            </button>
+            <button
+              type="button"
+              className={view === "library" ? "active" : ""}
+              onClick={() => setView("library")}
+            >
+              Gear Library
+            </button>
+          </div>
         </div>
       </header>
 
-      <main className={`dashboard ${view === "library" ? "library-layout" : ""}`}>
-        {view === "packs" && (
+      <main
+        className={`dashboard ${
+          view === "library" || (view === "packs" && !sidebarOpen) ? "library-layout" : ""
+        }`}
+      >
+        {view === "packs" && sidebarOpen && (
         <aside className="panel packs-panel">
           <div className="panel-head">
             <h2>Packs</h2>
