@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { id, parseNumber, normalizeWeightType, normalizeText, gramsToKg, reorder, mutatePackItemsForPack, applyOrder } from "./lib/util.js";
-import { normalizeCategories, primaryCategory, mergeOrCreateGear } from "./lib/gear.js";
+import { normalizeCategories, primaryCategory, mergeOrCreateGear, nextPurchase } from "./lib/gear.js";
 import { parseLighterpackCsv, parseLighterpackHtml, mapImportedEntry, packToCsv } from "./lib/import.js";
 import { buildPieSegments, describeDonutArc } from "./lib/chart.js";
 import { STORAGE_KEY, readStorage, normalizeData, defaultData } from "./lib/storage.js";
@@ -309,6 +309,91 @@ function SettingsIcon() {
   );
 }
 
+function StarIcon({ filled }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+    </svg>
+  );
+}
+
+function CartIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="8" cy="21" r="1" />
+      <circle cx="19" cy="21" r="1" />
+      <path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+
+// Favorite star + purchase-status (none/need/owned) controls, shared by the
+// library rows and the pack rows.
+function MarkControls({ favorite, purchase, onToggleFavorite, onCyclePurchase }) {
+  const status = purchase || "";
+  return (
+    <span className="mark-controls">
+      <button
+        type="button"
+        className={`mark-btn mark-fav ${favorite ? "active" : ""}`}
+        title={favorite ? "Unfavorite" : "Favorite"}
+        aria-label="Toggle favorite"
+        aria-pressed={favorite}
+        onClick={onToggleFavorite}
+      >
+        <StarIcon filled={favorite} />
+      </button>
+      <button
+        type="button"
+        className={`mark-btn mark-buy mark-${status || "none"}`}
+        title={status === "need" ? "Need to buy" : status === "owned" ? "Owned" : "Set purchase status"}
+        aria-label="Cycle purchase status"
+        onClick={onCyclePurchase}
+      >
+        {status === "owned" ? <CheckIcon /> : <CartIcon />}
+      </button>
+    </span>
+  );
+}
+
 export default function App() {
   const initial = readStorage();
 
@@ -346,8 +431,10 @@ export default function App() {
   const [chartHover, setChartHover] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedWeightType, setSelectedWeightType] = useState(null);
+  const [selectedMark, setSelectedMark] = useState(null);
   const [categoryDrafts, setCategoryDrafts] = useState({});
   const [libraryQuery, setLibraryQuery] = useState("");
+  const [libraryMark, setLibraryMark] = useState(null);
   const [expandedGears, setExpandedGears] = useState({});
   const [addGearOpen, setAddGearOpen] = useState(false);
   const [addOpen, setAddOpen] = useState({});
@@ -386,6 +473,7 @@ export default function App() {
   useEffect(() => {
     setSelectedCategory(null);
     setSelectedWeightType(null);
+    setSelectedMark(null);
     setNewCategories([]);
   }, [activePackId]);
 
@@ -508,6 +596,8 @@ export default function App() {
         // "carried" = everything except worn; others match the exact type.
         if (selectedWeightType === "carried" ? type === "worn" : type !== selectedWeightType) continue;
       }
+      if (selectedMark === "favorite" && !row.gear.favorite) continue;
+      if (selectedMark === "need" && row.gear.purchase !== "need") continue;
       const category = row.category || primaryCategory(row.gear);
       if (!grouped.has(category)) {
         grouped.set(category, { category, rows: [], totalWeight: 0, gearIds: new Set() });
@@ -530,7 +620,7 @@ export default function App() {
       return [{ category: "Uncategorized", rows: [], totalWeight: 0, gearIds: new Set() }];
     }
     return ordered.map((c) => grouped.get(c));
-  }, [activePackRows, activePack, hideZeroQty, selectedWeightType, newCategories]);
+  }, [activePackRows, activePack, hideZeroQty, selectedWeightType, selectedMark, newCategories]);
 
   // Only treat the filter as active while its category still exists in the pack.
   const activeFilter =
@@ -548,14 +638,24 @@ export default function App() {
   function toggleWeightTypeFilter(type) {
     setSelectedWeightType((prev) => (prev === type ? null : type));
   }
+
+  function togglePackMark(mark) {
+    setSelectedMark((prev) => (prev === mark ? null : mark));
+  }
+
+  function toggleLibraryMark(mark) {
+    setLibraryMark((prev) => (prev === mark ? null : mark));
+  }
   const filteredGears = useMemo(() => {
     const q = normalizeText(libraryQuery);
-    if (!q) return gears;
     return gears.filter((gear) => {
+      if (libraryMark === "favorite" && !gear.favorite) return false;
+      if (libraryMark === "need" && gear.purchase !== "need") return false;
+      if (!q) return true;
       const categories = (gear.categories || []).join(" ");
       return normalizeText(`${gear.name} ${gear.itemType} ${gear.description} ${categories}`).includes(q);
     });
-  }, [gears, libraryQuery]);
+  }, [gears, libraryQuery, libraryMark]);
 
   function createPack(e) {
     e.preventDefault();
@@ -1345,6 +1445,22 @@ export default function App() {
                     onChange={(e) => setLibraryQuery(e.target.value)}
                     placeholder="Search by name, category, type"
                   />
+                  <div className="mark-filters">
+                    <button
+                      type="button"
+                      className={`mark-filter ${libraryMark === "favorite" ? "active mark-fav" : ""}`}
+                      onClick={() => toggleLibraryMark("favorite")}
+                    >
+                      <StarIcon filled={libraryMark === "favorite"} /> Favorites
+                    </button>
+                    <button
+                      type="button"
+                      className={`mark-filter ${libraryMark === "need" ? "active mark-need" : ""}`}
+                      onClick={() => toggleLibraryMark("need")}
+                    >
+                      <CartIcon /> To buy
+                    </button>
+                  </div>
                 </div>
                 <div className="library-table-head">
                   <span>Name</span>
@@ -1367,12 +1483,20 @@ export default function App() {
                         )
                       }
                     >
-                      <input
-                        className="gear-cell-name"
-                        placeholder="Name"
-                        value={gear.name}
-                        onChange={(e) => updateGear(gear.id, { name: e.target.value })}
-                      />
+                      <div className="name-with-marks">
+                        <MarkControls
+                          favorite={gear.favorite}
+                          purchase={gear.purchase}
+                          onToggleFavorite={() => updateGear(gear.id, { favorite: !gear.favorite })}
+                          onCyclePurchase={() => updateGear(gear.id, { purchase: nextPurchase(gear.purchase) })}
+                        />
+                        <input
+                          className="gear-cell-name"
+                          placeholder="Name"
+                          value={gear.name}
+                          onChange={(e) => updateGear(gear.id, { name: e.target.value })}
+                        />
+                      </div>
                       <input
                         placeholder="Item type"
                         value={gear.itemType}
@@ -1662,17 +1786,39 @@ export default function App() {
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={onPackDrop}
                 >
-                  <h3>Pack Items by Category</h3>
-                  {(activeFilter || selectedWeightType) && (
+                  <div className="pack-list-head">
+                    <h3>Pack Items by Category</h3>
+                    <div className="mark-filters">
+                      <button
+                        type="button"
+                        className={`mark-filter ${selectedMark === "favorite" ? "active mark-fav" : ""}`}
+                        onClick={() => togglePackMark("favorite")}
+                      >
+                        <StarIcon filled={selectedMark === "favorite"} /> Favorites
+                      </button>
+                      <button
+                        type="button"
+                        className={`mark-filter ${selectedMark === "need" ? "active mark-need" : ""}`}
+                        onClick={() => togglePackMark("need")}
+                      >
+                        <CartIcon /> To buy
+                      </button>
+                    </div>
+                  </div>
+                  {(activeFilter || selectedWeightType || selectedMark) && (
                     <div className="filter-chip">
                       <span>
                         Filtering:{" "}
                         {activeFilter && <strong>{activeFilter}</strong>}
-                        {activeFilter && selectedWeightType && " · "}
+                        {activeFilter && (selectedWeightType || selectedMark) && " · "}
                         {selectedWeightType && (
                           <strong>
                             {selectedWeightType.charAt(0).toUpperCase() + selectedWeightType.slice(1)}
                           </strong>
+                        )}
+                        {selectedWeightType && selectedMark && " · "}
+                        {selectedMark && (
+                          <strong>{selectedMark === "favorite" ? "Favorites" : "To buy"}</strong>
                         )}
                       </span>
                       <button
@@ -1680,6 +1826,7 @@ export default function App() {
                         onClick={() => {
                           setSelectedCategory(null);
                           setSelectedWeightType(null);
+                          setSelectedMark(null);
                         }}
                       >
                         ✕ Show all
@@ -1768,11 +1915,23 @@ export default function App() {
                                 value={row.gear.itemType}
                                 onChange={(e) => updateGear(row.gear.id, { itemType: e.target.value })}
                               />
-                              <input
-                                className="cell-name"
-                                value={row.gear.name}
-                                onChange={(e) => updateGear(row.gear.id, { name: e.target.value })}
-                              />
+                              <div className="name-cell name-with-marks">
+                                <MarkControls
+                                  favorite={row.gear.favorite}
+                                  purchase={row.gear.purchase}
+                                  onToggleFavorite={() =>
+                                    updateGear(row.gear.id, { favorite: !row.gear.favorite })
+                                  }
+                                  onCyclePurchase={() =>
+                                    updateGear(row.gear.id, { purchase: nextPurchase(row.gear.purchase) })
+                                  }
+                                />
+                                <input
+                                  className="cell-name"
+                                  value={row.gear.name}
+                                  onChange={(e) => updateGear(row.gear.id, { name: e.target.value })}
+                                />
+                              </div>
 
                               <div className="flag-buttons cell-flags">
                                 <button

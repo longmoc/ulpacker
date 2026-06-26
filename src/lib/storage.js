@@ -1,5 +1,5 @@
 import { id, parseNumber, normalizeWeightType } from "./util.js";
-import { normalizeCategories, normalizeVariants, mergeGears, primaryCategory } from "./gear.js";
+import { normalizeCategories, normalizeVariants, normalizePurchase, mergeGears, primaryCategory } from "./gear.js";
 
 export const STORAGE_KEY = "ulpacker.v3";
 
@@ -11,6 +11,8 @@ export function eggSeed() {
     itemType: "Fresh Food",
     description: "Chicken egg",
     notes: "EU medium class (53-63g), midpoint estimate 58g.",
+    favorite: false,
+    purchase: "",
     variants: [{ id: id(), name: "Default", weight: 58 }]
   };
 }
@@ -66,6 +68,8 @@ export function defaultData() {
         itemType: "",
         description: "",
         notes: "",
+        favorite: false,
+        purchase: "",
         variants: [
           { id: id(), name: "40L", weight: 920 },
           { id: id(), name: "55L", weight: 1100 }
@@ -78,6 +82,8 @@ export function defaultData() {
         itemType: "",
         description: "",
         notes: "",
+        favorite: false,
+        purchase: "",
         variants: [{ id: id(), name: "Default", weight: 180 }]
       },
       eggSeed()
@@ -111,6 +117,8 @@ export function normalizeData(parsed) {
           itemType: gear.itemType || "",
           description: gear.description || "",
           notes: gear.notes || "",
+          favorite: Boolean(gear.favorite),
+          purchase: normalizePurchase(gear.purchase),
           variants: normalizeVariants(gear.variants)
         };
       })

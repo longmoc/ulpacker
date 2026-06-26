@@ -592,7 +592,16 @@ button[type="submit"]:active {
 }
 
 .library-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 8px;
+}
+
+.library-toolbar input {
+  flex: 1;
+  min-width: 180px;
 }
 
 .library-table-head {
@@ -1633,6 +1642,109 @@ button[type="submit"]:active {
   display: none;
   color: var(--text-3);
   font-size: 0.82rem;
+}
+
+/* Favorite + purchase markers (shared by library + pack rows) */
+.mark-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.mark-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  box-shadow: none;
+}
+
+.mark-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.mark-btn.mark-fav.active {
+  color: #f59e0b;
+}
+
+.mark-btn.mark-buy.mark-need {
+  color: #d97706;
+}
+
+.mark-btn.mark-buy.mark-owned {
+  color: var(--accent);
+}
+
+.name-with-marks {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.name-with-marks input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Favorite / To-buy filter chips (library toolbar + pack list head) */
+.mark-filters {
+  display: inline-flex;
+  gap: 6px;
+  flex: none;
+}
+
+.mark-filter {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 0.82rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-xs);
+}
+
+.mark-filter:hover {
+  background: #f4f4f6;
+  color: var(--text);
+}
+
+.mark-filter.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.mark-filter svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.pack-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.pack-list-head h3 {
+  margin: 0;
 }
 
 @media (max-width: 1200px) {

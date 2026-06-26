@@ -19,6 +19,17 @@ export function gearMergeKey(name, itemType) {
   return `${normalizeText(name)}||${normalizeText(itemType)}`;
 }
 
+export function normalizePurchase(value) {
+  return value === "owned" || value === "need" ? value : "";
+}
+
+// Click-to-cycle order for the purchase control: none -> need -> owned -> none.
+export function nextPurchase(current) {
+  if (current === "need") return "owned";
+  if (current === "owned") return "";
+  return "need";
+}
+
 export function normalizeVariants(variants) {
   const raw = Array.isArray(variants) && variants.length > 0 ? variants : [{ weight: 0 }];
 
@@ -90,6 +101,8 @@ export function mergeOrCreateGear(prevGears, incoming) {
     itemType: (incoming.itemType || "").trim(),
     description: (incoming.description || "").trim(),
     notes: incoming.notes || "",
+    favorite: Boolean(incoming.favorite),
+    purchase: normalizePurchase(incoming.purchase),
     variants: normalizeVariants(incoming.variants || [])
   };
 

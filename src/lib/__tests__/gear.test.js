@@ -5,7 +5,8 @@ import {
   gearMergeKey,
   normalizeVariants,
   mergeGears,
-  mergeOrCreateGear
+  mergeOrCreateGear,
+  nextPurchase
 } from "../gear.js";
 
 describe("normalizeCategories", () => {
@@ -108,5 +109,29 @@ describe("mergeOrCreateGear", () => {
   it("names an unnamed incoming gear", () => {
     const { gear } = mergeOrCreateGear([], { name: "   ", variants: [{ weight: 1 }] });
     expect(gear.name).toBe("Unnamed gear");
+  });
+
+  it("defaults favorite/purchase on create and validates them", () => {
+    const a = mergeOrCreateGear([], { name: "Tent", variants: [{ weight: 1 }] }).gear;
+    expect(a).toMatchObject({ favorite: false, purchase: "" });
+    const b = mergeOrCreateGear([], { name: "Quilt", favorite: 1, purchase: "bogus", variants: [{ weight: 1 }] }).gear;
+    expect(b).toMatchObject({ favorite: true, purchase: "" });
+  });
+
+  it("keeps the existing gear's favorite/purchase when merging", () => {
+    const prev = [
+      { id: "x", name: "Tent", itemType: "", categories: ["Shelter"], description: "", notes: "", favorite: true, purchase: "need", variants: [{ id: "v1", name: "Default", weight: 1200 }] }
+    ];
+    const { gears } = mergeOrCreateGear(prev, { name: "Tent", favorite: false, purchase: "owned", variants: [{ weight: 1300 }] });
+    expect(gears[0]).toMatchObject({ favorite: true, purchase: "need" });
+  });
+});
+
+describe("nextPurchase", () => {
+  it("cycles none -> need -> owned -> none", () => {
+    expect(nextPurchase("")).toBe("need");
+    expect(nextPurchase("need")).toBe("owned");
+    expect(nextPurchase("owned")).toBe("");
+    expect(nextPurchase(undefined)).toBe("need");
   });
 });

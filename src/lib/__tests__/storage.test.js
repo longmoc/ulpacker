@@ -99,6 +99,19 @@ describe("normalizeData", () => {
     expect(normalizeData({ gears: "nope" })).toBeNull();
   });
 
+  it("carries favorite + purchase markers through normalization", () => {
+    const data = normalizeData({
+      gears: [
+        { id: "g1", name: "Tent", categories: ["Shelter"], favorite: true, purchase: "need", variants: [{ weight: 1200 }] },
+        { id: "g2", name: "Stove", categories: ["Cooking"], purchase: "bogus", variants: [{ weight: 90 }] }
+      ],
+      packs: [{ id: "p1", name: "Trip" }],
+      packItems: []
+    });
+    expect(data.gears.find((g) => g.name === "Tent")).toMatchObject({ favorite: true, purchase: "need" });
+    expect(data.gears.find((g) => g.name === "Stove")).toMatchObject({ favorite: false, purchase: "" });
+  });
+
   it("normalizes a valid backup object without touching localStorage", () => {
     const data = normalizeData({
       gears: [{ id: "g1", name: "Quilt", categories: ["Sleep"], variants: [{ weight: 600 }] }],
