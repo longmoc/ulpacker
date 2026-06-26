@@ -42,7 +42,11 @@ export async function requestAccessToken({ prompt = "" } = {}) {
       prompt,
       callback: (response) => {
         if (response.error) reject(new Error(response.error));
-        else resolve(response.access_token);
+        else
+          resolve({
+            token: response.access_token,
+            expiresAt: Date.now() + (Number(response.expires_in) || 3600) * 1000
+          });
       },
       error_callback: (err) => reject(new Error(err?.type || "oauth_error"))
     });
