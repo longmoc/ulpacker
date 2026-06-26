@@ -606,7 +606,7 @@ button[type="submit"]:active {
 
 .library-table-head {
   display: grid;
-  grid-template-columns: 1.1fr 0.9fr 1.5fr 1.1fr 90px 260px;
+  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.05fr 90px 260px;
   gap: 8px;
   font-size: 0.72rem;
   text-transform: uppercase;
@@ -1030,7 +1030,7 @@ button[type="submit"]:active {
 
 .gear-row {
   display: grid;
-  grid-template-columns: 1.1fr 0.9fr 1.5fr 1.1fr 90px 260px;
+  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.05fr 90px 260px;
   gap: 8px;
   align-items: center;
   border: 0;
@@ -1123,7 +1123,7 @@ button[type="submit"]:active {
 
 .pack-row {
   display: grid;
-  grid-template-columns: 24px minmax(86px, 0.7fr) minmax(240px, 2fr) 52px 84px 56px 34px;
+  grid-template-columns: 24px minmax(80px, 0.7fr) minmax(150px, 1.6fr) 104px 84px 56px 34px;
   gap: 6px;
   align-items: center;
   border: 0;
@@ -1256,7 +1256,7 @@ button[type="submit"]:active {
 
 .group-table-head {
   display: grid;
-  grid-template-columns: 24px minmax(86px, 0.7fr) minmax(240px, 2fr) 52px 84px 56px 34px;
+  grid-template-columns: 24px minmax(80px, 0.7fr) minmax(150px, 1.6fr) 104px 84px 56px 34px;
   gap: 6px;
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -1745,6 +1745,29 @@ button[type="submit"]:active {
 
 .pack-list-head h3 {
   margin: 0;
+}
+
+.gear-marks {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Pack marker buttons live among the flags (hover-revealed until set);
+   override the default flag .active green with marker-specific colors. */
+.pack-row .flag-btn.mark-fav.active {
+  color: #f59e0b;
+  background: #fef3c7;
+}
+
+.pack-row .flag-btn.mark-buy.mark-need.active {
+  color: #d97706;
+  background: #fef3c7;
+}
+
+.pack-row .flag-btn.mark-buy.mark-owned.active {
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 
 @media (max-width: 1200px) {

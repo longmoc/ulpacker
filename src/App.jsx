@@ -365,31 +365,47 @@ function CheckIcon() {
   );
 }
 
-// Favorite star + purchase-status (none/need/owned) controls, shared by the
-// library rows and the pack rows.
-function MarkControls({ favorite, purchase, onToggleFavorite, onCyclePurchase }) {
+// Favorite star + purchase-status (none/need/owned) controls. Library rows use
+// the default (always-visible) style; pack rows pass `flag` to render them like
+// the consumable/worn flags (hover-revealed until set).
+function MarkControls({ favorite, purchase, onToggleFavorite, onCyclePurchase, flag }) {
   const status = purchase || "";
+  const base = flag ? "flag-btn" : "mark-btn";
+  const favBtn = (
+    <button
+      type="button"
+      className={`${base} mark-fav ${favorite ? "active" : ""}`}
+      title={favorite ? "Unfavorite" : "Favorite"}
+      aria-label="Toggle favorite"
+      aria-pressed={favorite}
+      onClick={onToggleFavorite}
+    >
+      <StarIcon filled={favorite} />
+    </button>
+  );
+  const buyBtn = (
+    <button
+      type="button"
+      className={`${base} mark-buy mark-${status || "none"} ${status ? "active" : ""}`}
+      title={status === "need" ? "Need to buy" : status === "owned" ? "Owned" : "Set purchase status"}
+      aria-label="Cycle purchase status"
+      onClick={onCyclePurchase}
+    >
+      {status === "owned" ? <CheckIcon /> : <CartIcon />}
+    </button>
+  );
+  if (flag) {
+    return (
+      <>
+        {favBtn}
+        {buyBtn}
+      </>
+    );
+  }
   return (
     <span className="mark-controls">
-      <button
-        type="button"
-        className={`mark-btn mark-fav ${favorite ? "active" : ""}`}
-        title={favorite ? "Unfavorite" : "Favorite"}
-        aria-label="Toggle favorite"
-        aria-pressed={favorite}
-        onClick={onToggleFavorite}
-      >
-        <StarIcon filled={favorite} />
-      </button>
-      <button
-        type="button"
-        className={`mark-btn mark-buy mark-${status || "none"}`}
-        title={status === "need" ? "Need to buy" : status === "owned" ? "Owned" : "Set purchase status"}
-        aria-label="Cycle purchase status"
-        onClick={onCyclePurchase}
-      >
-        {status === "owned" ? <CheckIcon /> : <CartIcon />}
-      </button>
+      {favBtn}
+      {buyBtn}
     </span>
   );
 }
@@ -1463,6 +1479,7 @@ export default function App() {
                   </div>
                 </div>
                 <div className="library-table-head">
+                  <span />
                   <span>Name</span>
                   <span>Item Type</span>
                   <span>Description</span>
@@ -1483,20 +1500,20 @@ export default function App() {
                         )
                       }
                     >
-                      <div className="name-with-marks">
+                      <div className="gear-marks">
                         <MarkControls
                           favorite={gear.favorite}
                           purchase={gear.purchase}
                           onToggleFavorite={() => updateGear(gear.id, { favorite: !gear.favorite })}
                           onCyclePurchase={() => updateGear(gear.id, { purchase: nextPurchase(gear.purchase) })}
                         />
-                        <input
-                          className="gear-cell-name"
-                          placeholder="Name"
-                          value={gear.name}
-                          onChange={(e) => updateGear(gear.id, { name: e.target.value })}
-                        />
                       </div>
+                      <input
+                        className="gear-cell-name"
+                        placeholder="Name"
+                        value={gear.name}
+                        onChange={(e) => updateGear(gear.id, { name: e.target.value })}
+                      />
                       <input
                         placeholder="Item type"
                         value={gear.itemType}
@@ -1915,23 +1932,11 @@ export default function App() {
                                 value={row.gear.itemType}
                                 onChange={(e) => updateGear(row.gear.id, { itemType: e.target.value })}
                               />
-                              <div className="name-cell name-with-marks">
-                                <MarkControls
-                                  favorite={row.gear.favorite}
-                                  purchase={row.gear.purchase}
-                                  onToggleFavorite={() =>
-                                    updateGear(row.gear.id, { favorite: !row.gear.favorite })
-                                  }
-                                  onCyclePurchase={() =>
-                                    updateGear(row.gear.id, { purchase: nextPurchase(row.gear.purchase) })
-                                  }
-                                />
-                                <input
-                                  className="cell-name"
-                                  value={row.gear.name}
-                                  onChange={(e) => updateGear(row.gear.id, { name: e.target.value })}
-                                />
-                              </div>
+                              <input
+                                className="cell-name"
+                                value={row.gear.name}
+                                onChange={(e) => updateGear(row.gear.id, { name: e.target.value })}
+                              />
 
                               <div className="flag-buttons cell-flags">
                                 <button
@@ -1952,6 +1957,17 @@ export default function App() {
                                 >
                                   <WornIcon />
                                 </button>
+                                <MarkControls
+                                  flag
+                                  favorite={row.gear.favorite}
+                                  purchase={row.gear.purchase}
+                                  onToggleFavorite={() =>
+                                    updateGear(row.gear.id, { favorite: !row.gear.favorite })
+                                  }
+                                  onCyclePurchase={() =>
+                                    updateGear(row.gear.id, { purchase: nextPurchase(row.gear.purchase) })
+                                  }
+                                />
                               </div>
 
                               <div className="cell-weight field-unit-wrap">
