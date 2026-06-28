@@ -24,11 +24,14 @@ function syncLabel(status) {
   return "";
 }
 
+// Empty string (epoch 0) when nothing was ever saved, so default/unedited local
+// data never wins last-write-wins against real cloud data on first sign-in.
+// A real timestamp is only set once the user actually edits something.
 function readInitialUpdatedAt() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}").updatedAt || new Date().toISOString();
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}").updatedAt || "";
   } catch {
-    return new Date().toISOString();
+    return "";
   }
 }
 
