@@ -815,13 +815,18 @@ button[type="submit"]:active {
 
 .legend-table {
   display: grid;
-  gap: 0;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  column-gap: 18px;
+}
+
+.legend.show-price .legend-table {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
 }
 
 .legend-table-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  column-gap: 18px;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   font-size: 0.74rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -842,8 +847,8 @@ button[type="submit"]:active {
 
 .legend-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  column-gap: 18px;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   align-items: center;
   font-size: 0.84rem;
   width: 100%;
@@ -1829,10 +1834,6 @@ button[type="submit"]:active {
   }
 }
 
-.legend.show-price .legend-table-head,
-.legend.show-price .legend-row {
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-}
 
 .legend-price {
   text-align: right;
