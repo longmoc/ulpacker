@@ -8,6 +8,15 @@ import { useGoogleSync } from "./hooks/useGoogleSync.js";
 import Landing from "./components/Landing.jsx";
 import logoUrl from "./logo.png";
 
+// Currency symbol shown after the number (Vietnamese style). Change to e.g.
+// prefix "$" by editing formatPrice if a different convention is needed.
+const CURRENCY = "₫";
+
+function formatPrice(value) {
+  const v = Math.max(0, parseNumber(value, 0));
+  return `${Math.round(v).toLocaleString("en-US")} ${CURRENCY}`;
+}
+
 function syncLabel(status) {
   if (status === "syncing") return "Saving…";
   if (status === "saved") return "Synced";
@@ -469,6 +478,13 @@ export default function App() {
       return true;
     }
   });
+  const [showPrice, setShowPrice] = useState(() => {
+    try {
+      return Boolean(JSON.parse(localStorage.getItem("ulpacker.settings") || "{}").showPrice);
+    } catch {
+      return false;
+    }
+  });
   const [libraryPackTarget, setLibraryPackTarget] = useState({});
   const [categoryDragSource, setCategoryDragSource] = useState(null);
   const [categoryDragOver, setCategoryDragOver] = useState(null);
@@ -523,8 +539,8 @@ export default function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem("ulpacker.settings", JSON.stringify({ hideZeroQty, sidebarOpen }));
-  }, [hideZeroQty, sidebarOpen]);
+    localStorage.setItem("ulpacker.settings", JSON.stringify({ hideZeroQty, sidebarOpen, showPrice }));
+  }, [hideZeroQty, sidebarOpen, showPrice]);
 
   useEffect(() => {
     setPackItems((prev) => {
@@ -569,11 +585,17 @@ export default function App() {
       .map((item) => {
         const gear = gears.find((g) => g.id === item.gearId);
         if (!gear) return null;
+        const qty = Math.max(0, Number(item.quantity || 0));
+        const priceVariant = gear.variants.find((v) => v.id === item.variantId) || gear.variants[0];
+        const unitPrice = Math.max(0, parseNumber(priceVariant?.price, 0));
         return {
           ...item,
           gear,
           category: item.category || primaryCategory(gear),
-          lineWeight: Math.max(0, Number(item.quantity || 0)) * Math.max(0, parseNumber(item.weight, 0))
+          priceVariantId: priceVariant?.id || "",
+          unitPrice,
+          linePrice: qty * unitPrice,
+          lineWeight: qty * Math.max(0, parseNumber(item.weight, 0))
         };
       })
       .filter(Boolean);
@@ -590,15 +612,19 @@ export default function App() {
   };
   // Carried = what's actually in the pack on your back, i.e. everything except worn.
   totals.carried = totals.total - totals.worn;
+  totals.price = carriedRows.reduce((sum, row) => sum + row.linePrice, 0);
 
   const categoryRows = useMemo(() => {
     const grouped = new Map();
     for (const row of carriedRows) {
       const key = row.category || primaryCategory(row.gear);
-      grouped.set(key, (grouped.get(key) || 0) + row.lineWeight);
+      const entry = grouped.get(key) || { weight: 0, price: 0 };
+      entry.weight += row.lineWeight;
+      entry.price += row.linePrice;
+      grouped.set(key, entry);
     }
     return [...grouped.entries()]
-      .map(([category, weight]) => ({ category, weight }))
+      .map(([category, v]) => ({ category, weight: v.weight, price: v.price }))
       .sort((a, b) => b.weight - a.weight);
   }, [carriedRows]);
 
@@ -616,11 +642,12 @@ export default function App() {
       if (selectedMark === "need" && row.gear.purchase !== "need") continue;
       const category = row.category || primaryCategory(row.gear);
       if (!grouped.has(category)) {
-        grouped.set(category, { category, rows: [], totalWeight: 0, gearIds: new Set() });
+        grouped.set(category, { category, rows: [], totalWeight: 0, totalPrice: 0, gearIds: new Set() });
       }
       const group = grouped.get(category);
       group.rows.push(row);
       group.totalWeight += row.lineWeight;
+      group.totalPrice += row.linePrice;
       group.gearIds.add(row.gear.id);
     }
     // Manual category order (per pack); new categories fall to the end.
@@ -628,12 +655,12 @@ export default function App() {
     // Empty categories the user just created (no items yet).
     for (const name of newCategories) {
       if (!grouped.has(name)) {
-        grouped.set(name, { category: name, rows: [], totalWeight: 0, gearIds: new Set() });
+        grouped.set(name, { category: name, rows: [], totalWeight: 0, totalPrice: 0, gearIds: new Set() });
         ordered.push(name);
       }
     }
     if (ordered.length === 0) {
-      return [{ category: "Uncategorized", rows: [], totalWeight: 0, gearIds: new Set() }];
+      return [{ category: "Uncategorized", rows: [], totalWeight: 0, totalPrice: 0, gearIds: new Set() }];
     }
     return ordered.map((c) => grouped.get(c));
   }, [activePackRows, activePack, hideZeroQty, selectedWeightType, selectedMark, newCategories]);
@@ -920,7 +947,7 @@ export default function App() {
               ...gear,
               variants: [
                 ...gear.variants,
-                { id: id(), name: `Variant ${gear.variants.length + 1}`, weight: 0 }
+                { id: id(), name: `Variant ${gear.variants.length + 1}`, weight: 0, price: 0 }
               ]
             }
           : gear
@@ -1256,6 +1283,14 @@ export default function App() {
                     onChange={(e) => setHideZeroQty(!e.target.checked)}
                   />
                   Show items with quantity 0
+                </label>
+                <label className="menu-check">
+                  <input
+                    type="checkbox"
+                    checked={showPrice}
+                    onChange={(e) => setShowPrice(e.target.checked)}
+                  />
+                  Show prices
                 </label>
               </div>
             </div>
@@ -1595,6 +1630,18 @@ export default function App() {
                                 }
                               />
                               <span>g</span>
+                              <input
+                                type="number"
+                                min="0"
+                                className="variant-price"
+                                value={Math.max(0, parseNumber(variant.price, 0))}
+                                onChange={(e) =>
+                                  updateVariant(gear.id, variant.id, {
+                                    price: Math.max(0, parseNumber(e.target.value, 0))
+                                  })
+                                }
+                              />
+                              <span>{CURRENCY}</span>
                               <button
                                 type="button"
                                 disabled={gear.variants.length <= 1}
@@ -1703,7 +1750,7 @@ export default function App() {
                 </div>
               </div>
 
-              <section className="analytics">
+              <section className={`analytics ${showPrice ? "show-price" : ""}`}>
                 <div className="pie-wrap">
                   <svg className="pie-svg" viewBox="0 0 220 220" role="img" aria-label="Weight by category">
                     {pieSegments.length === 0 && (
@@ -1752,12 +1799,13 @@ export default function App() {
                     </div>
                   )}
                 </div>
-                <div className="legend">
+                <div className={`legend ${showPrice ? "show-price" : ""}`}>
                   <h3>Category breakdown</h3>
                   {pieSegments.length === 0 && <p className="hint">No carried items yet.</p>}
                   <div className="legend-table">
                     <div className="legend-table-head">
                       <span>Category</span>
+                      {showPrice && <span className="legend-price">Price</span>}
                       <span>Weight</span>
                       <span>%</span>
                     </div>
@@ -1771,6 +1819,7 @@ export default function App() {
                         <span className="legend-category">
                           <span className="dot" style={{ background: seg.color }} /> {seg.category}
                         </span>
+                        {showPrice && <span className="legend-price">{formatPrice(seg.price)}</span>}
                         <span className="legend-weight">{gramsToKg(seg.weight)}</span>
                         <span className="legend-percent">{seg.percent.toFixed(1)}%</span>
                       </button>
@@ -1793,6 +1842,12 @@ export default function App() {
                       <span>Base Weight</span>
                       <strong>{gramsToKg(totals.base)}</strong>
                     </div>
+                    {showPrice && (
+                      <div className="breakdown-row">
+                        <span>Total price</span>
+                        <strong>{formatPrice(totals.price)}</strong>
+                      </div>
+                    )}
                   </div>
                 </div>
               </section>
@@ -1850,7 +1905,7 @@ export default function App() {
                       </button>
                     </div>
                   )}
-                  <div className="pack-list">
+                  <div className={`pack-list ${showPrice ? "show-price" : ""}`}>
                     {activePackRows.length === 0 && <p className="hint">Use + Add to create your first item.</p>}
                     {visibleGroups.map((group) => (
                       <section key={group.category} className="category-group">
@@ -1892,13 +1947,13 @@ export default function App() {
                               className="category-edit"
                             />
                           </div>
-                          <span>{gramsToKg(group.totalWeight)}</span>
                         </div>
                         <div className="group-table-head">
                           <span className="cell-drag" />
                           <span className="cell-item-type">Item Type</span>
                           <span className="cell-name">Name</span>
                           <span className="cell-flags">Flags</span>
+                          {showPrice && <span className="cell-price">Price</span>}
                           <span className="cell-weight">Weight (g)</span>
                           <span className="cell-qty">Qty</span>
                           <span className="cell-remove" />
@@ -1970,6 +2025,23 @@ export default function App() {
                                 />
                               </div>
 
+                              {showPrice && (
+                                <div className="cell-price field-unit-wrap">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={row.unitPrice}
+                                    onChange={(e) =>
+                                      row.priceVariantId &&
+                                      updateVariant(row.gear.id, row.priceVariantId, {
+                                        price: Math.max(0, parseNumber(e.target.value, 0))
+                                      })
+                                    }
+                                  />
+                                  <span className="field-unit">{CURRENCY}</span>
+                                </div>
+                              )}
+
                               <div className="cell-weight field-unit-wrap">
                                 <input
                                   type="number"
@@ -2027,15 +2099,7 @@ export default function App() {
                           const suggestedGear = gears.find((gear) => gear.id === draft.gearId);
                           return (
                             <div className="category-group-actions">
-                              {!addOpen[group.category] ? (
-                                <button
-                                  type="button"
-                                  className="add-item-toggle"
-                                  onClick={() => setAddOpen((prev) => ({ ...prev, [group.category]: true }))}
-                                >
-                                  + Add item
-                                </button>
-                              ) : (
+                              {addOpen[group.category] && (
                                 <>
                               <div className="pack-row add-row">
                                 <span className="drag-handle muted">+</span>
@@ -2142,15 +2206,30 @@ export default function App() {
                                   </select>
                                 </div>
                               )}
-                              <button
-                                type="button"
-                                className="add-item-toggle done"
-                                onClick={() => setAddOpen((prev) => ({ ...prev, [group.category]: false }))}
-                              >
-                                Done
-                              </button>
                                 </>
                               )}
+                              <div className="category-total-row">
+                                <span className="cell-drag" />
+                                <span className="cell-item-type" />
+                                <span className="cell-name">
+                                  <button
+                                    type="button"
+                                    className={`add-item-toggle ${addOpen[group.category] ? "done" : ""}`}
+                                    onClick={() =>
+                                      setAddOpen((prev) => ({ ...prev, [group.category]: !prev[group.category] }))
+                                    }
+                                  >
+                                    {addOpen[group.category] ? "Done" : "+ Add item"}
+                                  </button>
+                                </span>
+                                <span className="cell-flags" />
+                                {showPrice && (
+                                  <span className="cell-price cat-total">{formatPrice(group.totalPrice)}</span>
+                                )}
+                                <span className="cell-weight cat-total">{gramsToKg(group.totalWeight)}</span>
+                                <span className="cell-qty" />
+                                <span className="cell-remove" />
+                              </div>
                             </div>
                           );
                         })()}

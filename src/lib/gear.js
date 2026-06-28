@@ -42,7 +42,9 @@ export function normalizeVariants(variants) {
     byWeight.set(weight, {
       id: variant?.id || id(),
       name: typeof variant?.name === "string" ? variant.name.trim() : "",
-      weight
+      weight,
+      // Old data without a price is filled with 0 here (automatic migration).
+      price: Math.max(0, parseNumber(variant?.price, 0))
     });
   }
 
@@ -53,7 +55,8 @@ export function normalizeVariants(variants) {
   return kept.map((variant, idx) => ({
     id: variant.id,
     name: variant.name || (idx === 0 ? "Default" : `Variant ${idx + 1}`),
-    weight: variant.weight
+    weight: variant.weight,
+    price: variant.price
   }));
 }
 

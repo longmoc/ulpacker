@@ -86,8 +86,8 @@ describe("readStorage", () => {
     );
     const pack = readStorage().gears.find((g) => g.name === "Backpack");
     expect(pack.variants).toEqual([
-      { id: "v40", name: "40L", weight: 920 },
-      { id: "v55", name: "55L", weight: 1100 }
+      { id: "v40", name: "40L", weight: 920, price: 0 },
+      { id: "v55", name: "55L", weight: 1100, price: 0 }
     ]);
   });
 });

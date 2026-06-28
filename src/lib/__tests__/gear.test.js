@@ -67,6 +67,14 @@ describe("normalizeVariants", () => {
     const out = normalizeVariants([{ weight: 100 }, { weight: 200 }]);
     expect(out.map((v) => v.name)).toEqual(["Default", "Variant 2"]);
   });
+
+  it("keeps a per-variant price and fills missing prices with 0", () => {
+    const out = normalizeVariants([
+      { name: "40L", weight: 920, price: 1200 },
+      { name: "55L", weight: 1100 }
+    ]);
+    expect(out.map((v) => v.price)).toEqual([1200, 0]);
+  });
 });
 
 describe("mergeGears", () => {

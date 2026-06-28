@@ -1100,7 +1100,11 @@ button[type="submit"]:active {
 }
 
 .variant-row.compact {
-  grid-template-columns: 1.2fr 90px auto auto;
+  grid-template-columns: 1.2fr 80px auto 80px auto auto;
+}
+
+.variant-price {
+  width: 100%;
 }
 
 .gear-top {
@@ -1369,6 +1373,7 @@ button[type="submit"]:active {
 }
 
 .cell-flags,
+.cell-price,
 .cell-weight,
 .cell-qty,
 .cell-remove {
@@ -1770,6 +1775,50 @@ button[type="submit"]:active {
   background: var(--accent-soft);
 }
 
+/* ---- Prices (Settings -> Show prices) ---- */
+/* Insert a Price column between flags and weight in the pack list. */
+.pack-list.show-price .pack-row,
+.pack-list.show-price .group-table-head,
+.pack-list.show-price .category-total-row {
+  grid-template-columns: 24px minmax(80px, 0.7fr) minmax(120px, 1.3fr) 104px 90px 84px 56px 34px;
+}
+
+/* Per-category footer row: + Add item on the left, totals aligned under the
+   price/weight columns. */
+.category-total-row {
+  display: grid;
+  grid-template-columns: 24px minmax(80px, 0.7fr) minmax(150px, 1.6fr) 104px 84px 56px 34px;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 2px;
+  border-top: 1px solid var(--divider);
+}
+
+.category-total-row .cat-total {
+  font-weight: 650;
+  font-size: 0.84rem;
+  color: var(--accent);
+}
+
+.category-total-row .cell-price.cat-total {
+  color: var(--text-2);
+}
+
+/* Chart legend gains a Price column to the left of Weight; donut shifts left. */
+.analytics.show-price {
+  grid-template-columns: minmax(0, 0.7fr) minmax(420px, 1fr);
+}
+
+.legend.show-price .legend-table-head,
+.legend.show-price .legend-row {
+  grid-template-columns: minmax(0, 1fr) 92px 76px 48px;
+}
+
+.legend-price {
+  text-align: right;
+  color: var(--text-2);
+}
+
 @media (max-width: 1200px) {
   .summary-grid {
     grid-template-columns: repeat(3, 1fr);
@@ -1993,6 +2042,40 @@ button[type="submit"]:active {
 
   /* Expanded variant editor */
   .variant-row.compact {
-    grid-template-columns: 1fr auto auto auto;
+    grid-template-columns: 1fr auto auto auto auto auto;
+  }
+
+  /* Prices on mobile: price gets its own line in the item card. */
+  .pack-list.show-price .pack-row {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    grid-template-areas:
+      "name  name   name    remove"
+      "type  flags  weight  qty"
+      "price price  price   price";
+  }
+
+  .pack-list.show-price .pack-row .cell-price {
+    grid-area: price;
+    justify-self: stretch;
+    width: auto;
+  }
+
+  /* Category totals row collapses to a simple flex line on mobile. */
+  .category-total-row,
+  .pack-list.show-price .category-total-row {
+    display: flex;
+    grid-template-columns: none;
+    justify-content: space-between;
+    gap: 10px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+  }
+
+  .category-total-row > span:empty {
+    display: none;
+  }
+
+  .category-total-row .cell-name {
+    flex: 1;
   }
 }
