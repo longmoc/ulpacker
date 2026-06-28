@@ -820,8 +820,8 @@ button[type="submit"]:active {
 
 .legend-table-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 76px 48px;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  column-gap: 18px;
   font-size: 0.74rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -831,10 +831,19 @@ button[type="submit"]:active {
   padding-bottom: 5px;
 }
 
+/* Numeric column headers right-align to match their values. */
+.legend-table-head span {
+  text-align: right;
+}
+
+.legend-table-head span:first-child {
+  text-align: left;
+}
+
 .legend-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 76px 48px;
-  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  column-gap: 18px;
   align-items: center;
   font-size: 0.84rem;
   width: 100%;
@@ -1822,7 +1831,7 @@ button[type="submit"]:active {
 
 .legend.show-price .legend-table-head,
 .legend.show-price .legend-row {
-  grid-template-columns: minmax(0, 1fr) 92px 76px 48px;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
 }
 
 .legend-price {
