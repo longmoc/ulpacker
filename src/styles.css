@@ -762,7 +762,7 @@ button[type="submit"]:active {
 
 .analytics {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 0.85fr);
+  grid-template-columns: 1fr;
   gap: 24px;
   align-items: center;
   background: var(--surface-2);
@@ -772,10 +772,18 @@ button[type="submit"]:active {
   overflow: visible;
 }
 
+/* Two-column chart + legend only when there's room (desktop). */
+@media (min-width: 981px) {
+  .analytics {
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 0.85fr);
+  }
+}
+
 .pie-wrap {
   position: relative;
   width: 100%;
   max-width: 340px;
+  min-width: 0;
   aspect-ratio: 1 / 1;
   justify-self: center;
 }
@@ -1804,9 +1812,12 @@ button[type="submit"]:active {
   color: var(--text-2);
 }
 
-/* Chart legend gains a Price column to the left of Weight; donut shifts left. */
-.analytics.show-price {
-  grid-template-columns: minmax(0, 0.7fr) minmax(420px, 1fr);
+/* Chart legend gains a Price column to the left of Weight; donut shifts left.
+   Desktop only — on mobile the analytics is a single stacked column. */
+@media (min-width: 981px) {
+  .analytics.show-price {
+    grid-template-columns: minmax(0, 0.7fr) minmax(420px, 1fr);
+  }
 }
 
 .legend.show-price .legend-table-head,
@@ -1835,6 +1846,7 @@ button[type="submit"]:active {
   }
 
   .analytics,
+  .analytics.show-price,
   .library-table-head,
   .gear-row,
   .gear-top,

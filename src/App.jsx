@@ -8,13 +8,12 @@ import { useGoogleSync } from "./hooks/useGoogleSync.js";
 import Landing from "./components/Landing.jsx";
 import logoUrl from "./logo.png";
 
-// Currency symbol shown after the number (Vietnamese style). Change to e.g.
-// prefix "$" by editing formatPrice if a different convention is needed.
-const CURRENCY = "₫";
+// Currency symbol shown before the number.
+const CURRENCY = "$";
 
 function formatPrice(value) {
   const v = Math.max(0, parseNumber(value, 0));
-  return `${Math.round(v).toLocaleString("en-US")} ${CURRENCY}`;
+  return `${CURRENCY}${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 }
 
 function syncLabel(status) {
