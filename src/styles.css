@@ -1802,7 +1802,7 @@ button[type="submit"]:active {
 .pack-list.show-price .pack-row,
 .pack-list.show-price .group-table-head,
 .pack-list.show-price .category-total-row {
-  grid-template-columns: 24px minmax(80px, 0.7fr) minmax(120px, 1.3fr) 104px 90px 84px 56px 34px;
+  grid-template-columns: 24px minmax(80px, 0.7fr) minmax(140px, 1.4fr) 104px 70px 84px 56px 34px;
 }
 
 /* Per-category footer row: + Add item on the left, totals aligned under the
@@ -1830,7 +1830,7 @@ button[type="submit"]:active {
    Desktop only — on mobile the analytics is a single stacked column. */
 @media (min-width: 981px) {
   .analytics.show-price {
-    grid-template-columns: minmax(0, 0.7fr) minmax(420px, 1fr);
+    grid-template-columns: minmax(0, 0.9fr) minmax(380px, 0.8fr);
   }
 }
 
