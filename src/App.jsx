@@ -219,6 +219,26 @@ function BoxIcon() {
   );
 }
 
+function TotalIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 2 2 7l10 5 10-5-10-5Z" />
+      <path d="m2 17 10 5 10-5" />
+      <path d="m2 12 10 5 10-5" />
+    </svg>
+  );
+}
+
 function RemoveItemIcon() {
   return (
     <svg
@@ -458,6 +478,49 @@ function MarkControls({ favorite, purchase, onToggleFavorite, onCyclePurchase, f
   );
 }
 
+// Floating preview shown while hovering a sidebar pack card: the cover image at
+// full vividness with the name over it, then description + the five weights.
+// Positioned below the cursor (flips above near the screen bottom) so it stays
+// clear of the card's top-right delete icon. pointer-events: none so it never
+// steals hover from the card underneath.
+function PackHoverPreview({ pack, pos, weights }) {
+  const PW = 280;
+  const PH = 250;
+  const GAP = 18;
+  let left = pos.x - PW / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - PW - 8));
+  const below = pos.y + GAP;
+  const top = below + PH > window.innerHeight ? Math.max(8, pos.y - GAP - PH) : below;
+  const kg = (g) => `${(g / 1000).toFixed(2)} kg`;
+  return (
+    <div className="pack-hover" style={{ left, top, width: PW }}>
+      {pack.image ? (
+        <div className="pack-hover-img">
+          <img src={pack.image} alt="" />
+          <strong>{pack.name}</strong>
+        </div>
+      ) : (
+        <strong className="pack-hover-title">{pack.name}</strong>
+      )}
+      <div className="pack-hover-body">
+        {pack.description && <p className="pack-hover-desc">{pack.description}</p>}
+        <div className="pack-hover-weights">
+          <span><BackpackIcon /> Carried</span>
+          <b>{kg(weights.carried)}</b>
+          <span><BoxIcon /> Base</span>
+          <b>{kg(weights.base)}</b>
+          <span><ConsumableIcon /> Consumable</span>
+          <b>{kg(weights.consumable)}</b>
+          <span><WornIcon /> Worn</span>
+          <b>{kg(weights.worn)}</b>
+          <span><TotalIcon /> Total</span>
+          <b>{kg(weights.total)}</b>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const initial = readStorage();
 
@@ -538,6 +601,9 @@ export default function App() {
   // Sidebar pack reordering (drag a card onto another to move it there).
   const [packDragId, setPackDragId] = useState(null);
   const [packDragOverId, setPackDragOverId] = useState(null);
+  // Sidebar pack hover preview (the pack being hovered + cursor position).
+  const [hoverPack, setHoverPack] = useState(null);
+  const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
   const [importConfig, setImportConfig] = useState({
     mappingMode: "description_to_name",
     autoFillItemTypeFromCategory: true,
@@ -801,6 +867,24 @@ export default function App() {
       setSavingCover(false);
       window.alert("Sorry, that image could not be processed. Please try another file.");
     }
+  }
+
+  // Weight totals for any pack (by id): base / consumable / worn, plus derived
+  // carried (base + consumable) and total (everything).
+  function computePackWeights(packId) {
+    let base = 0;
+    let consumable = 0;
+    let worn = 0;
+    for (const item of packItems) {
+      if (item.packId !== packId) continue;
+      const grams =
+        Math.max(0, parseNumber(item.quantity, 0)) * Math.max(0, parseNumber(item.weight, 0));
+      if (item.weightType === "consumable") consumable += grams;
+      else if (item.weightType === "worn") worn += grams;
+      else base += grams;
+    }
+    const total = base + consumable + worn;
+    return { base, consumable, worn, total, carried: base + consumable };
   }
 
   function reorderPacks(targetId) {
@@ -1487,14 +1571,12 @@ export default function App() {
 
           <div className="pack-cards">
             {packs.map((pack) => {
-              const packWeight = packItems
-                .filter((item) => item.packId === pack.id)
-                .reduce((sum, item) => {
-                  return (
-                    sum +
-                    Math.max(0, parseNumber(item.quantity, 0)) * Math.max(0, parseNumber(item.weight, 0))
-                  );
-                }, 0);
+              const w = computePackWeights(pack.id);
+              // Range shown on the card: (total − consumable) … total — i.e. the
+              // pack weight once consumables are eaten, up to fully loaded.
+              const weightRange = `${((w.total - w.consumable) / 1000).toFixed(2)} - ${(
+                w.total / 1000
+              ).toFixed(2)} kg`;
 
               return (
                 <div
@@ -1505,6 +1587,7 @@ export default function App() {
                   draggable
                   onDragStart={(e) => {
                     setPackDragId(pack.id);
+                    setHoverPack(null);
                     e.dataTransfer.effectAllowed = "move";
                     // Firefox requires data to be set for a drag to start.
                     e.dataTransfer.setData("text/plain", pack.id);
@@ -1525,6 +1608,16 @@ export default function App() {
                     setPackDragId(null);
                     setPackDragOverId(null);
                   }}
+                  onMouseEnter={(e) => {
+                    if (packDragId) return;
+                    setHoverPack(pack);
+                    setHoverPos({ x: e.clientX, y: e.clientY });
+                  }}
+                  onMouseMove={(e) => {
+                    if (packDragId) return;
+                    setHoverPos({ x: e.clientX, y: e.clientY });
+                  }}
+                  onMouseLeave={() => setHoverPack((cur) => (cur?.id === pack.id ? null : cur))}
                 >
                   <button
                     type="button"
@@ -1534,7 +1627,7 @@ export default function App() {
                   >
                     <strong>{pack.name}</strong>
                     <small>{pack.description || "No description"}</small>
-                    <span>{gramsToKg(packWeight)}</span>
+                    <span>{weightRange}</span>
                   </button>
                   <button
                     type="button"
@@ -2576,6 +2669,13 @@ export default function App() {
           )}
         </section>
       </main>
+      {hoverPack && !packDragId && (
+        <PackHoverPreview
+          pack={hoverPack}
+          pos={hoverPos}
+          weights={computePackWeights(hoverPack.id)}
+        />
+      )}
     </div>
   );
 }

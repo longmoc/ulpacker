@@ -598,6 +598,99 @@ button[type="submit"]:active {
   cursor: grab;
 }
 
+/* Floating hover preview (vivid cover + name + weights). */
+.pack-hover {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.pack-hover-img {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  overflow: hidden;
+}
+
+.pack-hover-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Dark scrim only behind the name so the photo itself stays vivid. */
+.pack-hover-img::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0) 55%);
+}
+
+.pack-hover-img strong {
+  position: absolute;
+  left: 11px;
+  right: 11px;
+  bottom: 8px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+}
+
+.pack-hover-title {
+  display: block;
+  padding: 11px 13px 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.pack-hover-body {
+  padding: 11px 13px 13px;
+  display: grid;
+  gap: 9px;
+}
+
+.pack-hover-desc {
+  margin: 0;
+  font-size: 0.82rem;
+  font-style: italic;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.pack-hover-weights {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 12px;
+  font-size: 0.82rem;
+}
+
+.pack-hover-weights span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+}
+
+.pack-hover-weights b {
+  color: var(--text);
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .pack-card-wrap.dragging {
   opacity: 0.45;
   cursor: grabbing;
