@@ -586,13 +586,15 @@ button[type="submit"]:active {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
+  border: 1px solid var(--border-2);
+  border-radius: 50%;
+  /* Solid white chip so the red icon stays legible over a photo card background */
+  background: rgba(255, 255, 255, 0.95);
   color: var(--danger);
+  box-shadow: var(--shadow-sm);
   opacity: 0;
   cursor: pointer;
   transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease;
@@ -604,8 +606,9 @@ button[type="submit"]:active {
 }
 
 .pack-card-delete:hover {
-  background: var(--danger-soft);
+  background: var(--danger);
   border-color: var(--danger);
+  color: #fff;
 }
 
 .pack-card-delete svg {
