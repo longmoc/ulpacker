@@ -1761,17 +1761,19 @@ export default function App() {
               {activePack && (
                 <>
               <div className="workspace-head">
-                <input
-                  className="pack-name-input"
-                  value={activePack.name}
-                  onChange={(e) => updateActivePack({ name: e.target.value })}
-                />
-                <input
-                  className="pack-desc-input"
-                  value={activePack.description}
-                  onChange={(e) => updateActivePack({ description: e.target.value })}
-                  placeholder="Pack description"
-                />
+                <div className="workspace-titles">
+                  <input
+                    className="pack-name-input"
+                    value={activePack.name}
+                    onChange={(e) => updateActivePack({ name: e.target.value })}
+                  />
+                  <input
+                    className="pack-desc-input"
+                    value={activePack.description}
+                    onChange={(e) => updateActivePack({ description: e.target.value })}
+                    placeholder="Pack description"
+                  />
+                </div>
                 <div className="workspace-actions">
                   <div className="menu">
                     <button type="button" className="menu-trigger">
