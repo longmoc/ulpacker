@@ -526,6 +526,16 @@ button[type="submit"]:active {
   gap: 8px;
 }
 
+/* Group the create form into one block so it reads as a unit and stands apart
+   from the pack list below it. */
+.new-pack-form {
+  margin-top: 4px;
+  padding: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
 .new-gear-form label {
   display: grid;
   gap: 4px;

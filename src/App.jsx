@@ -539,7 +539,7 @@ export default function App() {
   const lastSavedRef = useRef(JSON.stringify({ gears: initial.gears, packs: initial.packs, packItems: initial.packItems }));
   const appliedUpdatedAt = useRef(null);
 
-  const [newPack, setNewPack] = useState({ name: "", description: "" });
+  const [newPack, setNewPack] = useState({ name: "" });
   const [newGear, setNewGear] = useState({
     name: "",
     categories: ["Uncategorized"],
@@ -822,13 +822,14 @@ export default function App() {
     const pack = {
       id: id(),
       name: newPack.name.trim(),
-      description: newPack.description.trim(),
+      description: "",
+      image: "",
       createdAt: new Date().toISOString(),
       categoryOrder: []
     };
     setPacks((prev) => [pack, ...prev]);
     setActivePackId(pack.id);
-    setNewPack({ name: "", description: "" });
+    setNewPack({ name: "" });
   }
 
   function updateActivePack(patch) {
@@ -1559,12 +1560,7 @@ export default function App() {
             <input
               placeholder="Pack name"
               value={newPack.name}
-              onChange={(e) => setNewPack((prev) => ({ ...prev, name: e.target.value }))}
-            />
-            <input
-              placeholder="Short description"
-              value={newPack.description}
-              onChange={(e) => setNewPack((prev) => ({ ...prev, description: e.target.value }))}
+              onChange={(e) => setNewPack({ name: e.target.value })}
             />
             <button type="submit">Create Pack</button>
           </form>
