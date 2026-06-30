@@ -706,26 +706,6 @@ button[type="submit"]:active {
   border-color: var(--danger);
 }
 
-.pack-cover-empty {
-  width: 100%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 14px;
-  color: var(--text-2);
-  border: 1px dashed var(--border-2);
-  border-radius: var(--radius);
-  background: var(--surface);
-  box-shadow: none;
-}
-
-.pack-cover-empty:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--surface);
-}
-
 /* Crop modal stage (react-easy-crop needs a sized, positioned parent). */
 .crop-stage {
   position: relative;
