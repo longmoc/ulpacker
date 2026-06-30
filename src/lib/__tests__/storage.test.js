@@ -112,6 +112,19 @@ describe("normalizeData", () => {
     expect(data.gears.find((g) => g.name === "Stove")).toMatchObject({ favorite: false, purchase: "" });
   });
 
+  it("preserves a pack cover image and defaults a missing one to empty", () => {
+    const data = normalizeData({
+      gears: [{ id: "g1", name: "Quilt", categories: ["Sleep"], variants: [{ weight: 600 }] }],
+      packs: [
+        { id: "p1", name: "With cover", image: "data:image/jpeg;base64,AAA" },
+        { id: "p2", name: "No cover" }
+      ],
+      packItems: []
+    });
+    expect(data.packs.find((p) => p.id === "p1").image).toBe("data:image/jpeg;base64,AAA");
+    expect(data.packs.find((p) => p.id === "p2").image).toBe("");
+  });
+
   it("normalizes a valid backup object without touching localStorage", () => {
     const data = normalizeData({
       gears: [{ id: "g1", name: "Quilt", categories: ["Sleep"], variants: [{ weight: 600 }] }],

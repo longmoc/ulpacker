@@ -23,6 +23,7 @@ export function ensurePackDefaults(data) {
         id: pack.id || id(),
         name: pack.name || "Unnamed Pack",
         description: pack.description || "",
+        image: typeof pack.image === "string" ? pack.image : "",
         createdAt: pack.createdAt || new Date().toISOString(),
         categoryOrder: Array.isArray(pack.categoryOrder)
           ? pack.categoryOrder.filter((c) => typeof c === "string")
@@ -33,6 +34,7 @@ export function ensurePackDefaults(data) {
           id: id(),
           name: "My First Pack",
           description: "",
+          image: "",
           createdAt: new Date().toISOString(),
           categoryOrder: []
         }
@@ -93,6 +95,7 @@ export function defaultData() {
         id: id(),
         name: "My First Pack",
         description: "",
+        image: "",
         createdAt: new Date().toISOString(),
         categoryOrder: []
       }

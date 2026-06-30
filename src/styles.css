@@ -613,6 +613,173 @@ button[type="submit"]:active {
   height: 15px;
 }
 
+/* When a pack has a cover image, use it as the card background. The photo sits
+   in ::before (so we can soften only the image), a white gradient scrim in
+   ::after keeps the dark/green text readable, and the text rides on top. */
+.pack-card.has-image {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.pack-card.has-image::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--pack-img);
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+}
+
+.pack-card.has-image::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    rgba(255, 255, 255, 0.94) 0%,
+    rgba(255, 255, 255, 0.74) 50%,
+    rgba(255, 255, 255, 0.32) 100%
+  );
+  z-index: 1;
+}
+
+.pack-card.has-image > * {
+  position: relative;
+  z-index: 2;
+}
+
+.pack-card.has-image strong,
+.pack-card.has-image small,
+.pack-card.has-image span {
+  text-shadow: 0 1px 3px rgba(255, 255, 255, 0.95), 0 0 2px rgba(255, 255, 255, 0.9);
+}
+
+.pack-card.has-image:hover {
+  background: var(--surface);
+}
+
+/* Pack cover banner in the pack view (full colour, fixed 3:1). */
+.pack-cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 1;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface-2, #f4f4f6);
+  border: 1px solid var(--border);
+}
+
+.pack-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.pack-cover-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.pack-cover:hover .pack-cover-actions {
+  opacity: 1;
+}
+
+.pack-cover-actions button {
+  width: auto;
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  background: rgba(255, 255, 255, 0.92);
+  border-color: var(--border-2);
+  backdrop-filter: blur(2px);
+}
+
+.pack-cover-actions .cover-remove {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.pack-cover-empty {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  color: var(--text-2);
+  border: 1px dashed var(--border-2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.pack-cover-empty:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--surface);
+}
+
+/* Crop modal stage (react-easy-crop needs a sized, positioned parent). */
+.crop-stage {
+  position: relative;
+  width: 100%;
+  height: 320px;
+  background: #1c1c1f;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.crop-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.crop-zoom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: var(--text-2);
+  flex: 1;
+  min-width: 180px;
+}
+
+.crop-zoom input[type="range"] {
+  flex: 1;
+  width: auto;
+}
+
+.crop-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.crop-actions button {
+  width: auto;
+  padding: 8px 14px;
+}
+
+.crop-actions .crop-save {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.crop-actions .crop-save:disabled {
+  opacity: 0.6;
+}
+
 .workspace {
   display: grid;
   gap: 14px;

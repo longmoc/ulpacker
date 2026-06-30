@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import Cropper from "react-easy-crop";
 import { id, parseNumber, normalizeWeightType, normalizeText, gramsToKg, reorder, mutatePackItemsForPack, applyOrder } from "./lib/util.js";
 import { normalizeCategories, primaryCategory, mergeOrCreateGear, nextPurchase } from "./lib/gear.js";
 import { parseLighterpackCsv, parseLighterpackHtml, mapImportedEntry, packToCsv } from "./lib/import.js";
@@ -14,6 +15,43 @@ const CURRENCY = "$";
 function formatPrice(value) {
   const v = Math.max(0, parseNumber(value, 0));
   return `${CURRENCY}${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+}
+
+// Pack cover images are a fixed 3:1 landscape. We crop the user's selection to
+// that ratio and downscale/compress to keep the embedded data URL small (it is
+// stored on the pack and synced inside the single JSON document).
+const COVER_ASPECT = 3;
+const COVER_OUT_WIDTH = 1200;
+const COVER_OUT_HEIGHT = COVER_OUT_WIDTH / COVER_ASPECT; // 400
+
+function getCroppedImg(src, pixelCrop) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = COVER_OUT_WIDTH;
+        canvas.height = COVER_OUT_HEIGHT;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(
+          image,
+          pixelCrop.x,
+          pixelCrop.y,
+          pixelCrop.width,
+          pixelCrop.height,
+          0,
+          0,
+          COVER_OUT_WIDTH,
+          COVER_OUT_HEIGHT
+        );
+        resolve(canvas.toDataURL("image/jpeg", 0.82));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    image.onerror = reject;
+    image.src = src;
+  });
 }
 
 function syncLabel(status) {
@@ -282,6 +320,26 @@ function TrashIcon() {
   );
 }
 
+function ImageIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-4.5-4.5L5 22" />
+    </svg>
+  );
+}
+
 function PanelIcon() {
   return (
     <svg
@@ -488,6 +546,14 @@ export default function App() {
     }
   });
   const [libraryPackTarget, setLibraryPackTarget] = useState({});
+  // Pack cover crop: cropSource holds the raw selected image (data URL) while the
+  // crop modal is open; croppedPx is the last region react-easy-crop reported.
+  const [cropSource, setCropSource] = useState("");
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [cropZoom, setCropZoom] = useState(1);
+  const [croppedPx, setCroppedPx] = useState(null);
+  const [savingCover, setSavingCover] = useState(false);
+  const coverInputRef = useRef(null);
   const [categoryDragSource, setCategoryDragSource] = useState(null);
   const [categoryDragOver, setCategoryDragOver] = useState(null);
   const [importConfig, setImportConfig] = useState({
@@ -720,6 +786,39 @@ export default function App() {
   function updateActivePack(patch) {
     if (!activePack) return;
     setPacks((prev) => prev.map((pack) => (pack.id === activePack.id ? { ...pack, ...patch } : pack)));
+  }
+
+  function onCoverFileSelected(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCrop({ x: 0, y: 0 });
+      setCropZoom(1);
+      setCroppedPx(null);
+      setCropSource(String(reader.result || ""));
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function closeCropModal() {
+    setCropSource("");
+    setCroppedPx(null);
+    setSavingCover(false);
+  }
+
+  async function saveCover() {
+    if (!cropSource || !croppedPx) return;
+    setSavingCover(true);
+    try {
+      const dataUrl = await getCroppedImg(cropSource, croppedPx);
+      updateActivePack({ image: dataUrl });
+      closeCropModal();
+    } catch {
+      setSavingCover(false);
+      window.alert("Sorry, that image could not be processed. Please try another file.");
+    }
   }
 
   function deletePack(target) {
@@ -1414,7 +1513,8 @@ export default function App() {
                 <div className="pack-card-wrap" key={pack.id}>
                   <button
                     type="button"
-                    className={`pack-card ${activePack?.id === pack.id ? "active" : ""}`}
+                    className={`pack-card ${activePack?.id === pack.id ? "active" : ""} ${pack.image ? "has-image" : ""}`}
+                    style={pack.image ? { "--pack-img": `url(${pack.image})` } : undefined}
                     onClick={() => setActivePackId(pack.id)}
                   >
                     <strong>{pack.name}</strong>
@@ -1722,6 +1822,40 @@ export default function App() {
                   </button>
                 </div>
               </div>
+
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={onCoverFileSelected}
+              />
+              {activePack.image ? (
+                <div className="pack-cover">
+                  <img src={activePack.image} alt={`${activePack.name} cover`} />
+                  <div className="pack-cover-actions">
+                    <button type="button" onClick={() => coverInputRef.current?.click()}>
+                      Change
+                    </button>
+                    <button
+                      type="button"
+                      className="cover-remove"
+                      onClick={() => updateActivePack({ image: "" })}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="pack-cover-empty"
+                  onClick={() => coverInputRef.current?.click()}
+                >
+                  <ImageIcon />
+                  Add cover image
+                </button>
+              )}
 
               <div className="summary-grid">
                 <button
@@ -2261,6 +2395,56 @@ export default function App() {
                   </div>
                 </section>
               </div>
+
+                  {cropSource && (
+                    <div className="modal-overlay" onClick={closeCropModal}>
+                      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+                        <div className="modal-head">
+                          <h3>Crop cover image</h3>
+                          <button type="button" onClick={closeCropModal}>
+                            ✕
+                          </button>
+                        </div>
+                        <div className="crop-stage">
+                          <Cropper
+                            image={cropSource}
+                            crop={crop}
+                            zoom={cropZoom}
+                            aspect={COVER_ASPECT}
+                            onCropChange={setCrop}
+                            onZoomChange={setCropZoom}
+                            onCropComplete={(_, px) => setCroppedPx(px)}
+                          />
+                        </div>
+                        <div className="crop-controls">
+                          <label className="crop-zoom">
+                            Zoom
+                            <input
+                              type="range"
+                              min={1}
+                              max={3}
+                              step={0.01}
+                              value={cropZoom}
+                              onChange={(e) => setCropZoom(Number(e.target.value))}
+                            />
+                          </label>
+                          <div className="crop-actions">
+                            <button type="button" onClick={closeCropModal}>
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              className="crop-save"
+                              disabled={!croppedPx || savingCover}
+                              onClick={saveCover}
+                            >
+                              {savingCover ? "Saving…" : "Save cover"}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {importModal && (
                     <div className="modal-overlay" onClick={closeImportModal}>
