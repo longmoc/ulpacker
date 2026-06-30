@@ -580,8 +580,9 @@ button[type="submit"]:active {
 /* Delete affordance: hidden until the card is hovered/focused. */
 .pack-card-delete {
   position: absolute;
-  top: 6px;
-  right: 6px;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
   justify-content: center;
