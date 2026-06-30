@@ -1802,16 +1802,6 @@ export default function App() {
                   placeholder="Pack description"
                 />
                 <div className="workspace-actions">
-                  {!activePack.image && (
-                    <button
-                      type="button"
-                      className="menu-trigger"
-                      onClick={() => coverInputRef.current?.click()}
-                    >
-                      <ImageIcon />
-                      Add cover
-                    </button>
-                  )}
                   <div className="menu">
                     <button type="button" className="menu-trigger">
                       <CloudDownloadIcon />
@@ -1840,7 +1830,7 @@ export default function App() {
                 style={{ display: "none" }}
                 onChange={onCoverFileSelected}
               />
-              {activePack.image && (
+              {activePack.image ? (
                 <div className="pack-cover">
                   <img src={activePack.image} alt={`${activePack.name} cover`} />
                   <div className="pack-cover-actions">
@@ -1856,6 +1846,15 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+              ) : (
+                <button
+                  type="button"
+                  className="pack-cover-empty"
+                  onClick={() => coverInputRef.current?.click()}
+                >
+                  <ImageIcon />
+                  Add cover image
+                </button>
               )}
 
               <div className="summary-grid">
