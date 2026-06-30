@@ -1392,7 +1392,9 @@ export default function App() {
                     Reconnect Drive
                   </button>
                 )}
-                <div className="menu-divider" />
+                {/* account-info already carries a bottom border; only add a
+                    divider in the signed-out case to separate Sign in above. */}
+                {!sync.account && sync.configured && <div className="menu-divider" />}
                 <button type="button" onClick={exportBackup}>
                   Export Profile
                 </button>

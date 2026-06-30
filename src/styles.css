@@ -879,14 +879,46 @@ button[type="submit"]:active {
   align-items: center;
 }
 
+/* Pack name + description read as plain text until hovered/focused, then reveal
+   a field affordance so it's clear they're editable inline. */
+.pack-name-input,
+.pack-desc-input {
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
+  border-radius: var(--radius);
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
 .pack-name-input {
-  flex: 0 1 240px;
+  flex: 0 1 280px;
   min-width: 160px;
+  padding: 6px 9px;
+  font-size: 1.2rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
 }
 
 .pack-desc-input {
   flex: 1 1 260px;
   max-width: 420px;
+  padding: 7px 9px;
+  font-size: 0.9rem;
+  color: var(--text-2);
+}
+
+.pack-name-input:hover,
+.pack-desc-input:hover {
+  border-color: var(--border-2);
+  background: var(--surface);
+}
+
+.pack-name-input:focus,
+.pack-desc-input:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--accent-ring);
 }
 
 .workspace-actions {
