@@ -238,46 +238,6 @@ function RemoveItemIcon() {
   );
 }
 
-function ExportIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="15"
-      height="15"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M12 15V3" />
-      <path d="m8 7 4-4 4 4" />
-      <path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" />
-    </svg>
-  );
-}
-
-function ImportIcon() {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      width="15"
-      height="15"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M12 3v12" />
-      <path d="m8 11 4 4 4-4" />
-      <path d="M4 14v5a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-5" />
-    </svg>
-  );
-}
-
 function CloudDownloadIcon() {
   return (
     <svg
@@ -374,6 +334,25 @@ function SettingsIcon() {
     >
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
+function UserIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" />
     </svg>
   );
 }
@@ -1352,32 +1331,6 @@ export default function App() {
           <div className="data-tools">
             <div className="menu">
               <button type="button" className="menu-trigger">
-                <ExportIcon />
-                Export
-              </button>
-              <div className="menu-list">
-                <button type="button" onClick={exportPackCsv}>
-                  Export pack to CSV
-                </button>
-                <button type="button" onClick={exportBackup}>
-                  Backup to JSON
-                </button>
-              </div>
-            </div>
-            <div className="menu">
-              <button type="button" className="menu-trigger">
-                <ImportIcon />
-                Import
-              </button>
-              <div className="menu-list">
-                <label className="menu-file">
-                  Restore from JSON
-                  <input type="file" accept=".json,application/json" onChange={importBackup} />
-                </label>
-              </div>
-            </div>
-            <div className="menu">
-              <button type="button" className="menu-trigger">
                 <SettingsIcon />
                 Settings
               </button>
@@ -1400,44 +1353,60 @@ export default function App() {
                 </label>
               </div>
             </div>
-            {sync.account ? (
-              <div className="menu account-menu">
-                <button type="button" className="menu-trigger account-trigger">
-                  {sync.account.picture ? (
-                    <img
-                      className="account-avatar"
-                      src={sync.account.picture}
-                      alt=""
-                      referrerPolicy="no-referrer"
-                    />
-                  ) : (
-                    <span className="account-avatar account-avatar-fallback">
-                      {(sync.account.name || "?").charAt(0).toUpperCase()}
-                    </span>
-                  )}
+            <div className="menu account-menu">
+              <button type="button" className="menu-trigger account-trigger">
+                {sync.account?.picture ? (
+                  <img
+                    className="account-avatar"
+                    src={sync.account.picture}
+                    alt=""
+                    referrerPolicy="no-referrer"
+                  />
+                ) : sync.account ? (
+                  <span className="account-avatar account-avatar-fallback">
+                    {(sync.account.name || "?").charAt(0).toUpperCase()}
+                  </span>
+                ) : (
+                  <span className="account-avatar account-avatar-fallback">
+                    <UserIcon />
+                  </span>
+                )}
+                {sync.account && (
                   <span className={`sync-dot sync-${sync.status}`} title={syncLabel(sync.status)} />
-                </button>
-                <div className="menu-list account-list">
+                )}
+              </button>
+              <div className="menu-list account-list">
+                {sync.account ? (
                   <div className="account-info">
                     <strong>{sync.account.name}</strong>
                     <small>{sync.account.email}</small>
                     <small className={`sync-line sync-line-${sync.status}`}>{syncLabel(sync.status)}</small>
                   </div>
-                  {(sync.status === "permission" || sync.status === "error") && (
-                    <button type="button" onClick={sync.signIn}>
-                      Reconnect Drive
-                    </button>
-                  )}
+                ) : sync.configured ? (
+                  <button type="button" onClick={sync.signIn}>
+                    Sign in
+                  </button>
+                ) : null}
+                {sync.account && (sync.status === "permission" || sync.status === "error") && (
+                  <button type="button" onClick={sync.signIn}>
+                    Reconnect Drive
+                  </button>
+                )}
+                <div className="menu-divider" />
+                <button type="button" onClick={exportBackup}>
+                  Export Profile
+                </button>
+                <label className="menu-file">
+                  Import Profile
+                  <input type="file" accept=".json,application/json" onChange={importBackup} />
+                </label>
+                {sync.account && (
                   <button type="button" onClick={sync.signOut}>
                     Sign out
                   </button>
-                </div>
+                )}
               </div>
-            ) : sync.configured ? (
-              <button type="button" className="menu-trigger signin-trigger" onClick={sync.signIn}>
-                Sign in
-              </button>
-            ) : null}
+            </div>
           </div>
         </div>
         <div className="nav-row">
@@ -1813,6 +1782,10 @@ export default function App() {
                       </button>
                       <button type="button" onClick={() => openImport("csv")}>
                         From CSV file
+                      </button>
+                      <div className="menu-divider" />
+                      <button type="button" onClick={exportPackCsv}>
+                        Export to CSV
                       </button>
                     </div>
                   </div>

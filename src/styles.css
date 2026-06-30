@@ -225,6 +225,12 @@ body {
   display: none;
 }
 
+.menu-divider {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
+
 .settings-menu {
   min-width: 220px;
 }
