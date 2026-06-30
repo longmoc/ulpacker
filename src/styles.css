@@ -573,6 +573,45 @@ button[type="submit"]:active {
   font-weight: 500;
 }
 
+.pack-card-wrap {
+  position: relative;
+}
+
+/* Delete affordance: hidden until the card is hovered/focused. */
+.pack-card-delete {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--danger);
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.pack-card-wrap:hover .pack-card-delete,
+.pack-card-delete:focus-visible {
+  opacity: 1;
+}
+
+.pack-card-delete:hover {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+
+.pack-card-delete svg {
+  width: 15px;
+  height: 15px;
+}
+
 .workspace {
   display: grid;
   gap: 14px;

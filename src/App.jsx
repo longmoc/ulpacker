@@ -722,10 +722,10 @@ export default function App() {
     setPacks((prev) => prev.map((pack) => (pack.id === activePack.id ? { ...pack, ...patch } : pack)));
   }
 
-  function deleteActivePack() {
-    if (!activePack) return;
-    if (!window.confirm(`Delete pack "${activePack.name}"? Its items will be removed.`)) return;
-    const targetId = activePack.id;
+  function deletePack(target) {
+    if (!target) return;
+    if (!window.confirm(`Delete pack "${target.name}"? Its items will be removed.`)) return;
+    const targetId = target.id;
     setPackItems((prev) => prev.filter((item) => item.packId !== targetId));
     const remaining = packs.filter((pack) => pack.id !== targetId);
     if (remaining.length === 0) {
@@ -737,7 +737,12 @@ export default function App() {
       return;
     }
     setPacks(remaining);
-    setActivePackId(remaining[0].id);
+    // Only move the selection if we deleted the pack that's currently open.
+    if (activePackId === targetId) setActivePackId(remaining[0].id);
+  }
+
+  function deleteActivePack() {
+    deletePack(activePack);
   }
 
   function renameGroupCategory(oldCategory, nextCategory) {
@@ -1406,16 +1411,29 @@ export default function App() {
                 }, 0);
 
               return (
-                <button
-                  type="button"
-                  key={pack.id}
-                  className={`pack-card ${activePack?.id === pack.id ? "active" : ""}`}
-                  onClick={() => setActivePackId(pack.id)}
-                >
-                  <strong>{pack.name}</strong>
-                  <small>{pack.description || "No description"}</small>
-                  <span>{gramsToKg(packWeight)}</span>
-                </button>
+                <div className="pack-card-wrap" key={pack.id}>
+                  <button
+                    type="button"
+                    className={`pack-card ${activePack?.id === pack.id ? "active" : ""}`}
+                    onClick={() => setActivePackId(pack.id)}
+                  >
+                    <strong>{pack.name}</strong>
+                    <small>{pack.description || "No description"}</small>
+                    <span>{gramsToKg(packWeight)}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="pack-card-delete"
+                    title="Delete pack"
+                    aria-label={`Delete pack ${pack.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deletePack(pack);
+                    }}
+                  >
+                    <TrashIcon />
+                  </button>
+                </div>
               );
             })}
           </div>
