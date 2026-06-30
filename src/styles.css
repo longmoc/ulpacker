@@ -549,6 +549,8 @@ button[type="submit"]:active {
   grid-template-columns: minmax(0, 1fr);
   gap: 3px;
   overflow: hidden;
+  /* Reserve room on the right so text never runs under the hover delete icon. */
+  padding-right: 38px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -593,6 +595,22 @@ button[type="submit"]:active {
 
 .pack-card-wrap {
   position: relative;
+  cursor: grab;
+}
+
+.pack-card-wrap.dragging {
+  opacity: 0.45;
+  cursor: grabbing;
+}
+
+.pack-card-wrap.drag-over::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border: 2px dashed var(--accent);
+  border-radius: calc(var(--radius) + 2px);
+  pointer-events: none;
+  z-index: 4;
 }
 
 /* Delete affordance: hidden until the card is hovered/focused. */
@@ -601,6 +619,8 @@ button[type="submit"]:active {
   top: 50%;
   right: 8px;
   transform: translateY(-50%);
+  /* Above the card's image scrim + text layers (z 1/2) so it's clickable. */
+  z-index: 5;
   display: inline-flex;
   align-items: center;
   justify-content: center;

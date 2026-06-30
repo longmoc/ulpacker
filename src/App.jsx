@@ -535,6 +535,9 @@ export default function App() {
   const coverInputRef = useRef(null);
   const [categoryDragSource, setCategoryDragSource] = useState(null);
   const [categoryDragOver, setCategoryDragOver] = useState(null);
+  // Sidebar pack reordering (drag a card onto another to move it there).
+  const [packDragId, setPackDragId] = useState(null);
+  const [packDragOverId, setPackDragOverId] = useState(null);
   const [importConfig, setImportConfig] = useState({
     mappingMode: "description_to_name",
     autoFillItemTypeFromCategory: true,
@@ -798,6 +801,19 @@ export default function App() {
       setSavingCover(false);
       window.alert("Sorry, that image could not be processed. Please try another file.");
     }
+  }
+
+  function reorderPacks(targetId) {
+    const sourceId = packDragId;
+    setPackDragId(null);
+    setPackDragOverId(null);
+    if (!sourceId || sourceId === targetId) return;
+    setPacks((prev) => {
+      const from = prev.findIndex((p) => p.id === sourceId);
+      const to = prev.findIndex((p) => p.id === targetId);
+      if (from < 0 || to < 0) return prev;
+      return reorder(prev, from, to);
+    });
   }
 
   function deletePack(target) {
@@ -1481,7 +1497,35 @@ export default function App() {
                 }, 0);
 
               return (
-                <div className="pack-card-wrap" key={pack.id}>
+                <div
+                  className={`pack-card-wrap ${packDragId === pack.id ? "dragging" : ""} ${
+                    packDragOverId === pack.id && packDragId !== pack.id ? "drag-over" : ""
+                  }`}
+                  key={pack.id}
+                  draggable
+                  onDragStart={(e) => {
+                    setPackDragId(pack.id);
+                    e.dataTransfer.effectAllowed = "move";
+                    // Firefox requires data to be set for a drag to start.
+                    e.dataTransfer.setData("text/plain", pack.id);
+                  }}
+                  onDragOver={(e) => {
+                    if (!packDragId) return;
+                    e.preventDefault();
+                    setPackDragOverId(pack.id);
+                  }}
+                  onDragLeave={() =>
+                    setPackDragOverId((cur) => (cur === pack.id ? null : cur))
+                  }
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    reorderPacks(pack.id);
+                  }}
+                  onDragEnd={() => {
+                    setPackDragId(null);
+                    setPackDragOverId(null);
+                  }}
+                >
                   <button
                     type="button"
                     className={`pack-card ${activePack?.id === pack.id ? "active" : ""} ${pack.image ? "has-image" : ""}`}
@@ -1795,7 +1839,7 @@ export default function App() {
                   </div>
                   <button type="button" className="action-danger" onClick={deleteActivePack}>
                     <TrashIcon />
-                    Delete Pack
+                    Delete
                   </button>
                 </div>
               </div>
