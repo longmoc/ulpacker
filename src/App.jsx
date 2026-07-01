@@ -1772,7 +1772,7 @@ export default function App() {
               <section className="library-create">
                 <button
                   type="button"
-                  className="collapsible-head"
+                  className="collapsible-head add-gear-toggle"
                   onClick={() => setAddGearOpen((open) => !open)}
                   aria-expanded={addGearOpen}
                 >
@@ -1907,7 +1907,7 @@ export default function App() {
                       />
                       <button
                         type="button"
-                        className={`variant-toggle ${gear.variants.length > 2 ? "variant-toggle-many" : ""}`}
+                        className={`variant-toggle ${gear.variants.length > 1 ? "variant-toggle-many" : ""}`}
                         onClick={() => toggleGearExpanded(gear.id)}
                       >
                         {gear.variants.length} {gear.variants.length === 1 ? "variant" : "variants"}

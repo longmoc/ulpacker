@@ -1634,10 +1634,10 @@ button[type="submit"]:active {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 4px 4px 9px;
-  border: 1px solid var(--border-2);
+  padding: 4px 6px 4px 9px;
+  border: 1px solid var(--accent-ring);
   border-radius: 10px;
-  background: var(--surface-2);
+  background: var(--accent-soft);
 }
 
 .variant-chip .variant-name {
@@ -1658,10 +1658,11 @@ button[type="submit"]:active {
 }
 
 .variant-chip .variant-num {
-  width: 52px;
+  width: 56px;
   border: 0;
   background: transparent;
-  padding: 2px 0;
+  /* Right-aligned with a little padding so the number keeps a gap from the unit. */
+  padding: 2px 5px 2px 0;
   text-align: right;
   font-size: 0.82rem;
   color: var(--text);
@@ -2246,6 +2247,27 @@ button[type="submit"]:active {
   font-weight: 600;
   color: var(--text);
   cursor: pointer;
+}
+
+/* Compact green "Add New Gear" toggle (not full width). */
+.add-gear-toggle {
+  width: auto;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  box-shadow: var(--shadow-xs);
+  font-size: 0.9rem;
+}
+
+.add-gear-toggle:hover {
+  background: var(--accent-press);
+}
+
+.add-gear-toggle .chev {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.85);
 }
 
 .collapsible-head:hover {
