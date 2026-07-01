@@ -629,7 +629,11 @@ export default function App() {
       return false;
     }
   });
-  const [libraryPackTarget, setLibraryPackTarget] = useState({});
+  // Add-to-pack modal: the gear being added, the pack chosen (step 2), and the
+  // new-category input.
+  const [addToPackGear, setAddToPackGear] = useState(null);
+  const [addToPackPackId, setAddToPackPackId] = useState(null);
+  const [addToPackNewCat, setAddToPackNewCat] = useState("");
   // Pack cover crop: cropSource holds the raw selected image (data URL) while the
   // crop modal is open; croppedPx is the last region react-easy-crop reported.
   const [cropSource, setCropSource] = useState("");
@@ -1166,11 +1170,8 @@ export default function App() {
       delete next[gearId];
       return next;
     });
-    setLibraryPackTarget((prev) => {
-      const next = { ...prev };
-      delete next[gearId];
-      return next;
-    });
+    // If the gear being removed is the one open in the add-to-pack modal, close it.
+    setAddToPackGear((cur) => (cur?.id === gearId ? null : cur));
   }
 
   function updateGear(gearId, patch) {
@@ -1206,6 +1207,19 @@ export default function App() {
           : gear
       )
     );
+    // Price is read live from the variant, but each pack item snapshots the
+    // weight — so when the variant weight changes, push it to every pack item
+    // using this variant so packs stay in sync.
+    if (patch.weight !== undefined) {
+      const nextWeight = Math.max(0, parseNumber(patch.weight, 0));
+      setPackItems((prev) =>
+        prev.map((item) =>
+          item.gearId === gearId && item.variantId === variantId
+            ? { ...item, weight: nextWeight }
+            : item
+        )
+      );
+    }
   }
 
   function removeVariant(gearId, variantId) {
@@ -1247,7 +1261,7 @@ export default function App() {
     );
   }
 
-  function addToSpecificPack(gearId, packId) {
+  function addToSpecificPack(gearId, packId, category) {
     const target = packs.find((pack) => pack.id === packId);
     if (!target) return;
     const gear = gears.find((item) => item.id === gearId);
@@ -1257,13 +1271,53 @@ export default function App() {
       packId: target.id,
       gearId,
       variantId: gear.variants[0].id,
-      category: primaryCategory(gear),
+      category: (category || "").trim() || primaryCategory(gear),
       quantity: 1,
       weight: Math.max(0, parseNumber(gear.variants[0]?.weight, 0)),
       weightType: "base"
     };
     setPackItems((prev) => [...prev, newItem]);
   }
+
+  function openAddToPack(gear) {
+    setAddToPackGear(gear);
+    setAddToPackPackId(null);
+    setAddToPackNewCat("");
+  }
+
+  function closeAddToPack() {
+    setAddToPackGear(null);
+    setAddToPackPackId(null);
+    setAddToPackNewCat("");
+  }
+
+  function confirmAddToPack(category) {
+    const cat = (category || "").trim();
+    if (!addToPackGear || !addToPackPackId || !cat) return;
+    addToSpecificPack(addToPackGear.id, addToPackPackId, cat);
+    closeAddToPack();
+  }
+
+  // Category choices for the add-to-pack modal: the item's own categories first
+  // (highest priority), then the chosen pack's existing categories (deduped).
+  const addToPackCategories = (() => {
+    if (!addToPackGear || !addToPackPackId) return { item: [], pack: [] };
+    const item = addToPackGear.categories || [];
+    const seen = new Set(item);
+    const pack = [];
+    const target = packs.find((p) => p.id === addToPackPackId);
+    const push = (c) => {
+      if (c && !seen.has(c)) {
+        seen.add(c);
+        pack.push(c);
+      }
+    };
+    (target?.categoryOrder || []).forEach(push);
+    packItems.forEach((it) => {
+      if (it.packId === addToPackPackId) push(it.category);
+    });
+    return { item, pack };
+  })();
 
   function onPackDrop(e) {
     e.preventDefault();
@@ -1855,27 +1909,10 @@ export default function App() {
                         {gear.variants.length} {gear.variants.length === 1 ? "variant" : "variants"}
                       </button>
                       <div className="library-actions">
-                        <select
-                          value={libraryPackTarget[gear.id] || activePackId || packs[0]?.id || ""}
-                          onChange={(e) =>
-                            setLibraryPackTarget((prev) => ({ ...prev, [gear.id]: e.target.value }))
-                          }
-                        >
-                          {packs.map((pack) => (
-                            <option key={pack.id} value={pack.id}>
-                              {pack.name}
-                            </option>
-                          ))}
-                        </select>
                         <button
                           type="button"
                           className="add-to-pack"
-                          onClick={() =>
-                            addToSpecificPack(
-                              gear.id,
-                              libraryPackTarget[gear.id] || activePackId || packs[0]?.id || ""
-                            )
-                          }
+                          onClick={() => openAddToPack(gear)}
                         >
                           Add to Pack
                         </button>
@@ -2735,6 +2772,99 @@ export default function App() {
           )}
         </section>
       </main>
+      {addToPackGear && (
+        <div className="modal-overlay" onClick={closeAddToPack}>
+          <div className="modal-panel add-to-pack-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3>
+                {!addToPackPackId
+                  ? `Add “${addToPackGear.name}” to…`
+                  : "Choose a category"}
+              </h3>
+              <button type="button" onClick={closeAddToPack}>
+                ✕
+              </button>
+            </div>
+
+            {!addToPackPackId ? (
+              <div className="add-pack-cards">
+                {packs.map((pack) => {
+                  const w = computePackWeights(pack.id);
+                  const range = `${((w.total - w.consumable) / 1000).toFixed(2)} - ${(
+                    w.total / 1000
+                  ).toFixed(2)} kg`;
+                  return (
+                    <button
+                      key={pack.id}
+                      type="button"
+                      className={`pack-card ${pack.image ? "has-image" : ""}`}
+                      style={pack.image ? { "--pack-img": `url(${pack.image})` } : undefined}
+                      onClick={() => setAddToPackPackId(pack.id)}
+                    >
+                      <strong>{pack.name}</strong>
+                      <small>{pack.description || "No description"}</small>
+                      <span>{range}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="add-cat-section">
+                {addToPackCategories.item.length > 0 && (
+                  <div className="add-cat-group">
+                    <h4>Item category</h4>
+                    <div className="add-cat-chips">
+                      {addToPackCategories.item.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          className="add-cat-chip primary"
+                          onClick={() => confirmAddToPack(c)}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {addToPackCategories.pack.length > 0 && (
+                  <div className="add-cat-group">
+                    <h4>Pack categories</h4>
+                    <div className="add-cat-chips">
+                      {addToPackCategories.pack.map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          className="add-cat-chip"
+                          onClick={() => confirmAddToPack(c)}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <form
+                  className="add-cat-new"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    confirmAddToPack(addToPackNewCat);
+                  }}
+                >
+                  <input
+                    placeholder="New category"
+                    value={addToPackNewCat}
+                    onChange={(e) => setAddToPackNewCat(e.target.value)}
+                  />
+                  <button type="submit" disabled={!addToPackNewCat.trim()}>
+                    Add
+                  </button>
+                </form>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {hoverPack && !packDragId && (
         <PackHoverPreview
           pack={hoverPack}

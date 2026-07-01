@@ -2000,6 +2000,92 @@ button[type="submit"]:active {
   color: var(--accent);
 }
 
+/* Add-to-pack modal */
+.add-to-pack-modal {
+  width: min(460px, calc(100vw - 24px));
+}
+
+.add-pack-cards {
+  display: grid;
+  gap: 8px;
+  max-height: 62vh;
+  overflow-y: auto;
+}
+
+.add-pack-cards .pack-card {
+  width: 100%;
+  cursor: pointer;
+}
+
+.add-cat-section {
+  display: grid;
+  gap: 16px;
+}
+
+.add-cat-group h4 {
+  margin: 0 0 8px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.add-cat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.add-cat-chip {
+  width: auto;
+  padding: 7px 13px;
+  border: 1px solid var(--border-2);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.add-cat-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.add-cat-chip.primary {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.add-cat-chip.primary:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.add-cat-new {
+  display: flex;
+  gap: 8px;
+}
+
+.add-cat-new input {
+  flex: 1;
+}
+
+.add-cat-new button {
+  width: auto;
+  padding: 8px 16px;
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.add-cat-new button:disabled {
+  opacity: 0.55;
+}
+
 .modal-panel input,
 .modal-panel select {
   background: var(--surface);
