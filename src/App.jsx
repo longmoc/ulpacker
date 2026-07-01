@@ -1181,7 +1181,7 @@ export default function App() {
   function addVariant(gearId) {
     setGears((prev) =>
       prev.map((gear) =>
-        gear.id === gearId
+        gear.id === gearId && gear.variants.length < 9
           ? {
               ...gear,
               variants: [
@@ -1905,7 +1905,11 @@ export default function App() {
                         onChange={(next) => updateGear(gear.id, { categories: next })}
                         placeholder="Add category"
                       />
-                      <button type="button" className="variant-toggle" onClick={() => toggleGearExpanded(gear.id)}>
+                      <button
+                        type="button"
+                        className={`variant-toggle ${gear.variants.length > 2 ? "variant-toggle-many" : ""}`}
+                        onClick={() => toggleGearExpanded(gear.id)}
+                      >
                         {gear.variants.length} {gear.variants.length === 1 ? "variant" : "variants"}
                       </button>
                       <div className="library-actions">
@@ -1938,44 +1942,58 @@ export default function App() {
                       {expandedGears[gear.id] && (
                         <div className="variant-editor">
                           {gear.variants.map((variant) => (
-                            <div className="variant-row compact" key={variant.id}>
+                            <div className="variant-chip" key={variant.id}>
                               <input
+                                className="variant-name"
                                 value={variant.name}
                                 onChange={(e) => updateVariant(gear.id, variant.id, { name: e.target.value })}
                               />
-                              <input
-                                type="number"
-                                min="0"
-                                value={variant.weight}
-                                onChange={(e) =>
-                                  updateVariant(gear.id, variant.id, {
-                                    weight: Math.max(0, parseNumber(e.target.value, 0))
-                                  })
-                                }
-                              />
-                              <span>g</span>
-                              <input
-                                type="number"
-                                min="0"
-                                className="variant-price"
-                                value={Math.max(0, parseNumber(variant.price, 0))}
-                                onChange={(e) =>
-                                  updateVariant(gear.id, variant.id, {
-                                    price: Math.max(0, parseNumber(e.target.value, 0))
-                                  })
-                                }
-                              />
-                              <span>{CURRENCY}</span>
+                              <label className="variant-field">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  className="variant-num"
+                                  value={variant.weight}
+                                  onChange={(e) =>
+                                    updateVariant(gear.id, variant.id, {
+                                      weight: Math.max(0, parseNumber(e.target.value, 0))
+                                    })
+                                  }
+                                />
+                                <span>g</span>
+                              </label>
+                              <label className="variant-field">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  className="variant-num"
+                                  value={Math.max(0, parseNumber(variant.price, 0))}
+                                  onChange={(e) =>
+                                    updateVariant(gear.id, variant.id, {
+                                      price: Math.max(0, parseNumber(e.target.value, 0))
+                                    })
+                                  }
+                                />
+                                <span>{CURRENCY}</span>
+                              </label>
                               <button
                                 type="button"
+                                className="variant-remove"
+                                title="Remove variant"
+                                aria-label="Remove variant"
                                 disabled={gear.variants.length <= 1}
                                 onClick={() => removeVariant(gear.id, variant.id)}
                               >
-                                Remove
+                                ×
                               </button>
                             </div>
                           ))}
-                          <button type="button" onClick={() => addVariant(gear.id)}>
+                          <button
+                            type="button"
+                            className="variant-add"
+                            disabled={gear.variants.length >= 9}
+                            onClick={() => addVariant(gear.id)}
+                          >
                             + Variant
                           </button>
                         </div>

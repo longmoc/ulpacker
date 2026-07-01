@@ -1051,7 +1051,7 @@ button[type="submit"]:active {
 
 .library-table-head {
   display: grid;
-  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.6fr min-content 170px;
+  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.6fr 88px 170px;
   gap: 8px;
   font-size: 0.72rem;
   text-transform: uppercase;
@@ -1548,7 +1548,7 @@ button[type="submit"]:active {
 
 .gear-row {
   display: grid;
-  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.6fr min-content 170px;
+  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.6fr 88px 170px;
   gap: 8px;
   align-items: center;
   border: 0;
@@ -1602,7 +1602,7 @@ button[type="submit"]:active {
 }
 
 .variant-toggle {
-  width: auto;
+  width: 100%;
   white-space: nowrap;
   border: 1px solid var(--border-2);
   border-radius: var(--radius);
@@ -1611,34 +1611,120 @@ button[type="submit"]:active {
   background: var(--surface);
 }
 
+/* More than 2 variants: amber highlight so gears with many variants stand out. */
+.variant-toggle-many {
+  background: var(--amber-bg);
+  border-color: var(--amber-border);
+  color: var(--amber-text);
+}
+
+/* Variants flow as compact bordered chips, wrapping so a wide row fits several. */
 .variant-editor {
   grid-column: 1 / -1;
   border-top: 1px dashed var(--border-2);
   margin-top: 4px;
   padding-top: 8px;
-  display: grid;
-  gap: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
-.variant-row.compact {
-  grid-template-columns: 1.2fr 80px auto 80px auto auto;
+.variant-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px 4px 9px;
+  border: 1px solid var(--border-2);
+  border-radius: 10px;
+  background: var(--surface-2);
 }
 
-.variant-price {
-  width: 100%;
+.variant-chip .variant-name {
+  width: 84px;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.variant-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.76rem;
+  color: var(--text-3);
+}
+
+.variant-chip .variant-num {
+  width: 52px;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  text-align: right;
+  font-size: 0.82rem;
+  color: var(--text);
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* No spinner arrows on the number fields. */
+.variant-chip .variant-num::-webkit-inner-spin-button,
+.variant-chip .variant-num::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.variant-remove {
+  width: 20px;
+  height: 20px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-3);
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.variant-remove:hover:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.variant-remove:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.variant-add {
+  width: auto;
+  padding: 7px 12px;
+  font-size: 0.82rem;
+  border: 1px dashed var(--border-2);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-2);
+  box-shadow: none;
+}
+
+.variant-add:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.variant-add:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .gear-top {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-}
-
-.variant-row {
-  display: grid;
-  grid-template-columns: 1.4fr 90px auto auto;
-  gap: 8px;
-  align-items: center;
 }
 
 .gear-actions {
@@ -2454,9 +2540,6 @@ button[type="submit"]:active {
   .library-table-head,
   .gear-row,
   .gear-top,
-  .variant-row {
-    grid-template-columns: 1fr;
-  }
 
   .workspace-head {
     flex-direction: column;
@@ -2656,11 +2739,6 @@ button[type="submit"]:active {
     flex: 1;
     min-width: 130px;
     width: auto;
-  }
-
-  /* Expanded variant editor */
-  .variant-row.compact {
-    grid-template-columns: 1fr auto auto auto auto auto;
   }
 
   /* Prices on mobile: price gets its own line in the item card. */
