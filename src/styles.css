@@ -836,6 +836,8 @@ button[type="submit"]:active {
   opacity: 1;
 }
 
+/* Glass buttons: translucent dark chip + light hairline border + white icon, so
+   they read on any photo without a heavy solid block. */
 .pack-cover-actions button {
   width: 30px;
   height: 30px;
@@ -844,23 +846,25 @@ button[type="submit"]:active {
   align-items: center;
   justify-content: center;
   border-radius: 8px;
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.92);
-  border-color: var(--border-2);
-  backdrop-filter: blur(2px);
+  color: #fff;
+  background: rgba(0, 0, 0, 0.34);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: none;
+  backdrop-filter: blur(3px);
 }
 
 .pack-cover-actions button:hover {
-  background: #fff;
+  background: rgba(0, 0, 0, 0.5);
 }
 
 .pack-cover-actions .cover-remove {
-  color: var(--danger);
-  border-color: var(--danger);
+  color: #ffb4b4;
+  border-color: rgba(255, 120, 120, 0.7);
 }
 
 .pack-cover-actions .cover-remove:hover {
-  background: var(--danger);
+  background: rgba(220, 38, 38, 0.55);
+  border-color: rgba(255, 120, 120, 0.9);
   color: #fff;
 }
 
