@@ -12,6 +12,10 @@ import logoUrl from "./logo.png";
 // Currency symbol shown before the number.
 const CURRENCY = "$";
 
+// Cap the number of packs. Cover images are embedded (base64) in the single
+// synced JSON, so this keeps total storage within the ~5MB localStorage budget.
+const MAX_PACKS = 20;
+
 function formatPrice(value) {
   const v = Math.max(0, parseNumber(value, 0));
   return `${CURRENCY}${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
@@ -838,6 +842,7 @@ export default function App() {
   function createPack(e) {
     e.preventDefault();
     if (!newPack.name.trim()) return;
+    if (packs.length >= MAX_PACKS) return;
     const pack = {
       id: id(),
       name: newPack.name.trim(),
@@ -1572,7 +1577,7 @@ export default function App() {
         <aside className="panel packs-panel">
           <div className="panel-head">
             <h2>Packs</h2>
-            <span>{packs.length} total</span>
+            <span>{packs.length} / {MAX_PACKS}</span>
           </div>
 
           <form className="new-pack-form" onSubmit={createPack}>
@@ -1580,8 +1585,14 @@ export default function App() {
               placeholder="Pack name"
               value={newPack.name}
               onChange={(e) => setNewPack({ name: e.target.value })}
+              disabled={packs.length >= MAX_PACKS}
             />
-            <button type="submit">Create Pack</button>
+            <button type="submit" disabled={packs.length >= MAX_PACKS}>
+              Create Pack
+            </button>
+            {packs.length >= MAX_PACKS && (
+              <p className="pack-limit-note">Pack limit reached ({MAX_PACKS}).</p>
+            )}
           </form>
 
           <div className="pack-cards">

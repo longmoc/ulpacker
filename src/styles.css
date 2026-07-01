@@ -553,6 +553,32 @@ button[type="submit"]:active {
   margin-top: 10px;
 }
 
+.pack-limit-note {
+  margin: 8px 2px 0;
+  font-size: 0.78rem;
+  color: var(--text-2);
+}
+
+/* Desktop: keep the packs sidebar pinned while the pack view scrolls, and give
+   the pack list its own scroll when it gets long (instead of the whole page). */
+@media (min-width: 981px) {
+  .packs-panel {
+    position: sticky;
+    top: 16px;
+    align-self: start;
+    max-height: calc(100vh - 32px);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .packs-panel .pack-cards {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+  }
+}
+
 .pack-card {
   text-align: left;
   display: grid;
