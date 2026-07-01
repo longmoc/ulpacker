@@ -837,17 +837,31 @@ button[type="submit"]:active {
 }
 
 .pack-cover-actions button {
-  width: auto;
-  padding: 5px 10px;
-  font-size: 0.8rem;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  color: var(--text);
   background: rgba(255, 255, 255, 0.92);
   border-color: var(--border-2);
   backdrop-filter: blur(2px);
 }
 
+.pack-cover-actions button:hover {
+  background: #fff;
+}
+
 .pack-cover-actions .cover-remove {
   color: var(--danger);
   border-color: var(--danger);
+}
+
+.pack-cover-actions .cover-remove:hover {
+  background: var(--danger);
+  color: #fff;
 }
 
 .pack-cover-empty {

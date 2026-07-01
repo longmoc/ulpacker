@@ -320,6 +320,25 @@ function ImageIcon() {
   );
 }
 
+function PencilIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
 function PanelIcon() {
   return (
     <svg
@@ -1944,15 +1963,22 @@ export default function App() {
                 <div className="pack-cover">
                   <img src={activePack.image} alt={`${activePack.name} cover`} />
                   <div className="pack-cover-actions">
-                    <button type="button" onClick={() => coverInputRef.current?.click()}>
-                      Change
+                    <button
+                      type="button"
+                      title="Change cover image"
+                      aria-label="Change cover image"
+                      onClick={() => coverInputRef.current?.click()}
+                    >
+                      <PencilIcon />
                     </button>
                     <button
                       type="button"
                       className="cover-remove"
+                      title="Remove cover image"
+                      aria-label="Remove cover image"
                       onClick={() => updateActivePack({ image: "" })}
                     >
-                      Remove
+                      <TrashIcon />
                     </button>
                   </div>
                 </div>
