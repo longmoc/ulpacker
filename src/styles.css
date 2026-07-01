@@ -1027,7 +1027,7 @@ button[type="submit"]:active {
 .library-list {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--surface-2);
+  background: var(--surface);
   padding: 14px;
 }
 
@@ -1624,8 +1624,12 @@ button[type="submit"]:active {
   border-top: 1px dashed var(--border-2);
   margin-top: 4px;
   padding-top: 8px;
+  /* Right-align the chips + Variant button, ending at the "X variants" column's
+     right edge (i.e. clear of the 170px actions column + 8px gap). */
+  padding-right: 178px;
   display: flex;
   flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
 }
@@ -2249,7 +2253,18 @@ button[type="submit"]:active {
   cursor: pointer;
 }
 
-/* Compact green "Add New Gear" toggle (not full width). */
+.collapsible-head:hover {
+  background: transparent;
+  color: var(--accent);
+}
+
+.collapsible-head .chev {
+  color: var(--text-3);
+  font-size: 0.7rem;
+}
+
+/* Compact green "Add New Gear" toggle (not full width). Defined AFTER the
+   .collapsible-head:hover/.chev rules so it wins the same-specificity match. */
 .add-gear-toggle {
   width: auto;
   gap: 8px;
@@ -2263,21 +2278,12 @@ button[type="submit"]:active {
 
 .add-gear-toggle:hover {
   background: var(--accent-press);
+  color: #fff;
 }
 
 .add-gear-toggle .chev {
   font-size: 0.7rem;
   color: rgba(255, 255, 255, 0.85);
-}
-
-.collapsible-head:hover {
-  background: transparent;
-  color: var(--accent);
-}
-
-.collapsible-head .chev {
-  color: var(--text-3);
-  font-size: 0.7rem;
 }
 
 .new-gear-form {
@@ -2566,6 +2572,12 @@ button[type="submit"]:active {
   .workspace-head {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  /* No desktop right-inset for the variant chips on mobile. */
+  .variant-editor {
+    padding-right: 0;
+    justify-content: flex-start;
   }
 
   .workspace-head .pack-name-input,
