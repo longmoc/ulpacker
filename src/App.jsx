@@ -16,6 +16,17 @@ const CURRENCY = "$";
 // synced JSON, so this keeps total storage within the ~5MB localStorage budget.
 const MAX_PACKS = 20;
 
+// A fresh "Add New Gear" draft (one default variant with weight/price fields).
+function blankNewGear() {
+  return {
+    name: "",
+    categories: ["Uncategorized"],
+    itemType: "",
+    description: "",
+    variants: [{ id: id(), name: "Default", weight: "", price: "" }]
+  };
+}
+
 function formatPrice(value) {
   const v = Math.max(0, parseNumber(value, 0));
   return `${CURRENCY}${v.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
@@ -475,6 +486,44 @@ function CheckIcon() {
   );
 }
 
+function PlusIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
+  );
+}
+
+function XIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="15"
+      height="15"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </svg>
+  );
+}
+
 // Favorite star + purchase-status (none/need/owned) controls. Library rows use
 // the default (always-visible) style; pack rows pass `flag` to render them like
 // the consumable/worn flags (hover-revealed until set).
@@ -582,14 +631,7 @@ export default function App() {
   const appliedUpdatedAt = useRef(null);
 
   const [newPack, setNewPack] = useState({ name: "" });
-  const [newGear, setNewGear] = useState({
-    name: "",
-    categories: ["Uncategorized"],
-    itemType: "",
-    description: "",
-    variantName: "Default",
-    variantWeight: ""
-  });
+  const [newGear, setNewGear] = useState(blankNewGear);
 
   const [importUrl, setImportUrl] = useState("");
   const [importStatus, setImportStatus] = useState("");
@@ -1134,9 +1176,14 @@ export default function App() {
   }
 
   function addGear(e) {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (!newGear.name.trim()) return;
-    const weight = Math.max(0, parseNumber(newGear.variantWeight, 0));
+    const variants = newGear.variants.map((v) => ({
+      id: id(),
+      name: v.name.trim() || "Default",
+      weight: Math.max(0, parseNumber(v.weight, 0)),
+      price: Math.max(0, parseNumber(v.price, 0))
+    }));
     setGears((prev) =>
       mergeOrCreateGear(prev, {
         id: id(),
@@ -1145,17 +1192,43 @@ export default function App() {
         itemType: newGear.itemType.trim(),
         description: newGear.description.trim(),
         notes: "",
-        variants: [{ id: id(), name: newGear.variantName.trim() || "Default", weight }]
+        variants
       }).gears
     );
-    setNewGear({
-      name: "",
-      categories: ["Uncategorized"],
-      itemType: "",
-      description: "",
-      variantName: "Default",
-      variantWeight: ""
-    });
+    setNewGear(blankNewGear());
+  }
+
+  function discardNewGear() {
+    setNewGear(blankNewGear());
+  }
+
+  function updateNewGearVariant(variantId, patch) {
+    setNewGear((prev) => ({
+      ...prev,
+      variants: prev.variants.map((v) => (v.id === variantId ? { ...v, ...patch } : v))
+    }));
+  }
+
+  function addNewGearVariant() {
+    setNewGear((prev) =>
+      prev.variants.length >= 9
+        ? prev
+        : {
+            ...prev,
+            variants: [
+              ...prev.variants,
+              { id: id(), name: `Variant ${prev.variants.length + 1}`, weight: "", price: "" }
+            ]
+          }
+    );
+  }
+
+  function removeNewGearVariant(variantId) {
+    setNewGear((prev) => ({
+      ...prev,
+      variants:
+        prev.variants.length > 1 ? prev.variants.filter((v) => v.id !== variantId) : prev.variants
+    }));
   }
 
   function toggleGearExpanded(gearId) {
@@ -1772,62 +1845,117 @@ export default function App() {
               <section className="library-create">
                 <button
                   type="button"
-                  className="collapsible-head add-gear-toggle"
+                  className={`add-gear-toggle ${addGearOpen ? "open" : ""}`}
                   onClick={() => setAddGearOpen((open) => !open)}
                   aria-expanded={addGearOpen}
                 >
+                  <PlusIcon />
                   <span>Add New Gear</span>
-                  <span className="chev">{addGearOpen ? "▲" : "▼"}</span>
                 </button>
                 {addGearOpen && (
                 <form className="new-gear-form" onSubmit={addGear}>
-                  <label>
-                    <span>Name</span>
+                  <div className="ng-row-main">
                     <input
+                      className="ng-input"
+                      placeholder="Name"
                       value={newGear.name}
                       onChange={(e) => setNewGear((prev) => ({ ...prev, name: e.target.value }))}
                     />
-                  </label>
-                  <label>
-                    <span>Categories</span>
+                    <input
+                      className="ng-input"
+                      placeholder="Item type"
+                      value={newGear.itemType}
+                      onChange={(e) => setNewGear((prev) => ({ ...prev, itemType: e.target.value }))}
+                    />
+                    <input
+                      className="ng-input"
+                      placeholder="Description"
+                      value={newGear.description}
+                      onChange={(e) => setNewGear((prev) => ({ ...prev, description: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="ng-cat">
                     <CategoryChipsInput
                       categories={newGear.categories}
                       onChange={(next) => setNewGear((prev) => ({ ...prev, categories: next }))}
                       placeholder="Add category"
                     />
-                  </label>
-                  <label>
-                    <span>Item Type</span>
-                    <input
-                      value={newGear.itemType}
-                      onChange={(e) => setNewGear((prev) => ({ ...prev, itemType: e.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    <span>Description</span>
-                    <input
-                      value={newGear.description}
-                      onChange={(e) => setNewGear((prev) => ({ ...prev, description: e.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    <span>Default Variant</span>
-                    <input
-                      value={newGear.variantName}
-                      onChange={(e) => setNewGear((prev) => ({ ...prev, variantName: e.target.value }))}
-                    />
-                  </label>
-                  <label>
-                    <span>Weight (g)</span>
-                    <input
-                      type="number"
-                      min="0"
-                      placeholder="0"
-                      value={newGear.variantWeight}
-                      onChange={(e) => setNewGear((prev) => ({ ...prev, variantWeight: e.target.value }))}
-                    />
-                  </label>
-                  <button type="submit">Add Gear</button>
+                  </div>
+
+                  <div className="variant-editor ng-variants">
+                    {newGear.variants.map((variant) => (
+                      <div className="variant-chip" key={variant.id}>
+                        <input
+                          className="variant-name"
+                          placeholder="Variant"
+                          value={variant.name}
+                          onChange={(e) => updateNewGearVariant(variant.id, { name: e.target.value })}
+                        />
+                        <label className="variant-field">
+                          <input
+                            type="number"
+                            min="0"
+                            className="variant-num"
+                            placeholder="0"
+                            value={variant.weight}
+                            onChange={(e) => updateNewGearVariant(variant.id, { weight: e.target.value })}
+                          />
+                          <span>g</span>
+                        </label>
+                        <label className="variant-field">
+                          <input
+                            type="number"
+                            min="0"
+                            className="variant-num"
+                            placeholder="0"
+                            value={variant.price}
+                            onChange={(e) => updateNewGearVariant(variant.id, { price: e.target.value })}
+                          />
+                          <span>{CURRENCY}</span>
+                        </label>
+                        <button
+                          type="button"
+                          className="variant-remove"
+                          title="Remove variant"
+                          aria-label="Remove variant"
+                          disabled={newGear.variants.length <= 1}
+                          onClick={() => removeNewGearVariant(variant.id)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="variant-add"
+                      disabled={newGear.variants.length >= 9}
+                      onClick={addNewGearVariant}
+                    >
+                      + Variant
+                    </button>
+                  </div>
+
+                  <div className="ng-actions">
+                    <button
+                      type="button"
+                      className="ng-discard"
+                      title="Discard"
+                      aria-label="Discard"
+                      onClick={discardNewGear}
+                    >
+                      <XIcon />
+                    </button>
+                    <button
+                      type="submit"
+                      className="ng-accept"
+                      title="Add gear"
+                      aria-label="Add gear"
+                      disabled={!newGear.name.trim()}
+                    >
+                      <CheckIcon />
+                    </button>
+                  </div>
                 </form>
                 )}
               </section>

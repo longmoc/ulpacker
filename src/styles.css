@@ -555,7 +555,6 @@ button[type="submit"]:active {
 }
 
 .new-pack-form,
-.new-gear-form,
 .import-url-form,
 .import-options {
   display: grid;
@@ -570,19 +569,6 @@ button[type="submit"]:active {
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-}
-
-.new-gear-form label {
-  display: grid;
-  gap: 4px;
-}
-
-.new-gear-form label > span {
-  font-size: 0.7rem;
-  color: var(--text-3);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .pack-cards {
@@ -2265,67 +2251,126 @@ button[type="submit"]:active {
   font-size: 0.7rem;
 }
 
-/* Compact green "Add New Gear" toggle (not full width). Defined AFTER the
-   .collapsible-head:hover/.chev rules so it wins the same-specificity match. */
+/* "Add New Gear" toggle: leading + icon, no chevron, three states
+   (default outline / hover soft / clicked filled). */
 .add-gear-toggle {
   width: auto;
-  gap: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   padding: 8px 14px;
   border-radius: var(--radius);
-  background: var(--accent);
-  color: #fff;
-  box-shadow: var(--shadow-xs);
   font-size: 0.9rem;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  box-shadow: var(--shadow-xs);
 }
 
 .add-gear-toggle:hover {
-  background: var(--accent-press);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.add-gear-toggle.open {
+  background: var(--accent);
   color: #fff;
+  border-color: var(--accent);
 }
 
-.add-gear-toggle .chev {
-  font-size: 0.7rem;
-  color: rgba(255, 255, 255, 0.85);
+.add-gear-toggle.open:hover {
+  background: var(--accent-press);
+  border-color: var(--accent-press);
 }
 
+/* Add New Gear form: stacked rows. */
 .new-gear-form {
-  grid-template-columns: 1fr 1fr;
-  gap: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   margin-top: 14px;
 }
 
-.new-gear-form > button[type="submit"] {
-  grid-column: 1 / -1;
-  margin-top: 2px;
-  padding: 11px;
-  font-weight: 600;
+/* Name / item type / description as underlined inline inputs (placeholder =
+   the hint), like editing an item in a pack. */
+.ng-row-main {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr 1.4fr;
+  gap: 16px;
 }
 
-/* Categories reads as one cohesive tag-input field (chips + inline input in a
-   single bordered box). */
-.new-gear-form .chips-input {
-  min-height: 40px;
-  align-content: center;
-  padding: 5px 6px;
-  border: 1px solid var(--border-2);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-
-.new-gear-form .chips-input:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-ring);
-}
-
-.new-gear-form .chips-input input {
-  width: 120px;
+.ng-input {
   border: 0;
+  border-bottom: 1px solid var(--border-2);
+  border-radius: 0;
   background: transparent;
-  padding: 3px 4px;
+  padding: 6px 2px;
+  font-size: 0.9rem;
 }
 
-.new-gear-form .chips-input input:focus {
+.ng-input:hover {
+  border-bottom-color: var(--text-3);
+}
+
+.ng-input:focus {
+  outline: none;
   box-shadow: none;
+  border-bottom-color: var(--accent);
+}
+
+.ng-cat {
+  padding: 2px 0;
+}
+
+/* Variant group reuses .variant-chip; left-aligned, no desktop right inset. */
+.new-gear-form .ng-variants {
+  padding-right: 0;
+  justify-content: flex-start;
+}
+
+/* Accept (✓) / discard (✗) actions. */
+.ng-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.ng-accept,
+.ng-discard {
+  width: 46px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+}
+
+.ng-discard {
+  background: var(--surface);
+  color: var(--text-2);
+  border: 1px solid var(--border-2);
+}
+
+.ng-discard:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.ng-accept {
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+}
+
+.ng-accept:hover:not(:disabled) {
+  background: var(--accent-press);
+}
+
+.ng-accept:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* Library row actions */
@@ -2757,8 +2802,9 @@ button[type="submit"]:active {
   }
 
   /* ---- Gear Library: card per gear ---- */
-  .new-gear-form {
+  .ng-row-main {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .library-table-head {
