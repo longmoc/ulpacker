@@ -1536,37 +1536,41 @@ export default function App() {
             </div>
           </div>
         </div>
-        <div className="nav-row">
-          {view === "packs" && (
-            <button
-              type="button"
-              className={`sidebar-toggle ${sidebarOpen ? "active" : ""}`}
-              onClick={() => setSidebarOpen((open) => !open)}
-              title={sidebarOpen ? "Hide packs sidebar" : "Show packs sidebar"}
-              aria-label="Toggle packs sidebar"
-              aria-pressed={sidebarOpen}
-            >
-              <PanelIcon />
-            </button>
-          )}
-          <div className="view-tabs">
-            <button
-              type="button"
-              className={view === "packs" ? "active" : ""}
-              onClick={() => setView("packs")}
-            >
-              Packs
-            </button>
-            <button
-              type="button"
-              className={view === "library" ? "active" : ""}
-              onClick={() => setView("library")}
-            >
-              Gear Library
-            </button>
-          </div>
-        </div>
       </header>
+
+      {/* Sits OUTSIDE the header so its sticky containing block is .app (full
+          page height), not the short header — otherwise it unpins once the
+          header scrolls past. */}
+      <div className="nav-row">
+        {view === "packs" && (
+          <button
+            type="button"
+            className={`sidebar-toggle ${sidebarOpen ? "active" : ""}`}
+            onClick={() => setSidebarOpen((open) => !open)}
+            title={sidebarOpen ? "Hide packs sidebar" : "Show packs sidebar"}
+            aria-label="Toggle packs sidebar"
+            aria-pressed={sidebarOpen}
+          >
+            <PanelIcon />
+          </button>
+        )}
+        <div className="view-tabs">
+          <button
+            type="button"
+            className={view === "packs" ? "active" : ""}
+            onClick={() => setView("packs")}
+          >
+            Packs
+          </button>
+          <button
+            type="button"
+            className={view === "library" ? "active" : ""}
+            onClick={() => setView("library")}
+          >
+            Gear Library
+          </button>
+        </div>
+      </div>
 
       <main
         className={`dashboard ${
