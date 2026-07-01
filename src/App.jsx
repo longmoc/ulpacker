@@ -1568,8 +1568,9 @@ export default function App() {
 
       {/* Sits OUTSIDE the header so its sticky containing block is .app (full
           page height), not the short header — otherwise it unpins once the
-          header scrolls past. */}
-      <div className="nav-row">
+          header scrolls past. `with-sidebar` narrows the pinned bar to the
+          sidebar column so it doesn't cover the pack view on the right. */}
+      <div className={`nav-row ${view === "packs" && sidebarOpen ? "with-sidebar" : ""}`}>
         {view === "packs" && (
           <button
             type="button"

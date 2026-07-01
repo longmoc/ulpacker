@@ -599,16 +599,24 @@ button[type="submit"]:active {
    view scrolls, and give the pack list its own scroll when it gets long
    (instead of the whole page). */
 @media (min-width: 981px) {
-  /* A bit more top breathing room above the pinned tabs on desktop. */
+  /* A bit more top breathing room above the pinned tabs on desktop; keep the
+     bar only as wide as its content so it doesn't cover the pack view. */
   .nav-row {
     padding: 18px 0 12px;
+    width: fit-content;
+  }
+
+  /* In packs view with the sidebar open, match the bar to the sidebar column
+     (320px) so the pinned tabs + sidebar read as one left panel. */
+  .nav-row.with-sidebar {
+    width: 320px;
   }
 
   .packs-panel {
     position: sticky;
-    top: 66px;
+    top: 72px;
     align-self: start;
-    max-height: calc(100vh - 82px);
+    max-height: calc(100vh - 88px);
     display: flex;
     flex-direction: column;
   }
@@ -2367,7 +2375,9 @@ button[type="submit"]:active {
 @media (max-width: 768px) {
   .app {
     padding: 10px;
-    overflow-x: hidden;
+    /* clip (not hidden) so it doesn't become a scroll container and break the
+       sticky tabs row on mobile. */
+    overflow-x: clip;
   }
 
   /* Let the logo + Export/Import/account wrap instead of overflowing on narrow phones. */
