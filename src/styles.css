@@ -562,14 +562,25 @@ button[type="submit"]:active {
   color: var(--text-2);
 }
 
-/* Desktop: keep the packs sidebar pinned while the pack view scrolls, and give
-   the pack list its own scroll when it gets long (instead of the whole page). */
+/* Desktop: keep the Packs/Gear tabs + the packs sidebar pinned while the pack
+   view scrolls, and give the pack list its own scroll when it gets long
+   (instead of the whole page). */
 @media (min-width: 981px) {
+  .nav-row {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    margin-bottom: 0;
+    padding: 10px 0;
+    /* Opaque so pack-view content scrolls cleanly underneath. */
+    background: var(--bg);
+  }
+
   .packs-panel {
     position: sticky;
-    top: 16px;
+    top: 58px;
     align-self: start;
-    max-height: calc(100vh - 32px);
+    max-height: calc(100vh - 74px);
     display: flex;
     flex-direction: column;
   }
