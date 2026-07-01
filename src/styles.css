@@ -601,7 +601,7 @@ button[type="submit"]:active {
 @media (min-width: 981px) {
   /* A bit more top breathing room above the pinned tabs on desktop. */
   .nav-row {
-    padding: 18px 0 12px;
+    padding: 9px 0 12px;
   }
 
   /* Only when the sidebar is open (2-column) narrow the bar to the sidebar
@@ -614,9 +614,9 @@ button[type="submit"]:active {
 
   .packs-panel {
     position: sticky;
-    top: 72px;
+    top: 62px;
     align-self: start;
-    max-height: calc(100vh - 88px);
+    max-height: calc(100vh - 78px);
     display: flex;
     flex-direction: column;
   }
