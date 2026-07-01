@@ -599,15 +599,15 @@ button[type="submit"]:active {
    view scrolls, and give the pack list its own scroll when it gets long
    (instead of the whole page). */
 @media (min-width: 981px) {
-  /* A bit more top breathing room above the pinned tabs on desktop; keep the
-     bar only as wide as its content so it doesn't cover the pack view. */
+  /* A bit more top breathing room above the pinned tabs on desktop. */
   .nav-row {
     padding: 18px 0 12px;
-    width: fit-content;
   }
 
-  /* In packs view with the sidebar open, match the bar to the sidebar column
-     (320px) so the pinned tabs + sidebar read as one left panel. */
+  /* Only when the sidebar is open (2-column) narrow the bar to the sidebar
+     column (320px) so it doesn't cover the pack view on the right. In the
+     single-column layouts (sidebar hidden / Gear Library) the bar stays
+     full-width and acts as a normal opaque sticky header. */
   .nav-row.with-sidebar {
     width: 320px;
   }
