@@ -577,10 +577,12 @@ button[type="submit"]:active {
   gap: 4px;
 }
 
-.new-gear-form label span {
-  font-size: 0.76rem;
-  color: var(--text-2);
+.new-gear-form label > span {
+  font-size: 0.7rem;
+  color: var(--text-3);
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .pack-cards {
@@ -2288,11 +2290,42 @@ button[type="submit"]:active {
 
 .new-gear-form {
   grid-template-columns: 1fr 1fr;
-  margin-top: 12px;
+  gap: 14px 16px;
+  margin-top: 14px;
 }
 
 .new-gear-form > button[type="submit"] {
   grid-column: 1 / -1;
+  margin-top: 2px;
+  padding: 11px;
+  font-weight: 600;
+}
+
+/* Categories reads as one cohesive tag-input field (chips + inline input in a
+   single bordered box). */
+.new-gear-form .chips-input {
+  min-height: 40px;
+  align-content: center;
+  padding: 5px 6px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.new-gear-form .chips-input:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+
+.new-gear-form .chips-input input {
+  width: 120px;
+  border: 0;
+  background: transparent;
+  padding: 3px 4px;
+}
+
+.new-gear-form .chips-input input:focus {
+  box-shadow: none;
 }
 
 /* Library row actions */

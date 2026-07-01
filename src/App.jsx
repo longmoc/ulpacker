@@ -1793,6 +1793,7 @@ export default function App() {
                     <CategoryChipsInput
                       categories={newGear.categories}
                       onChange={(next) => setNewGear((prev) => ({ ...prev, categories: next }))}
+                      placeholder="Add category"
                     />
                   </label>
                   <label>
@@ -1821,6 +1822,7 @@ export default function App() {
                     <input
                       type="number"
                       min="0"
+                      placeholder="0"
                       value={newGear.variantWeight}
                       onChange={(e) => setNewGear((prev) => ({ ...prev, variantWeight: e.target.value }))}
                     />
