@@ -343,6 +343,25 @@ function PencilIcon() {
   );
 }
 
+function ArrowUpIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="20"
+      height="20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 19V5" />
+      <path d="m5 12 7-7 7 7" />
+    </svg>
+  );
+}
+
 function PanelIcon() {
   return (
     <svg
@@ -627,6 +646,8 @@ export default function App() {
   // Sidebar pack hover preview (the pack being hovered + cursor position).
   const [hoverPack, setHoverPack] = useState(null);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
+  // Back-to-top button: shown once the page is scrolled down a bit.
+  const [showTop, setShowTop] = useState(false);
   const [importConfig, setImportConfig] = useState({
     mappingMode: "description_to_name",
     autoFillItemTypeFromCategory: true,
@@ -640,6 +661,13 @@ export default function App() {
       setActivePackId(packs[0].id);
     }
   }, [packs, activePack]);
+
+  useEffect(() => {
+    const onScroll = () => setShowTop(window.scrollY > 500);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     setSelectedCategory(null);
@@ -2712,6 +2740,17 @@ export default function App() {
           pos={hoverPos}
           weights={computePackWeights(hoverPack.id)}
         />
+      )}
+      {showTop && (
+        <button
+          type="button"
+          className="back-to-top"
+          title="Back to top"
+          aria-label="Back to top"
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+        >
+          <ArrowUpIcon />
+        </button>
       )}
     </div>
   );

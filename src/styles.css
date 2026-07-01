@@ -72,7 +72,40 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  /* Pinned at the top on every screen size (only the tabs; the sidebar pin is
+     desktop-only, see below). Opaque bg so content scrolls cleanly underneath. */
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  margin-bottom: 0;
+  padding: 12px 0;
+  background: var(--bg);
+}
+
+/* Floating back-to-top button (appears after scrolling down a bit). */
+.back-to-top {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 40;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+}
+
+.back-to-top:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 
 .sidebar-toggle {
@@ -566,15 +599,9 @@ button[type="submit"]:active {
    view scrolls, and give the pack list its own scroll when it gets long
    (instead of the whole page). */
 @media (min-width: 981px) {
+  /* A bit more top breathing room above the pinned tabs on desktop. */
   .nav-row {
-    position: sticky;
-    top: 0;
-    z-index: 30;
-    margin-bottom: 0;
-    /* Extra top padding is the breathing room above the tabs when pinned; the
-       opaque bg covers it (and the pack-view content scrolling underneath). */
     padding: 18px 0 12px;
-    background: var(--bg);
   }
 
   .packs-panel {
