@@ -1051,7 +1051,7 @@ button[type="submit"]:active {
 
 .library-table-head {
   display: grid;
-  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.05fr 90px 260px;
+  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.6fr min-content 170px;
   gap: 8px;
   font-size: 0.72rem;
   text-transform: uppercase;
@@ -1063,14 +1063,23 @@ button[type="submit"]:active {
 }
 
 .chips-input {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
 }
 
+/* Let the chips and the input share one wrapping flex row (side by side when
+   there's room, wrapping to a new line only when there isn't). */
 .chips-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  display: contents;
+}
+
+/* Keep the "Add category" input short (just fits its placeholder); typing longer
+   text still works, it just scrolls within the field. */
+.chips-input input {
+  width: 118px;
+  flex: 0 0 auto;
 }
 
 .chip-tag {
@@ -1539,7 +1548,7 @@ button[type="submit"]:active {
 
 .gear-row {
   display: grid;
-  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.05fr 90px 260px;
+  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.6fr min-content 170px;
   gap: 8px;
   align-items: center;
   border: 0;
@@ -1593,9 +1602,12 @@ button[type="submit"]:active {
 }
 
 .variant-toggle {
+  width: auto;
+  white-space: nowrap;
   border: 1px solid var(--border-2);
   border-radius: var(--radius);
-  padding: 6px 8px;
+  padding: 5px 8px;
+  font-size: 0.82rem;
   background: var(--surface);
 }
 
@@ -2172,6 +2184,15 @@ button[type="submit"]:active {
 /* Library row actions */
 .add-to-pack {
   white-space: nowrap;
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.add-to-pack:hover {
+  background: var(--accent);
+  color: #fff;
 }
 
 .library-actions .icon-only {
