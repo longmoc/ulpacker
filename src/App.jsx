@@ -1991,6 +1991,17 @@ export default function App() {
                       onChange={(e) => setLibraryQuery(e.target.value)}
                       placeholder="Search by name, category, type"
                     />
+                    {libraryQuery && (
+                      <button
+                        type="button"
+                        className="search-clear"
+                        title="Clear search"
+                        aria-label="Clear search"
+                        onClick={() => setLibraryQuery("")}
+                      >
+                        <XIcon />
+                      </button>
+                    )}
                   </div>
                   <div className="mark-filters">
                     <button

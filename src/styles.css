@@ -1063,6 +1063,29 @@ button[type="submit"]:active {
 .search-box input {
   width: 100%;
   padding-left: 34px;
+  padding-right: 34px;
+}
+
+/* Clear button, shown only while there's text (see JSX). */
+.search-clear {
+  position: absolute;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-3);
+}
+
+.search-clear:hover {
+  background: var(--surface-2);
+  color: var(--text);
 }
 
 .library-table-head {
