@@ -1044,9 +1044,25 @@ button[type="submit"]:active {
   margin-bottom: 8px;
 }
 
-.library-toolbar input {
+.search-box {
+  position: relative;
   flex: 1;
   min-width: 180px;
+  display: flex;
+  align-items: center;
+}
+
+/* Icon pinned at the start; stays put while typing (it's not inside the input). */
+.search-box svg {
+  position: absolute;
+  left: 11px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.search-box input {
+  width: 100%;
+  padding-left: 34px;
 }
 
 .library-table-head {

@@ -524,6 +524,25 @@ function XIcon() {
   );
 }
 
+function SearchIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
 // Favorite star + purchase-status (none/need/owned) controls. Library rows use
 // the default (always-visible) style; pack rows pass `flag` to render them like
 // the consumable/worn flags (hover-revealed until set).
@@ -1965,11 +1984,14 @@ export default function App() {
 
               <section className="library-list">
                 <div className="library-toolbar">
-                  <input
-                    value={libraryQuery}
-                    onChange={(e) => setLibraryQuery(e.target.value)}
-                    placeholder="Search by name, category, type"
-                  />
+                  <div className="search-box">
+                    <SearchIcon />
+                    <input
+                      value={libraryQuery}
+                      onChange={(e) => setLibraryQuery(e.target.value)}
+                      placeholder="Search by name, category, type"
+                    />
+                  </div>
                   <div className="mark-filters">
                     <button
                       type="button"
