@@ -1052,10 +1052,12 @@ button[type="submit"]:active {
   align-items: center;
 }
 
-/* Icon pinned at the start; stays put while typing (it's not inside the input). */
-.search-box svg {
+/* Leading icon only (direct child) — NOT the × inside the clear button. */
+.search-box > svg {
   position: absolute;
   left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--text-3);
   pointer-events: none;
 }
@@ -1070,6 +1072,8 @@ button[type="submit"]:active {
 .search-clear {
   position: absolute;
   right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 24px;
   height: 24px;
   padding: 0;
