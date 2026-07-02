@@ -1843,18 +1843,43 @@ export default function App() {
               </div>
 
               <section className="library-create">
-                <button
-                  type="button"
-                  className={`add-gear-toggle ${addGearOpen ? "open" : ""}`}
-                  onClick={() => setAddGearOpen((open) => !open)}
-                  aria-expanded={addGearOpen}
-                >
-                  <PlusIcon />
-                  <span>Add New Gear</span>
-                </button>
+                <div className="ng-head">
+                  <button
+                    type="button"
+                    className={`add-gear-toggle ${addGearOpen ? "open" : ""}`}
+                    onClick={() => setAddGearOpen((open) => !open)}
+                    aria-expanded={addGearOpen}
+                  >
+                    <PlusIcon />
+                    <span>Add New Gear</span>
+                  </button>
+                  {addGearOpen && (
+                    <div className="ng-actions">
+                      <button
+                        type="button"
+                        className="ng-discard"
+                        title="Discard"
+                        aria-label="Discard"
+                        onClick={discardNewGear}
+                      >
+                        <XIcon />
+                      </button>
+                      <button
+                        type="button"
+                        className="ng-accept"
+                        title="Add gear"
+                        aria-label="Add gear"
+                        disabled={!newGear.name.trim()}
+                        onClick={() => addGear()}
+                      >
+                        <CheckIcon />
+                      </button>
+                    </div>
+                  )}
+                </div>
                 {addGearOpen && (
                 <form className="new-gear-form" onSubmit={addGear}>
-                  <div className="ng-row-main">
+                  <div className="ng-grid">
                     <input
                       className="ng-input"
                       placeholder="Name"
@@ -1863,24 +1888,23 @@ export default function App() {
                     />
                     <input
                       className="ng-input"
-                      placeholder="Item type"
-                      value={newGear.itemType}
-                      onChange={(e) => setNewGear((prev) => ({ ...prev, itemType: e.target.value }))}
-                    />
-                    <input
-                      className="ng-input"
                       placeholder="Description"
                       value={newGear.description}
                       onChange={(e) => setNewGear((prev) => ({ ...prev, description: e.target.value }))}
                     />
-                  </div>
-
-                  <div className="ng-cat">
-                    <CategoryChipsInput
-                      categories={newGear.categories}
-                      onChange={(next) => setNewGear((prev) => ({ ...prev, categories: next }))}
-                      placeholder="Add category"
+                    <input
+                      className="ng-input"
+                      placeholder="Item type"
+                      value={newGear.itemType}
+                      onChange={(e) => setNewGear((prev) => ({ ...prev, itemType: e.target.value }))}
                     />
+                    <div className="ng-cat">
+                      <CategoryChipsInput
+                        categories={newGear.categories}
+                        onChange={(next) => setNewGear((prev) => ({ ...prev, categories: next }))}
+                        placeholder="Add category"
+                      />
+                    </div>
                   </div>
 
                   <div className="variant-editor ng-variants">
@@ -1933,27 +1957,6 @@ export default function App() {
                       onClick={addNewGearVariant}
                     >
                       + Variant
-                    </button>
-                  </div>
-
-                  <div className="ng-actions">
-                    <button
-                      type="button"
-                      className="ng-discard"
-                      title="Discard"
-                      aria-label="Discard"
-                      onClick={discardNewGear}
-                    >
-                      <XIcon />
-                    </button>
-                    <button
-                      type="submit"
-                      className="ng-accept"
-                      title="Add gear"
-                      aria-label="Add gear"
-                      disabled={!newGear.name.trim()}
-                    >
-                      <CheckIcon />
                     </button>
                   </div>
                 </form>
