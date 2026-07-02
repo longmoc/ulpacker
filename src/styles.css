@@ -1019,6 +1019,18 @@ button[type="submit"]:active {
   padding: 14px;
 }
 
+/* Tint the add-gear panel so it reads as a distinct input area. Category chips
+   are normally surface-2, so on this surface-2 panel they'd blend — give them a
+   white background here so they stay legible. Inputs (transparent, dark text),
+   variant chips (light green) and the buttons all read fine on the tint. */
+.library-create {
+  background: var(--surface-2);
+}
+
+.library-create .chip-tag {
+  background: var(--surface);
+}
+
 .library-create h3,
 .library-list h3 {
   margin-bottom: 10px;
