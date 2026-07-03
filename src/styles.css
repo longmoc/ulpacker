@@ -524,7 +524,8 @@ body::before {
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 16px;
-  box-shadow: var(--shadow-sm);
+  /* A clearer soft lift so panels stand out from the illustrated background. */
+  box-shadow: 0 1px 3px rgba(16, 17, 26, 0.05), 0 6px 20px rgba(16, 17, 26, 0.08);
 }
 
 .panel h2,
