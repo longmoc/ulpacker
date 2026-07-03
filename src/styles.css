@@ -55,10 +55,23 @@ body {
   overflow-x: clip;
 }
 
+/* Decorative full-page background, fixed to the viewport behind all content.
+   A fixed element (not background-attachment: fixed) so it's reliable on mobile;
+   the base colour under it is the fallback before the image loads. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--bg) url("./raw_background.png") center / cover no-repeat;
+  pointer-events: none;
+}
+
 .app {
   min-height: 100vh;
   padding: 24px;
-  background: var(--bg);
+  /* transparent so the fixed background shows through the gaps around content */
+  background: transparent;
 }
 
 .brand-logo {
@@ -381,7 +394,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: var(--bg);
+  background: transparent;
 }
 
 .landing-card {
