@@ -662,7 +662,8 @@ button[type="submit"]:active {
     flex-direction: column;
   }
 
-  .packs-panel .pack-cards {
+  .packs-panel .pack-cards,
+  .packs-panel .lib-cats {
     flex: 1 1 auto;
     min-height: 0;
     overflow-y: auto;
@@ -671,6 +672,102 @@ button[type="submit"]:active {
        accent ring isn't cropped at the left/right edges. */
     padding: 3px 4px;
   }
+}
+
+/* Gear Library sidebar: overview stats on top, category filter below. */
+.lib-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+
+.lib-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 9px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.lib-stat span {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-3);
+  font-weight: 600;
+}
+
+.lib-stat strong {
+  font-size: 1.1rem;
+  color: var(--text);
+}
+
+.lib-cats-head {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  color: var(--text-3);
+  padding: 0 2px 6px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 6px;
+}
+
+.lib-cats {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lib-cat {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font-size: 0.88rem;
+  text-align: left;
+}
+
+.lib-cat > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lib-cat em {
+  flex: none;
+  font-style: normal;
+  font-size: 0.76rem;
+  color: var(--text-3);
+  background: var(--surface-2);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.lib-cat:hover {
+  background: var(--surface-2);
+}
+
+.lib-cat.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.lib-cat.active em {
+  background: #fff;
+  color: var(--accent);
 }
 
 .pack-card {

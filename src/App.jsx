@@ -665,6 +665,7 @@ export default function App() {
   const [categoryDrafts, setCategoryDrafts] = useState({});
   const [libraryQuery, setLibraryQuery] = useState("");
   const [libraryMark, setLibraryMark] = useState(null);
+  const [libraryCategory, setLibraryCategory] = useState(null);
   const [expandedGears, setExpandedGears] = useState({});
   const [addGearOpen, setAddGearOpen] = useState(false);
   const [addOpen, setAddOpen] = useState({});
@@ -946,11 +947,34 @@ export default function App() {
     return gears.filter((gear) => {
       if (libraryMark === "favorite" && !gear.favorite) return false;
       if (libraryMark === "need" && gear.purchase !== "need") return false;
+      if (libraryCategory && !(gear.categories || []).includes(libraryCategory)) return false;
       if (!q) return true;
       const categories = (gear.categories || []).join(" ");
       return normalizeText(`${gear.name} ${gear.itemType} ${gear.description} ${categories}`).includes(q);
     });
-  }, [gears, libraryQuery, libraryMark]);
+  }, [gears, libraryQuery, libraryMark, libraryCategory]);
+
+  // Library sidebar: overview stats + category counts (a gear can be in several
+  // categories, so it's counted under each).
+  const libraryStats = useMemo(() => {
+    const cats = new Set();
+    let variants = 0;
+    gears.forEach((gear) => {
+      variants += gear.variants?.length || 0;
+      (gear.categories || []).forEach((c) => cats.add(c));
+    });
+    return { items: gears.length, variants, categories: cats.size };
+  }, [gears]);
+
+  const libraryCategories = useMemo(() => {
+    const counts = new Map();
+    gears.forEach((gear) => {
+      (gear.categories || []).forEach((c) => counts.set(c, (counts.get(c) || 0) + 1));
+    });
+    return [...counts.entries()]
+      .map(([cat, count]) => ({ cat, count }))
+      .sort((a, b) => b.count - a.count || a.cat.localeCompare(b.cat));
+  }, [gears]);
 
   function createPack(e) {
     e.preventDefault();
@@ -1738,11 +1762,9 @@ export default function App() {
           sidebar column so it doesn't cover the pack view on the right. */}
       <div
         ref={navRef}
-        className={`nav-row ${view === "packs" && sidebarOpen ? "with-sidebar" : ""} ${
-          navStuck && (isNarrow || view === "library" || (view === "packs" && !sidebarOpen))
-            ? "frosted"
-            : ""
-        }`}
+        className={`nav-row ${
+          view === "library" || (view === "packs" && sidebarOpen) ? "with-sidebar" : ""
+        } ${navStuck && (isNarrow || (view === "packs" && !sidebarOpen)) ? "frosted" : ""}`}
       >
         {view === "packs" && (
           <button
@@ -1776,9 +1798,56 @@ export default function App() {
 
       <main
         className={`dashboard ${
-          view === "library" || (view === "packs" && !sidebarOpen) ? "library-layout" : ""
+          view === "packs" && !sidebarOpen ? "library-layout" : ""
         }`}
       >
+        {view === "library" && (
+        <aside className="panel packs-panel library-side">
+          <div className="panel-head">
+            <h2>Library</h2>
+            <span>{libraryStats.items} items</span>
+          </div>
+
+          <div className="lib-stats">
+            <div className="lib-stat">
+              <span>Items</span>
+              <strong>{libraryStats.items}</strong>
+            </div>
+            <div className="lib-stat">
+              <span>Variants</span>
+              <strong>{libraryStats.variants}</strong>
+            </div>
+            <div className="lib-stat">
+              <span>Categories</span>
+              <strong>{libraryStats.categories}</strong>
+            </div>
+          </div>
+
+          <div className="lib-cats-head">Categories</div>
+          <div className="lib-cats">
+            <button
+              type="button"
+              className={`lib-cat ${!libraryCategory ? "active" : ""}`}
+              onClick={() => setLibraryCategory(null)}
+            >
+              <span>All</span>
+              <em>{libraryStats.items}</em>
+            </button>
+            {libraryCategories.map(({ cat, count }) => (
+              <button
+                type="button"
+                key={cat}
+                className={`lib-cat ${libraryCategory === cat ? "active" : ""}`}
+                onClick={() => setLibraryCategory((cur) => (cur === cat ? null : cat))}
+              >
+                <span>{cat}</span>
+                <em>{count}</em>
+              </button>
+            ))}
+          </div>
+        </aside>
+        )}
+
         {view === "packs" && sidebarOpen && (
         <aside className="panel packs-panel">
           <div className="panel-head">
@@ -1889,7 +1958,11 @@ export default function App() {
             <>
               <div className="panel-head">
                 <h2>Gear Library</h2>
-                <span>{gears.length} items</span>
+                <span>
+                  {filteredGears.length === gears.length
+                    ? `${gears.length} items`
+                    : `${filteredGears.length} of ${gears.length}`}
+                </span>
               </div>
 
               <section className="library-create">
