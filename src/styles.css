@@ -467,6 +467,15 @@ body {
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* Pack detail with the sidebar hidden: on wide screens cap the width and centre
+   it (sprawling full-width is hard to read); narrower screens still fill since
+   the content is below the max-width. */
+.workspace.centered {
+  width: 100%;
+  max-width: 1120px;
+  margin-inline: auto;
+}
+
 .panel {
   background: var(--surface);
   border: 1px solid var(--border);

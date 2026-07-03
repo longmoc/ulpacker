@@ -1853,7 +1853,11 @@ export default function App() {
         </aside>
         )}
 
-        <section className="panel workspace">
+        <section
+          className={`panel workspace ${
+            view === "packs" && !sidebarOpen ? "centered" : ""
+          }`}
+        >
           {view === "library" && (
             <>
               <div className="panel-head">
