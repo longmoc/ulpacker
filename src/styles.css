@@ -67,7 +67,7 @@ body::before {
      behind the content. */
   background-color: var(--bg);
   background-image: linear-gradient(rgba(251, 251, 252, 0.45), rgba(251, 251, 252, 0.45)),
-    url("./raw_background.png");
+    url("./raw_background.jpg");
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -93,14 +93,16 @@ body::before {
   align-items: center;
   gap: 8px;
   /* Pinned at the top on every screen size (only the tabs; the sidebar pin is
-     desktop-only, see below). Transparent so the background shows through — the
-     tabs and toggle carry their own backgrounds. */
+     desktop-only, see below). Frosted glass: translucent + blur so the wallpaper
+     shows through while content scrolling underneath stays soft/legible. */
   position: sticky;
   top: 0;
   z-index: 30;
   margin-bottom: 0;
   padding: 12px 0;
-  background: transparent;
+  background: rgba(251, 251, 252, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 /* Floating back-to-top button (appears after scrolling down a bit). */
