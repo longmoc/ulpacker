@@ -1762,22 +1762,20 @@ export default function App() {
           sidebar column so it doesn't cover the pack view on the right. */}
       <div
         ref={navRef}
-        className={`nav-row ${
-          view === "library" || (view === "packs" && sidebarOpen) ? "with-sidebar" : ""
-        } ${navStuck && (isNarrow || (view === "packs" && !sidebarOpen)) ? "frosted" : ""}`}
+        className={`nav-row ${sidebarOpen ? "with-sidebar" : ""} ${
+          navStuck && (isNarrow || !sidebarOpen) ? "frosted" : ""
+        }`}
       >
-        {view === "packs" && (
-          <button
-            type="button"
-            className={`sidebar-toggle ${sidebarOpen ? "active" : ""}`}
-            onClick={() => setSidebarOpen((open) => !open)}
-            title={sidebarOpen ? "Hide packs sidebar" : "Show packs sidebar"}
-            aria-label="Toggle packs sidebar"
-            aria-pressed={sidebarOpen}
-          >
-            <PanelIcon />
-          </button>
-        )}
+        <button
+          type="button"
+          className={`sidebar-toggle ${sidebarOpen ? "active" : ""}`}
+          onClick={() => setSidebarOpen((open) => !open)}
+          title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+          aria-label="Toggle sidebar"
+          aria-pressed={sidebarOpen}
+        >
+          <PanelIcon />
+        </button>
         <div className="view-tabs">
           <button
             type="button"
@@ -1796,12 +1794,8 @@ export default function App() {
         </div>
       </div>
 
-      <main
-        className={`dashboard ${
-          view === "packs" && !sidebarOpen ? "library-layout" : ""
-        }`}
-      >
-        {view === "library" && (
+      <main className={`dashboard ${!sidebarOpen ? "library-layout" : ""}`}>
+        {view === "library" && sidebarOpen && (
         <aside className="panel packs-panel library-side">
           <div className="panel-head">
             <h2>Library</h2>
@@ -1949,11 +1943,7 @@ export default function App() {
         </aside>
         )}
 
-        <section
-          className={`panel workspace ${
-            view === "packs" && !sidebarOpen ? "centered" : ""
-          }`}
-        >
+        <section className={`panel workspace ${!sidebarOpen ? "centered" : ""}`}>
           {view === "library" && (
             <>
               <div className="panel-head">
