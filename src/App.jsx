@@ -2120,7 +2120,7 @@ export default function App() {
                   <span>Item Type</span>
                   <span>Description</span>
                   <span>Categories</span>
-                  <span>Variants</span>
+                  <span>Var</span>
                   <span />
                 </div>
                 <div className="gear-list compact">
@@ -2170,15 +2170,22 @@ export default function App() {
                         className={`variant-toggle ${gear.variants.length > 1 ? "variant-toggle-many" : ""}`}
                         onClick={() => toggleGearExpanded(gear.id)}
                       >
-                        {gear.variants.length} {gear.variants.length === 1 ? "variant" : "variants"}
+                        {gear.variants.length}
+                        <span className="variant-word">
+                          {" "}
+                          {gear.variants.length === 1 ? "variant" : "variants"}
+                        </span>
                       </button>
                       <div className="library-actions">
                         <button
                           type="button"
                           className="add-to-pack"
+                          title="Add to Pack"
+                          aria-label="Add to Pack"
                           onClick={() => openAddToPack(gear)}
                         >
-                          Add to Pack
+                          <PlusIcon />
+                          <BackpackIcon />
                         </button>
                         <button
                           type="button"

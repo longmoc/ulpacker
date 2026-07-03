@@ -1247,7 +1247,7 @@ button[type="submit"]:active {
 
 .library-table-head {
   display: grid;
-  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.6fr 88px 170px;
+  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.7fr 52px 92px;
   gap: 8px;
   font-size: 0.72rem;
   text-transform: uppercase;
@@ -1274,8 +1274,9 @@ button[type="submit"]:active {
 /* Keep the "Add category" input short (just fits its placeholder); typing longer
    text still works, it just scrolls within the field. */
 .chips-input input {
-  width: 118px;
+  width: 104px;
   flex: 0 0 auto;
+  font-size: 0.8rem;
 }
 
 .chip-tag {
@@ -1744,7 +1745,7 @@ button[type="submit"]:active {
 
 .gear-row {
   display: grid;
-  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.6fr 88px 170px;
+  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.7fr 52px 92px;
   gap: 8px;
   align-items: center;
   border: 0;
@@ -2623,12 +2624,29 @@ button[type="submit"]:active {
 }
 
 /* Library row actions */
+/* Compact icon button (plus + backpack) — tooltip says "Add to Pack". */
 .add-to-pack {
-  white-space: nowrap;
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 7px 9px;
   background: var(--accent-soft);
   border-color: var(--accent);
   color: var(--accent);
-  font-weight: 600;
+}
+
+.add-to-pack:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Number-only variant toggle on desktop (hide the word); the count column
+   narrows accordingly. */
+@media (min-width: 981px) {
+  .variant-word {
+    display: none;
+  }
 }
 
 .add-to-pack:hover {
@@ -3068,13 +3086,32 @@ button[type="submit"]:active {
 
   .gear-row {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    flex-flow: row wrap;
+    align-items: center;
+    gap: 8px 10px;
     border: 1px solid var(--border);
     border-radius: 10px;
     background: var(--surface);
     padding: 12px;
     margin-bottom: 8px;
+  }
+
+  /* Each field is its own full-width line by default... */
+  .gear-row > * {
+    flex: 1 1 100%;
+  }
+
+  /* ...except the markers (left) and the action buttons (right), which share the
+     top row. */
+  .gear-row .gear-marks {
+    order: -1;
+    flex: 0 0 auto;
+  }
+
+  .gear-row .library-actions {
+    order: -1;
+    flex: 0 0 auto;
+    margin-left: auto;
   }
 
   .gear-row input {
@@ -3094,18 +3131,7 @@ button[type="submit"]:active {
   }
 
   .gear-row .variant-toggle {
-    width: auto;
-    align-self: flex-start;
-  }
-
-  .gear-row .library-actions {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-  }
-
-  .gear-row .library-actions select {
-    flex: 1;
-    min-width: 130px;
+    flex: 0 0 auto;
     width: auto;
   }
 
