@@ -614,6 +614,9 @@ button[type="submit"]:active {
     min-height: 0;
     overflow-y: auto;
     scrollbar-gutter: stable;
+    /* overflow-y:auto makes overflow-x clip too; pad so the active card's
+       accent ring isn't cropped at the left/right edges. */
+    padding: 3px 4px;
   }
 }
 
