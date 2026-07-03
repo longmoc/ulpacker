@@ -105,11 +105,24 @@ body::before {
 }
 
 /* Frosted glass — only while the row is pinned and there's no sidebar column, so
-   content scrolling underneath stays legible; otherwise it stays transparent. */
+   content scrolling underneath stays legible; otherwise it stays transparent.
+   Bleed edge-to-edge past the app's 24px padding (negative margin, restored via
+   padding) so the frosted band spans the full screen width. */
 .nav-row.frosted {
-  background: rgba(251, 251, 252, 0.6);
+  margin-inline: -24px;
+  padding-inline: 24px;
+  background: rgba(251, 251, 252, 0.62);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 1px 0 var(--border);
+}
+
+/* Stronger border/shadow on the tabs + toggle so they stand out on the frosted
+   band. */
+.nav-row.frosted .view-tabs,
+.nav-row.frosted .sidebar-toggle {
+  border-color: #c4c9d3;
+  box-shadow: var(--shadow-sm);
 }
 
 /* Floating back-to-top button (appears after scrolling down a bit). */
@@ -2818,6 +2831,12 @@ button[type="submit"]:active {
     /* clip (not hidden) so it doesn't become a scroll container and break the
        sticky tabs row on mobile. */
     overflow-x: clip;
+  }
+
+  /* Full-bleed frosted band matches the smaller mobile app padding. */
+  .nav-row.frosted {
+    margin-inline: -10px;
+    padding-inline: 10px;
   }
 
   /* Let the logo + Export/Import/account wrap instead of overflowing on narrow phones. */
