@@ -63,7 +63,14 @@ body::before {
   position: fixed;
   inset: 0;
   z-index: -1;
-  background: var(--bg) url("./raw_background.png") center / cover no-repeat;
+  /* A translucent white wash over the illustration softens it so it stays subtle
+     behind the content. */
+  background-color: var(--bg);
+  background-image: linear-gradient(rgba(251, 251, 252, 0.45), rgba(251, 251, 252, 0.45)),
+    url("./raw_background.png");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   pointer-events: none;
 }
 
@@ -86,13 +93,14 @@ body::before {
   align-items: center;
   gap: 8px;
   /* Pinned at the top on every screen size (only the tabs; the sidebar pin is
-     desktop-only, see below). Opaque bg so content scrolls cleanly underneath. */
+     desktop-only, see below). Transparent so the background shows through — the
+     tabs and toggle carry their own backgrounds. */
   position: sticky;
   top: 0;
   z-index: 30;
   margin-bottom: 0;
   padding: 12px 0;
-  background: var(--bg);
+  background: transparent;
 }
 
 /* Floating back-to-top button (appears after scrolling down a bit). */
