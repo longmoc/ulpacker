@@ -716,6 +716,11 @@ export default function App() {
   // Whether the tabs row is currently pinned at the top (drives frosted glass).
   const [navStuck, setNavStuck] = useState(false);
   const navRef = useRef(null);
+  // Narrow/mobile is always single-column (sidebar stacks on top and scrolls
+  // away), so the frosted glass should apply there regardless of sidebar state.
+  const [isNarrow, setIsNarrow] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(max-width: 980px)").matches
+  );
   const [importConfig, setImportConfig] = useState({
     mappingMode: "description_to_name",
     autoFillItemTypeFromCategory: true,
@@ -740,6 +745,13 @@ export default function App() {
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
     return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 980px)");
+    const onChange = () => setIsNarrow(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
   }, []);
 
   useEffect(() => {
@@ -1727,7 +1739,9 @@ export default function App() {
       <div
         ref={navRef}
         className={`nav-row ${view === "packs" && sidebarOpen ? "with-sidebar" : ""} ${
-          navStuck && (view === "library" || (view === "packs" && !sidebarOpen)) ? "frosted" : ""
+          navStuck && (isNarrow || view === "library" || (view === "packs" && !sidebarOpen))
+            ? "frosted"
+            : ""
         }`}
       >
         {view === "packs" && (
