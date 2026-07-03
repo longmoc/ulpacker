@@ -1247,7 +1247,7 @@ button[type="submit"]:active {
 
 .library-table-head {
   display: grid;
-  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.7fr 52px 92px;
+  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.7fr 66px 92px;
   gap: 8px;
   font-size: 0.72rem;
   text-transform: uppercase;
@@ -1745,7 +1745,7 @@ button[type="submit"]:active {
 
 .gear-row {
   display: grid;
-  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.7fr 52px 92px;
+  grid-template-columns: 52px 1.5fr 0.85fr 1fr 1.7fr 66px 92px;
   gap: 8px;
   align-items: center;
   border: 0;
@@ -1821,9 +1821,10 @@ button[type="submit"]:active {
   border-top: 1px dashed var(--border-2);
   margin-top: 4px;
   padding-top: 8px;
-  /* Right-align the chips + Variant button, ending at the "X variants" column's
-     right edge (i.e. clear of the 170px actions column + 8px gap). */
-  padding-right: 178px;
+  /* Right-align the chips + Variant button, ending at the variants column's right
+     edge (= the count button's right edge): clear of the 92px actions column +
+     8px gap. */
+  padding-right: 100px;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;

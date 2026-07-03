@@ -2120,7 +2120,7 @@ export default function App() {
                   <span>Item Type</span>
                   <span>Description</span>
                   <span>Categories</span>
-                  <span>Var</span>
+                  <span>Variants</span>
                   <span />
                 </div>
                 <div className="gear-list compact">
