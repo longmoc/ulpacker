@@ -93,13 +93,20 @@ body::before {
   align-items: center;
   gap: 8px;
   /* Pinned at the top on every screen size (only the tabs; the sidebar pin is
-     desktop-only, see below). Frosted glass: translucent + blur so the wallpaper
-     shows through while content scrolling underneath stays soft/legible. */
+     desktop-only, see below). Transparent by default; the .frosted variant (set
+     from JS only when pinned + single-column) turns on the frosted glass. */
   position: sticky;
   top: 0;
   z-index: 30;
   margin-bottom: 0;
   padding: 12px 0;
+  background: transparent;
+  transition: background 0.18s ease;
+}
+
+/* Frosted glass — only while the row is pinned and there's no sidebar column, so
+   content scrolling underneath stays legible; otherwise it stays transparent. */
+.nav-row.frosted {
   background: rgba(251, 251, 252, 0.6);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);

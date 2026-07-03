@@ -713,6 +713,9 @@ export default function App() {
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
   // Back-to-top button: shown once the page is scrolled down a bit.
   const [showTop, setShowTop] = useState(false);
+  // Whether the tabs row is currently pinned at the top (drives frosted glass).
+  const [navStuck, setNavStuck] = useState(false);
+  const navRef = useRef(null);
   const [importConfig, setImportConfig] = useState({
     mappingMode: "description_to_name",
     autoFillItemTypeFromCategory: true,
@@ -728,7 +731,12 @@ export default function App() {
   }, [packs, activePack]);
 
   useEffect(() => {
-    const onScroll = () => setShowTop(window.scrollY > 500);
+    const onScroll = () => {
+      setShowTop(window.scrollY > 500);
+      const el = navRef.current;
+      // Pinned once the sticky row reaches the top (rect.top clamps at 0).
+      setNavStuck(el ? el.getBoundingClientRect().top <= 0.5 : false);
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
     return () => window.removeEventListener("scroll", onScroll);
@@ -1716,7 +1724,12 @@ export default function App() {
           page height), not the short header — otherwise it unpins once the
           header scrolls past. `with-sidebar` narrows the pinned bar to the
           sidebar column so it doesn't cover the pack view on the right. */}
-      <div className={`nav-row ${view === "packs" && sidebarOpen ? "with-sidebar" : ""}`}>
+      <div
+        ref={navRef}
+        className={`nav-row ${view === "packs" && sidebarOpen ? "with-sidebar" : ""} ${
+          navStuck && (view === "library" || (view === "packs" && !sidebarOpen)) ? "frosted" : ""
+        }`}
+      >
         {view === "packs" && (
           <button
             type="button"
