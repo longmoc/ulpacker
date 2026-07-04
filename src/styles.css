@@ -519,8 +519,16 @@ body::before {
    the content is below the max-width. */
 .workspace.centered {
   width: 100%;
-  max-width: 1120px;
   margin-inline: auto;
+}
+
+@media (min-width: 981px) {
+  /* Sidebar hidden: cap the workspace at the 2-column width (content − sidebar
+     320 − gap 16 = −336) plus 20% of the sidebar (64px) → −272px. So it's never
+     smaller than with the sidebar, just a touch wider, and centered. */
+  .workspace.centered {
+    max-width: calc(100% - 272px);
+  }
 }
 
 .panel {
