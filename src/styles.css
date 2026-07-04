@@ -1174,6 +1174,10 @@ button[type="submit"]:active {
 .workspace {
   display: grid;
   gap: 14px;
+  /* Pack rows at the top; when the panel is taller than its content (e.g. a
+     filtered library shorter than the sidebar) leave the slack at the bottom
+     instead of stretching each section (which bloated the Add-New-Gear box). */
+  align-content: start;
 }
 
 .library-create,
