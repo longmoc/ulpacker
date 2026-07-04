@@ -2125,17 +2125,7 @@ export default function App() {
                 </div>
                 <div className="gear-list compact">
                   {filteredGears.map((gear) => (
-                    <article
-                      key={gear.id}
-                      className="gear-row"
-                      draggable
-                      onDragStart={(e) =>
-                        e.dataTransfer.setData(
-                          "application/json",
-                          JSON.stringify({ type: "library", gearId: gear.id })
-                        )
-                      }
-                    >
+                    <article key={gear.id} className="gear-row">
                       <div className="gear-marks">
                         <MarkControls
                           favorite={gear.favorite}
@@ -2622,20 +2612,23 @@ export default function App() {
                               className={`pack-row ${dragOverIndex === index ? "drag-over" : ""} ${
                                 Number(row.quantity) === 0 ? "inactive" : ""
                               }`}
-                              draggable
-                              onDragStart={(e) =>
-                                e.dataTransfer.setData(
-                                  "application/json",
-                                  JSON.stringify({ type: "pack", itemId: row.id })
-                                )
-                              }
                               onDragEnd={() => setDragOverIndex(null)}
                               onDragOver={(e) => {
                                 e.preventDefault();
                                 setDragOverIndex(index);
                               }}
                             >
-                              <span className="drag-handle cell-drag" title="Drag to reorder">
+                              <span
+                                className="drag-handle cell-drag"
+                                title="Drag to reorder"
+                                draggable
+                                onDragStart={(e) =>
+                                  e.dataTransfer.setData(
+                                    "application/json",
+                                    JSON.stringify({ type: "pack", itemId: row.id })
+                                  )
+                                }
+                              >
                                 ::
                               </span>
                               <input
