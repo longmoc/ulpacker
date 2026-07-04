@@ -78,8 +78,8 @@ body::before {
   min-height: 100vh;
   padding: 24px;
   /* Cap the content width on large monitors and centre it (the fixed wallpaper
-     shows in the margins). MacBook & smaller (<=1500 CSS px) fill as before. */
-  max-width: 1500px;
+     shows in the margins). MacBook & smaller (<=1728 CSS px) fill as before. */
+  max-width: 1728px;
   margin-inline: auto;
   /* transparent so the fixed background shows through the gaps around content */
   background: transparent;
