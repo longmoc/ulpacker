@@ -79,6 +79,37 @@ export default defineConfig(({ command }) => ({
       configurePreviewServer(server) {
         server.middlewares.use(lighterpackProxyMiddleware());
       }
+    },
+    {
+      // Content-Security-Policy as a meta tag, injected at BUILD time only
+      // (GitHub Pages can't set headers; in dev Vite injects inline scripts
+      // for HMR/React refresh which a static CSP would block).
+      // Allows: our own bundle, the Google Identity Services script/iframes,
+      // Google APIs (userinfo + Drive appdata), Google avatar images, inline
+      // styles (React style attributes) and data: images (pack covers).
+      name: "csp-meta",
+      apply: "build",
+      transformIndexHtml() {
+        const csp = [
+          "default-src 'self'",
+          "script-src 'self' https://accounts.google.com",
+          "connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com",
+          "img-src 'self' data: https://*.googleusercontent.com",
+          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+          "font-src 'self' https://fonts.gstatic.com",
+          "frame-src https://accounts.google.com",
+          "object-src 'none'",
+          "base-uri 'self'",
+          "form-action 'self'"
+        ].join("; ");
+        return [
+          {
+            tag: "meta",
+            attrs: { "http-equiv": "Content-Security-Policy", content: csp },
+            injectTo: "head-prepend"
+          }
+        ];
+      }
     }
   ]
 }));
