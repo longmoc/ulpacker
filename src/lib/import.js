@@ -1,7 +1,19 @@
 import { parseNumber, normalizeWeightType, unitToGrams, textContent } from "./util.js";
 
+// Cells starting with = + - @ can be executed as formulas by spreadsheet apps
+// (CSV injection). Prefix them with a single quote — Excel's own "treat as
+// text" convention — and strip that exact prefix again on import so our own
+// round-trip stays clean.
+function escapeFormula(s) {
+  return /^[=+\-@]/.test(s) ? `'${s}` : s;
+}
+
+export function unescapeFormula(s) {
+  return /^'[=+\-@]/.test(s) ? s.slice(1) : s;
+}
+
 function csvCell(value) {
-  const s = String(value ?? "");
+  const s = escapeFormula(String(value ?? ""));
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -94,8 +106,8 @@ export function parseLighterpackCsv(text) {
     .slice(1)
     .map(parseCsvLine)
     .map((cols) => {
-      const name = (cols[idx.name] || "").trim();
-      const description = (cols[idx.description] || "").trim();
+      const name = unescapeFormula((cols[idx.name] || "").trim());
+      const description = unescapeFormula((cols[idx.description] || "").trim());
       if (!name && !description) return null;
 
       const isWorn = isTruthyFlag(cols[idx.worn]);
@@ -104,7 +116,7 @@ export function parseLighterpackCsv(text) {
       return {
         name,
         description,
-        category: (cols[idx.category] || "").trim(),
+        category: unescapeFormula((cols[idx.category] || "").trim()),
         grams: Math.round(unitToGrams(cols[idx.weight], cols[idx.unit])),
         quantity: Math.max(0, parseNumber(cols[idx.qty], 1)),
         weightType: isWorn ? "worn" : isConsumable ? "consumable" : "base",

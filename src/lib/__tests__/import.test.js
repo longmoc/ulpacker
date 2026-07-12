@@ -128,6 +128,23 @@ describe("packToCsv", () => {
     const mapped = mapImportedEntry(entry, { mappingMode: "description_to_name", autoFillItemTypeFromCategory: false });
     expect(mapped).toMatchObject({ name: "X-Mid", itemType: "Tent" });
   });
+
+  it("neutralises formula-looking cells (CSV injection) and round-trips them", () => {
+    const csv = packToCsv([
+      { itemType: "=HYPERLINK(\"http://evil\")", name: "+SUM(A1)", category: "@cmd", quantity: 1, weight: 10, weightType: "base" }
+    ]);
+    // Exported cells are prefixed with ' so spreadsheets treat them as text
+    // (the first cell is additionally quote-wrapped because it contains ").
+    const line = csv.split("\n")[1];
+    expect(line.startsWith("\"'=HYPERLINK")).toBe(true);
+    expect(line).toContain(",'@cmd,");
+    expect(line).toContain("'+SUM(A1)");
+    // Our own importer strips that exact prefix again.
+    const entry = parseLighterpackCsv(csv)[0];
+    expect(entry.name).toBe("=HYPERLINK(\"http://evil\")");
+    expect(entry.description).toBe("+SUM(A1)");
+    expect(entry.category).toBe("@cmd");
+  });
 });
 
 describe("mapImportedEntry", () => {

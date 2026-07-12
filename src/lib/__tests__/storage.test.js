@@ -125,6 +125,19 @@ describe("normalizeData", () => {
     expect(data.packs.find((p) => p.id === "p2").image).toBe("");
   });
 
+  it("strips non-data-URL cover images (remote URLs from a hostile backup)", () => {
+    const data = normalizeData({
+      gears: [{ id: "g1", name: "Quilt", categories: ["Sleep"], variants: [{ weight: 600 }] }],
+      packs: [
+        { id: "p1", name: "Tracker", image: "https://evil.example/pixel.png" },
+        { id: "p2", name: "Script", image: "javascript:alert(1)" },
+        { id: "p3", name: "NotImage", image: "data:text/html,<script>1</script>" }
+      ],
+      packItems: []
+    });
+    expect(data.packs.map((p) => p.image)).toEqual(["", "", ""]);
+  });
+
   it("normalizes a valid backup object without touching localStorage", () => {
     const data = normalizeData({
       gears: [{ id: "g1", name: "Quilt", categories: ["Sleep"], variants: [{ weight: 600 }] }],

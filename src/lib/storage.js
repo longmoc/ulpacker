@@ -17,13 +17,20 @@ export function eggSeed() {
   };
 }
 
+// Cover images must be inline data URLs (the app only ever produces those).
+// Rejecting anything else keeps an imported backup from planting a remote URL
+// that would be fetched on view (tracking / IP leak).
+function sanitizeCoverImage(value) {
+  return typeof value === "string" && value.startsWith("data:image/") ? value : "";
+}
+
 export function ensurePackDefaults(data) {
   const packs = Array.isArray(data.packs) && data.packs.length > 0
     ? data.packs.map((pack) => ({
         id: pack.id || id(),
         name: pack.name || "Unnamed Pack",
         description: pack.description || "",
-        image: typeof pack.image === "string" ? pack.image : "",
+        image: sanitizeCoverImage(pack.image),
         createdAt: pack.createdAt || new Date().toISOString(),
         categoryOrder: Array.isArray(pack.categoryOrder)
           ? pack.categoryOrder.filter((c) => typeof c === "string")
