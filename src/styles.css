@@ -3799,3 +3799,56 @@ button[type="submit"]:active {
 .gpx-reorder button:disabled {
   opacity: 0.35;
 }
+
+/* Real basemap (Leaflet) */
+.map-panel {
+  position: relative;
+}
+
+.track-map-canvas {
+  height: 460px;
+  width: 100%;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.leaflet-container {
+  font: inherit;
+}
+
+.map-toggle {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1000;
+  display: inline-flex;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.map-toggle button {
+  width: auto;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  background: transparent;
+  color: var(--text-2);
+}
+
+.map-toggle button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+@media (max-width: 768px) {
+  .track-map-canvas {
+    height: 340px;
+  }
+}

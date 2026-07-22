@@ -10,6 +10,7 @@ import {
 } from "../../lib/trail.js";
 import ElevationProfile from "./ElevationProfile.jsx";
 import TrackShape from "./TrackShape.jsx";
+import TrackMap from "./TrackMap.jsx";
 import CheckpointList from "./CheckpointList.jsx";
 import ItineraryDays from "./ItineraryDays.jsx";
 
@@ -30,6 +31,21 @@ export default function TripWorkspace({
   const [addKm, setAddKm] = useState("");
   const [splitDays, setSplitDays] = useState("");
   const [hoverRouteM, setHoverRouteM] = useState(null);
+  const [mapMode, setMapMode] = useState(() => {
+    try {
+      return localStorage.getItem("ulpacker.tripMapMode") === "shape" ? "shape" : "map";
+    } catch {
+      return "map";
+    }
+  });
+  const chooseMode = (m) => {
+    setMapMode(m);
+    try {
+      localStorage.setItem("ulpacker.tripMapMode", m);
+    } catch {
+      // ignore
+    }
+  };
 
   const cums = useMemo(() => (track ? buildCumulatives(track.segments) : null), [track]);
 
@@ -222,12 +238,40 @@ export default function TripWorkspace({
               onAddAt={addAtRoute}
               onHover={setHoverRouteM}
             />
-            <TrackShape
-              track={track}
-              checkpoints={trip.checkpoints}
-              onAddAt={addAtLatLng}
-              highlight={hoverPoint}
-            />
+            <div className="map-panel">
+              <div className="map-toggle">
+                <button
+                  type="button"
+                  className={mapMode === "map" ? "active" : ""}
+                  onClick={() => chooseMode("map")}
+                >
+                  Map
+                </button>
+                <button
+                  type="button"
+                  className={mapMode === "shape" ? "active" : ""}
+                  onClick={() => chooseMode("shape")}
+                >
+                  Shape
+                </button>
+              </div>
+              {mapMode === "map" ? (
+                <TrackMap
+                  key={trip.id}
+                  track={track}
+                  checkpoints={trip.checkpoints}
+                  onAddAt={addAtLatLng}
+                  highlight={hoverPoint}
+                />
+              ) : (
+                <TrackShape
+                  track={track}
+                  checkpoints={trip.checkpoints}
+                  onAddAt={addAtLatLng}
+                  highlight={hoverPoint}
+                />
+              )}
+            </div>
           </div>
 
           <section className="trip-section">

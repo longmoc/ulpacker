@@ -67,11 +67,20 @@ The `Trips` view turns a GPX file into a route plan. Import a `.gpx` file (up to
   or `<rte>` is never merged with another).
 - Import the file's waypoints as checkpoints.
 
-Each trip shows an **elevation profile** (elevation vs. route distance) and a 2D
-**track shape**, both drawn as inline SVG — no map tiles, no network calls, works
-offline. Click the profile to drop a checkpoint at that distance. A trip can
-optionally **link to a pack**; deleting that pack just unlinks it (the trip is
-kept).
+Each trip shows an **elevation profile** (elevation vs. route distance) and a
+map of the route. The map has two modes, toggled in its top-right corner:
+
+- **Map** — a real OpenStreetMap basemap (Leaflet). This is the only feature
+  that loads external tiles; its origin is allow-listed in the CSP.
+- **Shape** — a self-drawn 2D SVG of the track, with no tiles and no network
+  calls (the offline fallback).
+
+Hovering the elevation profile highlights the matching point on the map. Click
+the profile (by distance) or the map (by location) to drop a checkpoint; you can
+also add one at an explicit distance, split the route into N evenly-spaced days,
+or auto-detect prominent passes and high/low points from the elevation. A trip
+can optionally **link to a pack**; deleting that pack just unlinks it (the trip
+is kept).
 
 A few correctness details worth knowing:
 
@@ -204,7 +213,10 @@ document as compressed data URLs (1200×400 JPEG), which is why packs are capped
 - A Content-Security-Policy meta tag is injected into `dist/index.html` at build
   time (GitHub Pages cannot set headers; dev is excluded because Vite's HMR uses
   inline scripts). Any new external origin must be added to the `csp` list in
-  `vite.config.js` or it will be blocked in production only.
+  `vite.config.js` or it will be blocked in production only. The trip map's
+  OpenStreetMap tile origin (`*.tile.openstreetmap.org`) is allow-listed in
+  `img-src`; it is the only feature that fetches external resources, and the
+  map's **Shape** mode avoids it entirely.
 - Imported backups are sanitized: pack cover images must be `data:image/` URLs.
 - CSV exports neutralise spreadsheet formula injection (`= + - @` cells are
   prefixed with `'`; the importer strips it again on round-trip).
@@ -219,6 +231,7 @@ document as compressed data URLs (1200×400 JPEG), which is why packs are capped
 - React 18
 - Vite 5
 - react-easy-crop (pack cover cropping)
+- Leaflet + OpenStreetMap tiles (trip map basemap)
 - Google Identity Services + Drive REST (loaded at runtime, no SDK dependency)
 - Plain CSS with design tokens (Inter font, light theme)
 - Vitest for unit tests

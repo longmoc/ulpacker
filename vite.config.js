@@ -94,7 +94,7 @@ export default defineConfig(({ command }) => ({
           "default-src 'self'",
           "script-src 'self' https://accounts.google.com",
           "connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com",
-          "img-src 'self' data: https://*.googleusercontent.com",
+          "img-src 'self' data: https://*.googleusercontent.com https://*.tile.openstreetmap.org",
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com",
           "frame-src https://accounts.google.com",
