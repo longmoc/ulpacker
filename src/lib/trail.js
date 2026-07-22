@@ -19,6 +19,40 @@ export const OFF_ROUTE_M = 200;
 // Bumping this recomputes cached trip stats on load.
 export const METRICS_VERSION = 1;
 
+// Checkpoint categories. "overnight" is special — it drives the day itinerary.
+// The rest are informational markers shown on the map/profile.
+export const CHECKPOINT_KINDS = {
+  overnight: { label: "Overnight", emoji: "⛺" },
+  water: { label: "Water", emoji: "💧" },
+  resupply: { label: "Resupply", emoji: "🛒" },
+  pass: { label: "Pass / summit", emoji: "⛰️" },
+  viewpoint: { label: "Viewpoint", emoji: "📷" },
+  hazard: { label: "Hazard", emoji: "⚠️" },
+  poi: { label: "Landmark", emoji: "📍" }
+};
+export const CHECKPOINT_KIND_KEYS = Object.keys(CHECKPOINT_KINDS);
+
+export function isCheckpointKind(k) {
+  return Object.prototype.hasOwnProperty.call(CHECKPOINT_KINDS, k);
+}
+
+export function isOvernight(cp) {
+  return cp?.kind === "overnight";
+}
+
+// Guess a checkpoint category from its name using hiking vocabulary. Order
+// matters: the most specific/hazardous signals win. Falls back to "poi".
+export function classifyCheckpoint(name) {
+  const s = (name || "").toLowerCase();
+  if (/hazard|ladder|footbridge|exposed|cable|chain|danger|scree|\bford\b|crevasse|snowfield|rockfall/.test(s)) return "hazard";
+  if (/resupply|supermarket|grocery|\bshop\b|\bstore\b|market|provision|\bgas\b|\bfuel\b/.test(s)) return "resupply";
+  if (/water|refill|fountain|spring|\bsource\b|potable|\beau\b/.test(s)) return "water";
+  if (/viewpoint|panorama|balcony|belv[eé]d|overlook|vista|belvedere/.test(s)) return "viewpoint";
+  if (/\bcol\b|\bpass\b|summit|weather gate|\bpeak\b|t[eê]te|aiguillette|\bcime\b/.test(s)) return "pass";
+  if (/camping|bivouac|bivacco|g[iî]te|dortoir|\bcamp\b|hostel|\bhut\b|\bdorm\b/.test(s)) return "overnight";
+  return "poi";
+}
+
 const EARTH_R = 6371000; // metres
 const DEG2RAD = Math.PI / 180;
 const COORD_DECIMALS = 5; // ~1.1 m
@@ -656,7 +690,7 @@ export function suggestDaySplits(totalM, target, { checkpoints = [], boundaries 
   const anchors = [
     ...checkpoints
       .filter((cp) => Number.isFinite(cp?.anchor?.routeDistanceM))
-      .map((cp) => ({ routeM: cp.anchor.routeDistanceM, source: "checkpoint", id: cp.id, priority: cp.overnight ? 0 : 1 })),
+      .map((cp) => ({ routeM: cp.anchor.routeDistanceM, source: "checkpoint", id: cp.id, priority: cp.kind === "overnight" ? 0 : 1 })),
     ...boundaries
       .filter((r) => Number.isFinite(r))
       .map((routeM) => ({ routeM, source: "boundary", priority: 2 }))
@@ -737,7 +771,7 @@ export function buildDays({ checkpoints = [], segments = [], cumulatives } = {})
   const warnings = [];
   const interior = [];
   for (const cp of checkpoints) {
-    if (!cp.overnight) continue;
+    if (cp.kind !== "overnight") continue;
     const routeM = cp.anchor?.routeDistanceM;
     if (!Number.isFinite(routeM)) continue;
     if (routeM <= EPS || routeM >= totalM - EPS) continue; // coincides with Start/Finish

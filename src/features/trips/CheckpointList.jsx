@@ -1,30 +1,34 @@
 import React from "react";
-import { OFF_ROUTE_M } from "../../lib/trail.js";
+import { OFF_ROUTE_M, CHECKPOINT_KINDS, CHECKPOINT_KIND_KEYS } from "../../lib/trail.js";
 
 const km = (m) => (m / 1000).toFixed(2);
 
-// Checkpoint rows: inline name, route distance, elevation, overnight toggle,
+// Checkpoint rows: category selector, inline name, route distance, elevation,
 // note, off-route / ambiguous flags, delete. Everything is reachable without
-// the graphics (mobile-friendly).
+// the graphics (mobile-friendly). The "overnight" category drives the itinerary.
 export default function CheckpointList({ checkpoints, onUpdate, onDelete }) {
   if (checkpoints.length === 0) {
-    return <p className="empty-hint">No checkpoints yet. Click the elevation profile to add one.</p>;
+    return <p className="empty-hint">No checkpoints yet. Click the map or elevation profile to add one.</p>;
   }
   return (
     <ul className="checkpoint-list">
       {checkpoints.map((cp) => {
         const offRoute = cp.anchor.offsetM > OFF_ROUTE_M;
+        const kind = CHECKPOINT_KINDS[cp.kind] ? cp.kind : "poi";
         return (
           <li key={cp.id} className="checkpoint-row">
-            <button
-              type="button"
-              className={`moon-btn ${cp.overnight ? "active" : ""}`}
-              title={cp.overnight ? "Overnight stop" : "Mark as overnight stop"}
-              aria-pressed={cp.overnight}
-              onClick={() => onUpdate(cp.id, { overnight: !cp.overnight })}
+            <select
+              className={`cp-kind kind-${kind}`}
+              value={kind}
+              title={CHECKPOINT_KINDS[kind].label}
+              onChange={(e) => onUpdate(cp.id, { kind: e.target.value })}
             >
-              🌙
-            </button>
+              {CHECKPOINT_KIND_KEYS.map((k) => (
+                <option key={k} value={k}>
+                  {CHECKPOINT_KINDS[k].emoji} {CHECKPOINT_KINDS[k].label}
+                </option>
+              ))}
+            </select>
             <input
               className="cp-name"
               value={cp.name}

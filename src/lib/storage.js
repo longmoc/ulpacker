@@ -4,6 +4,7 @@ import {
   buildTrackStats,
   buildCumulatives,
   clampText,
+  isCheckpointKind,
   MAX_TRIPS,
   MAX_CHECKPOINTS_PER_TRIP,
   MAX_SEGMENTS,
@@ -132,11 +133,14 @@ function sanitizeCheckpoint(raw) {
   if (!Number.isFinite(lat) || lat < -90 || lat > 90) return null;
   if (!Number.isFinite(lng) || lng < -180 || lng > 180) return null;
   const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  // `kind` categorises the checkpoint (drives the map icon); "overnight" also
+  // drives the itinerary. Migrate legacy `overnight: true` → kind "overnight".
+  const kind = isCheckpointKind(raw.kind) ? raw.kind : raw.overnight ? "overnight" : "poi";
   return {
     id: raw.id || id(),
     name: clampText(raw.name),
     note: clampText(raw.note),
-    overnight: Boolean(raw.overnight),
+    kind,
     source: raw.source === "waypoint" ? "waypoint" : "manual",
     anchor: {
       segmentIndex,

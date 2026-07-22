@@ -22,6 +22,7 @@ import {
   anchorAtRouteM,
   joinContiguousSegments,
   segmentBoundaryRouteMs,
+  classifyCheckpoint,
   MAX_TRIPS,
   MAX_SEGMENTS,
   MAX_TRACK_STORAGE_BYTES,
@@ -1026,7 +1027,7 @@ export default function App() {
         id: `cp_${id()}`,
         name: wp.name,
         note: "",
-        overnight: false,
+        kind: classifyCheckpoint(wp.name),
         source: "waypoint",
         anchor: snapToTrack(track.segments, wp.lat, wp.lng, { cumulatives: cums })
       }));
@@ -1041,7 +1042,7 @@ export default function App() {
           id: `cp_${id()}`,
           name: b.endsName,
           note: "",
-          overnight: true,
+          kind: "overnight",
           source: "manual",
           anchor: anchorAtRouteM(track.segments, cums, b.routeM)
         });

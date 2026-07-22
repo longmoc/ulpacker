@@ -90,7 +90,15 @@ export default function TrackShape({ track, checkpoints, onAddAt, highlight }) {
         {end && <circle cx={end[0]} cy={end[1]} r={rStartEnd} className="track-end" />}
         {checkpoints.map((cp) => {
           const [x, y] = project(cp.anchor.lat, cp.anchor.lng);
-          return <circle key={cp.id} cx={x} cy={y} r={rCp} className={cp.overnight ? "track-cp overnight" : "track-cp"} />;
+          return (
+            <circle
+              key={cp.id}
+              cx={x}
+              cy={y}
+              r={rCp}
+              className={`track-cp kind-${cp.kind || "poi"}${cp.kind === "overnight" ? " overnight" : ""}`}
+            />
+          );
         })}
         {hi && (
           <g className="track-hover">

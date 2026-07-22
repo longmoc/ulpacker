@@ -11,12 +11,12 @@ export default function ItineraryDays({ trip, track }) {
     return buildDays({ checkpoints: trip.checkpoints, segments: track.segments, cumulatives });
   }, [trip.checkpoints, track]);
 
-  const hasOvernight = trip.checkpoints.some((c) => c.overnight);
+  const hasOvernight = trip.checkpoints.some((c) => c.kind === "overnight");
 
   return (
     <div className="itinerary">
       {!hasOvernight && (
-        <p className="empty-hint">Mark a checkpoint as an overnight stop (🌙) to split the route into days.</p>
+        <p className="empty-hint">Set a checkpoint's category to Overnight (⛺) to split the route into days.</p>
       )}
       {warnings?.map((w, i) => (
         <p key={i} className="status warn">{w}</p>

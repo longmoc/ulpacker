@@ -76,7 +76,7 @@ export default function TripWorkspace({
   };
 
   const pushCheckpoint = (anchor) =>
-    onAddCheckpoint({ id: `cp_${id()}`, name: "", note: "", overnight: false, source: "manual", anchor });
+    onAddCheckpoint({ id: `cp_${id()}`, name: "", note: "", kind: "poi", source: "manual", anchor });
 
   // From an elevation-profile click (route distance).
   const addAtRoute = (routeM) => {
@@ -103,7 +103,7 @@ export default function TripWorkspace({
         id: `cp_${id()}`,
         name: it.name,
         note: "",
-        overnight: Boolean(it.overnight),
+        kind: it.kind || "poi",
         source: "manual",
         anchor: anchorAtRouteM(track.segments, cums, it.routeM)
       });
@@ -124,13 +124,13 @@ export default function TripWorkspace({
     let camp = 1;
     for (const it of plan) {
       if (it.source === "checkpoint" && it.id) {
-        onUpdateCheckpoint(it.id, { overnight: true });
+        onUpdateCheckpoint(it.id, { kind: "overnight" });
       } else {
         onAddCheckpoint({
           id: `cp_${id()}`,
           name: `Camp ${camp}`,
           note: "",
-          overnight: true,
+          kind: "overnight",
           source: "manual",
           anchor: anchorAtRouteM(track.segments, cums, it.routeM)
         });
@@ -145,7 +145,7 @@ export default function TripWorkspace({
   const boundaries = trip.boundaries || [];
   const canAddSegments = boundaries.length >= 1 && boundaries.length <= 20;
   const addSegmentStops = () => {
-    addMany(boundaries.map((routeM, i) => ({ routeM, name: `Stop ${i + 1}`, overnight: false })));
+    addMany(boundaries.map((routeM, i) => ({ routeM, name: `Stop ${i + 1}`, kind: "poi" })));
   };
 
   // Suggest: passes / high & low points from the elevation profile.
@@ -160,7 +160,7 @@ export default function TripWorkspace({
       ex.map((e) => ({
         routeM: e.routeM,
         name: `${e.kind === "high" ? "High point" : "Low point"} ${e.ele} m`,
-        overnight: false
+        kind: e.kind === "high" ? "pass" : "poi"
       }))
     );
   };

@@ -17,6 +17,7 @@ import {
   suggestDaySplits,
   segmentBoundaryRouteMs,
   detectExtrema,
+  classifyCheckpoint,
   MAX_TRACK_POINTS
 } from "../trail.js";
 
@@ -305,6 +306,22 @@ describe("evenSplitRouteM", () => {
   });
 });
 
+describe("classifyCheckpoint", () => {
+  it("classifies hiking waypoint names by category", () => {
+    expect(classifyCheckpoint("Weather gate — Col du Bonhomme")).toBe("pass");
+    expect(classifyCheckpoint("Hazard — Bionnassay glacier footbridge")).toBe("hazard");
+    expect(classifyCheckpoint("Full resupply/gas — Courmayeur")).toBe("resupply");
+    expect(classifyCheckpoint("Rest/water — Refuge des Mottets")).toBe("water");
+    expect(classifyCheckpoint("Viewpoint — Mont de la Saxe balcony")).toBe("viewpoint");
+    expect(classifyCheckpoint("Day 2 — Camping des Glaciers")).toBe("overnight");
+    expect(classifyCheckpoint("Route checkpoint — Dolonne")).toBe("poi");
+    expect(classifyCheckpoint("")).toBe("poi");
+  });
+  it("prioritises hazard over other signals", () => {
+    expect(classifyCheckpoint("Hazard — ladder near the water source")).toBe("hazard");
+  });
+});
+
 describe("segmentBoundaryRouteMs", () => {
   it("returns interior boundary distances for a multi-segment track", () => {
     const segs = [
@@ -331,7 +348,7 @@ describe("suggestDaySplits", () => {
   });
   it("prefers an overnight checkpoint over a boundary at the same distance", () => {
     const plan = suggestDaySplits(12000, { days: 2 }, {
-      checkpoints: [{ id: "c1", overnight: true, anchor: { routeDistanceM: 6100 } }],
+      checkpoints: [{ id: "c1", kind: "overnight", anchor: { routeDistanceM: 6100 } }],
       boundaries: [6050]
     });
     expect(plan[0].source).toBe("checkpoint");
@@ -389,7 +406,7 @@ describe("buildDays", () => {
   const total = cumulatives.totalM;
 
   const overnight = (routeDistanceM, id = "cp1", name = "Camp") => ({
-    id, name, overnight: true, anchor: { routeDistanceM, segmentIndex: 0, alongSegmentM: routeDistanceM }
+    id, name, kind: "overnight", anchor: { routeDistanceM, segmentIndex: 0, alongSegmentM: routeDistanceM }
   });
 
   it("returns a single day with no overnight checkpoints", () => {

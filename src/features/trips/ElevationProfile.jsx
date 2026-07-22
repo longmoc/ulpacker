@@ -172,7 +172,7 @@ export default function ElevationProfile({ track, checkpoints, onAddAt, onHover 
                 cx={x}
                 cy={hasEle && cp.anchor.ele != null ? yOf(cp.anchor.ele) : PAD.top + 6}
                 r={4}
-                className={cp.overnight ? "cp-dot overnight" : "cp-dot"}
+                className={`cp-dot kind-${cp.kind || "poi"}${cp.kind === "overnight" ? " overnight" : ""}`}
               />
             </g>
           );

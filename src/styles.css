@@ -3852,3 +3852,51 @@ button[type="submit"]:active {
     height: 340px;
   }
 }
+
+/* Checkpoint categories (kinds) */
+.cp-kind {
+  width: 60px;
+  padding: 5px 4px;
+  flex: 0 0 auto;
+  border-left-width: 3px;
+  border-left-style: solid;
+  border-left-color: #5b6472;
+}
+.cp-kind.kind-overnight { border-left-color: var(--accent); }
+.cp-kind.kind-water { border-left-color: #2b8fd6; }
+.cp-kind.kind-resupply { border-left-color: #b4690e; }
+.cp-kind.kind-pass { border-left-color: #6b7280; }
+.cp-kind.kind-viewpoint { border-left-color: #7c3aed; }
+.cp-kind.kind-hazard { border-left-color: #b42318; }
+.cp-kind.kind-poi { border-left-color: #5b6472; }
+
+/* Profile + shape checkpoint dots, coloured by kind */
+.cp-dot.kind-water, .track-cp.kind-water { stroke: #2b8fd6; }
+.cp-dot.kind-resupply, .track-cp.kind-resupply { stroke: #b4690e; }
+.cp-dot.kind-pass, .track-cp.kind-pass { stroke: #6b7280; }
+.cp-dot.kind-viewpoint, .track-cp.kind-viewpoint { stroke: #7c3aed; }
+.cp-dot.kind-hazard, .track-cp.kind-hazard { stroke: #b42318; }
+.cp-dot.kind-poi, .track-cp.kind-poi { stroke: #5b6472; }
+
+/* Leaflet emoji markers */
+.cp-marker { background: none; border: none; }
+.cp-marker-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff;
+  border: 2px solid #5b6472;
+  box-shadow: 0 1px 3px rgba(16, 17, 26, 0.4);
+  font-size: 15px;
+  line-height: 1;
+}
+.cp-marker-overnight .cp-marker-pin { border-color: var(--accent); }
+.cp-marker-water .cp-marker-pin { border-color: #2b8fd6; }
+.cp-marker-resupply .cp-marker-pin { border-color: #b4690e; }
+.cp-marker-pass .cp-marker-pin { border-color: #6b7280; }
+.cp-marker-viewpoint .cp-marker-pin { border-color: #7c3aed; }
+.cp-marker-hazard .cp-marker-pin { border-color: #b42318; }
+.cp-marker-poi .cp-marker-pin { border-color: #5b6472; }

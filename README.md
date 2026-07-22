@@ -77,10 +77,17 @@ map of the route. The map has two modes, toggled in its top-right corner:
 
 Hovering the elevation profile highlights the matching point on the map. Click
 the profile (by distance) or the map (by location) to drop a checkpoint; you can
-also add one at an explicit distance, split the route into N evenly-spaced days,
-or auto-detect prominent passes and high/low points from the elevation. A trip
-can optionally **link to a pack**; deleting that pack just unlinks it (the trip
-is kept).
+also add one at an explicit distance, split the route into N days (snapped to
+existing checkpoints and segment boundaries), or auto-detect prominent passes
+and high/low points from the elevation. A trip can optionally **link to a pack**;
+deleting that pack just unlinks it (the trip is kept).
+
+Each checkpoint has a **category** — Overnight (⛺), Water (💧), Resupply (🛒),
+Pass/summit (⛰️), Viewpoint (📷), Hazard (⚠️), or Landmark (📍) — shown as a
+distinct marker on the map and dot on the profile. Only **Overnight** stops split
+the route into days. Imported GPX waypoints are auto-categorised from their names
+using hiking vocabulary (e.g. "Rest/water — …" → Water, "Weather gate — Col …" →
+Pass), and every checkpoint's category can be changed from its row.
 
 A few correctness details worth knowing:
 

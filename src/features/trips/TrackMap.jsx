@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { CHECKPOINT_KINDS } from "../../lib/trail.js";
 
 const ACCENT = "#1b5e3f";
 const GREEN = "#2e9e5b";
@@ -63,14 +64,17 @@ export default function TrackMap({ track, checkpoints, onAddAt, highlight }) {
     if (cpLayer.current) cpLayer.current.remove();
     const group = L.featureGroup();
     for (const cp of checkpoints) {
-      L.circleMarker([cp.anchor.lat, cp.anchor.lng], {
-        radius: 5,
-        color: ACCENT,
-        weight: 2,
-        fillColor: cp.overnight ? ACCENT : "#fff",
-        fillOpacity: 1
-      })
-        .bindTooltip(cp.name || "Checkpoint", { direction: "top" })
+      const kind = CHECKPOINT_KINDS[cp.kind] ? cp.kind : "poi";
+      const emoji = CHECKPOINT_KINDS[kind].emoji;
+      const icon = L.divIcon({
+        className: `cp-marker cp-marker-${kind}`,
+        html: `<span class="cp-marker-pin">${emoji}</span>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        tooltipAnchor: [0, -16]
+      });
+      L.marker([cp.anchor.lat, cp.anchor.lng], { icon })
+        .bindTooltip(`${emoji} ${cp.name || CHECKPOINT_KINDS[kind].label}`, { direction: "top" })
         .addTo(group);
     }
     group.addTo(map);

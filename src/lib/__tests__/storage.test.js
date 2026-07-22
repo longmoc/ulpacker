@@ -212,7 +212,7 @@ describe("normalizeTrips", () => {
   it("clamps a checkpoint anchor to the real track length and recomputes routeDistanceM", () => {
     const tracks = { trk_a: track() };
     const cp = {
-      id: "c1", name: "Camp", overnight: true,
+      id: "c1", name: "Camp", kind: "overnight",
       anchor: { segmentIndex: 5, alongSegmentM: 99999, routeDistanceM: 99999, lat: 45, lng: 6.01 }
     };
     const [trip] = normalizeTrips([tripWith("trk_a", { checkpoints: [cp] })], new Set(), tracks);
