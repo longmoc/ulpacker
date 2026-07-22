@@ -3675,3 +3675,26 @@ button[type="submit"]:active {
     grid-template-columns: 1fr;
   }
 }
+
+.gpx-candidates-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gpx-candidate-order {
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.link-btn {
+  width: auto;
+  border: none;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 0.82rem;
+  text-decoration: underline;
+}

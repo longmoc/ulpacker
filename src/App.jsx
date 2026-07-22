@@ -20,6 +20,7 @@ import {
   parseGpx,
   snapToTrack,
   MAX_TRIPS,
+  MAX_SEGMENTS,
   MAX_TRACK_STORAGE_BYTES,
   MAX_GPX_BYTES
 } from "./lib/trail.js";
@@ -981,12 +982,20 @@ export default function App() {
     }
   }
 
-  // Commit the staged import for the chosen candidate.
-  function confirmGpxImport({ candidateId, importWaypoints }) {
+  // Commit the staged import: merge the chosen candidates' segments in file
+  // order (gaps between tracks stay segment breaks, never phantom distance).
+  function confirmGpxImport({ candidateIds, importWaypoints }) {
     const gi = gpxImport;
     if (!gi) return;
-    const candidate = gi.candidates.find((c) => c.id === candidateId) || gi.candidates[0];
-    const track = { segments: candidate.segments };
+    const ids = new Set(candidateIds || []);
+    const chosen = gi.candidates.filter((c) => ids.has(c.id));
+    if (chosen.length === 0) return;
+    let segments = chosen.flatMap((c) => c.segments);
+    if (segments.length > MAX_SEGMENTS) {
+      window.alert(`Combined track has ${segments.length} segments; keeping the first ${MAX_SEGMENTS}.`);
+      segments = segments.slice(0, MAX_SEGMENTS);
+    }
+    const track = { segments };
     const cums = buildCumulatives(track.segments);
 
     let checkpoints = [];
@@ -1012,7 +1021,9 @@ export default function App() {
       }));
       replaceTripTrack(gi.tripId, { track, checkpoints: sortCheckpoints([...resnapped, ...checkpoints]) });
     } else {
-      createTripFromTrack({ name: candidate.name || gi.fileName, track, checkpoints: sortCheckpoints(checkpoints) });
+      // Single track → use its name; multiple merged → use the file name.
+      const name = chosen.length === 1 ? chosen[0].name || gi.fileName : gi.fileName;
+      createTripFromTrack({ name, track, checkpoints: sortCheckpoints(checkpoints) });
     }
     setGpxImport(null);
   }

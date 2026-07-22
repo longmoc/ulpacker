@@ -63,8 +63,10 @@ function normalizePoint(lat, lng, ele) {
 
 // Returns { candidates: [{ id, kind, name, segments }], waypoints, warnings }.
 // Each <trk> is one candidate (keeping all its <trkseg>); each <rte> is a
-// one-segment candidate. Candidates are NEVER merged. Waypoints are file-level
-// suggestions; they are snapped to the chosen candidate at confirm time.
+// one-segment candidate. The PARSER never merges — merging is a downstream
+// choice: the import UI may concatenate several candidates' segments in file
+// order (safe, because segment boundaries are never counted as distance).
+// Waypoints are file-level suggestions, snapped to the chosen track at confirm.
 export function parseGpx(xmlText, limits = {}) {
   const maxBytes = limits.maxBytes ?? MAX_GPX_BYTES;
   const maxPoints = limits.maxPoints ?? MAX_TRACK_POINTS;

@@ -7,14 +7,23 @@ const km = (m) => (m / 1000).toFixed(1);
 // merged) and whether to import waypoints as checkpoints before committing.
 export default function GpxImportModal({ data, onConfirm, onClose }) {
   const { mode, fileName, candidates, waypoints, warnings } = data;
-  const [candidateId, setCandidateId] = useState(candidates[0]?.id || "");
+  // Default to all candidates selected; they merge in file order.
+  const [selectedIds, setSelectedIds] = useState(() => candidates.map((c) => c.id));
   const [importWaypoints, setImportWaypoints] = useState(waypoints.length > 0);
 
-  const selected = candidates.find((c) => c.id === candidateId) || candidates[0];
-  const stats = useMemo(() => (selected ? buildTrackStats(selected.segments) : null), [selected]);
-  const points = selected ? selected.segments.reduce((n, s) => n + s.points.length, 0) : 0;
+  // Keep file order regardless of toggle order.
+  const chosen = candidates.filter((c) => selectedIds.includes(c.id));
+  const mergedSegments = chosen.flatMap((c) => c.segments);
+  const stats = useMemo(
+    () => (mergedSegments.length ? buildTrackStats(mergedSegments) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedIds]
+  );
+  const points = mergedSegments.reduce((n, s) => n + s.points.length, 0);
+  const canConfirm = chosen.length > 0;
 
-  const canConfirm = Boolean(selected);
+  const toggle = (id) =>
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -23,17 +32,28 @@ export default function GpxImportModal({ data, onConfirm, onClose }) {
 
         {candidates.length > 1 && (
           <div className="gpx-candidates">
-            <p className="field-label">This file has {candidates.length} tracks/routes — pick one:</p>
-            {candidates.map((c) => (
+            <div className="gpx-candidates-head">
+              <p className="field-label">
+                This file has {candidates.length} tracks/routes — checked ones are combined in order:
+              </p>
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() =>
+                  setSelectedIds((prev) =>
+                    prev.length === candidates.length ? [] : candidates.map((c) => c.id)
+                  )
+                }
+              >
+                {selectedIds.length === candidates.length ? "Clear all" : "Select all"}
+              </button>
+            </div>
+            {candidates.map((c, i) => (
               <label key={c.id} className="gpx-candidate">
-                <input
-                  type="radio"
-                  name="candidate"
-                  checked={c.id === candidateId}
-                  onChange={() => setCandidateId(c.id)}
-                />
+                <input type="checkbox" checked={selectedIds.includes(c.id)} onChange={() => toggle(c.id)} />
                 <span>
-                  {c.name} <em>({c.kind}, {c.segments.length} seg)</em>
+                  <span className="gpx-candidate-order">{i + 1}.</span> {c.name}{" "}
+                  <em>({c.kind}, {c.segments.length} seg)</em>
                 </span>
               </label>
             ))}
@@ -45,7 +65,7 @@ export default function GpxImportModal({ data, onConfirm, onClose }) {
             <span>{km(stats.distanceM)} km</span>
             {stats.ascentM != null && <span>+{stats.ascentM} / −{stats.descentM} m</span>}
             <span>{points.toLocaleString()} points</span>
-            <span>{selected.segments.length} segment{selected.segments.length > 1 ? "s" : ""}</span>
+            <span>{mergedSegments.length} segment{mergedSegments.length > 1 ? "s" : ""}</span>
           </div>
         )}
 
@@ -76,9 +96,9 @@ export default function GpxImportModal({ data, onConfirm, onClose }) {
             type="button"
             className="primary"
             disabled={!canConfirm}
-            onClick={() => onConfirm({ candidateId: selected.id, importWaypoints })}
+            onClick={() => onConfirm({ candidateIds: chosen.map((c) => c.id), importWaypoints })}
           >
-            {mode === "replace" ? "Replace" : "Create trip"}
+            {mode === "replace" ? "Replace" : chosen.length > 1 ? `Create trip (${chosen.length} tracks)` : "Create trip"}
           </button>
         </div>
       </div>
