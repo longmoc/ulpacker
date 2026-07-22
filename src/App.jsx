@@ -19,6 +19,7 @@ import {
   buildCumulatives,
   parseGpx,
   snapToTrack,
+  joinContiguousSegments,
   MAX_TRIPS,
   MAX_SEGMENTS,
   MAX_TRACK_STORAGE_BYTES,
@@ -990,7 +991,9 @@ export default function App() {
     const ids = new Set(candidateIds || []);
     const chosen = gi.candidates.filter((c) => ids.has(c.id));
     if (chosen.length === 0) return;
-    let segments = chosen.flatMap((c) => c.segments);
+    // Fuse touching segments (contiguous OSM ways) so a split route doesn't show
+    // phantom gaps; genuinely separate segments stay separate.
+    let segments = joinContiguousSegments(chosen.flatMap((c) => c.segments));
     if (segments.length > MAX_SEGMENTS) {
       window.alert(`Combined track has ${segments.length} segments; keeping the first ${MAX_SEGMENTS}.`);
       segments = segments.slice(0, MAX_SEGMENTS);

@@ -30,7 +30,9 @@ export default function ItineraryDays({ trip, track }) {
             <div className="day-stats">
               {km(day.distanceM)} km
               {day.ascentM != null && ` · +${day.ascentM} / −${day.descentM} m`}
-              {day.elevationCoverage < 1 && <span className="cp-flag partial" title="Partial elevation data"> partial ele</span>}
+              {day.elevationCoverage > 0 && day.elevationCoverage < 1 && (
+                <span className="cp-flag partial" title="Partial elevation data"> partial ele</span>
+              )}
               {day.segmentBreaks > 0 && <span className="cp-flag" title="Track gap within this day"> {day.segmentBreaks} gap</span>}
             </div>
           </div>

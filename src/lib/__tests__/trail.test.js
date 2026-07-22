@@ -12,6 +12,7 @@ import {
   buildElevationSeries,
   detectAntimeridian,
   buildDays,
+  joinContiguousSegments,
   MAX_TRACK_POINTS
 } from "../trail.js";
 
@@ -250,6 +251,31 @@ describe("projectTrack / buildElevationSeries", () => {
     expect(series).toHaveLength(2);
     expect(breaks).toHaveLength(1);
     expect(breaks[0]).toBeGreaterThan(0);
+  });
+});
+
+describe("joinContiguousSegments", () => {
+  it("fuses segments whose endpoints touch into one continuous segment", () => {
+    const segs = [
+      { points: [[45, 6.0, 100], [45, 6.01, 110]] },
+      { points: [[45, 6.01, 110], [45, 6.02, 120]] } // starts where the first ended
+    ];
+    const out = joinContiguousSegments(segs);
+    expect(out).toHaveLength(1);
+    expect(out[0].points).toHaveLength(3); // duplicate shared node dropped
+  });
+
+  it("keeps genuinely separate segments apart", () => {
+    const segs = [
+      { points: [[45, 6.0, 100], [45, 6.01, 110]] },
+      { points: [[45.5, 6.0, 200], [45.5, 6.01, 210]] } // far away
+    ];
+    expect(joinContiguousSegments(segs)).toHaveLength(2);
+  });
+
+  it("leaves a single segment untouched", () => {
+    const segs = [{ points: [[45, 6, 1], [45.001, 6, 2]] }];
+    expect(joinContiguousSegments(segs)).toBe(segs);
   });
 });
 

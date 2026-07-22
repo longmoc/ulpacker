@@ -108,9 +108,10 @@ export default function ElevationProfile({ track, checkpoints, onAddAt }) {
         role="img"
         aria-label="Elevation profile"
         preserveAspectRatio="none"
-        onMouseMove={handleMove}
+        className={hasEle ? "clickable" : ""}
+        onMouseMove={hasEle ? handleMove : undefined}
         onMouseLeave={() => setHover(null)}
-        onClick={() => hover && onAddAt(hover.routeM)}
+        onClick={() => hasEle && hover && onAddAt(hover.routeM)}
       >
         {!hasEle && (
           <text x={W / 2} y={H / 2} textAnchor="middle" className="profile-empty">
@@ -181,9 +182,11 @@ export default function ElevationProfile({ track, checkpoints, onAddAt }) {
         )}
       </svg>
       <div className="profile-caption">
-        {hover
-          ? `${(hover.routeM / 1000).toFixed(2)} km${hoverEle != null ? ` · ${Math.round(hoverEle)} m` : ""} — click to add checkpoint`
-          : "Click the profile to add a checkpoint"}
+        {!hasEle
+          ? "No elevation data in this GPX — add checkpoints on the map or by distance below."
+          : hover
+            ? `${(hover.routeM / 1000).toFixed(2)} km${hoverEle != null ? ` · ${Math.round(hoverEle)} m` : ""} — click to add checkpoint`
+            : "Click the profile to add a checkpoint"}
       </div>
     </div>
   );

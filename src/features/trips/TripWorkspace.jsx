@@ -1,6 +1,6 @@
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { id } from "../../lib/util.js";
-import { anchorAtRouteM, buildCumulatives, buildDays } from "../../lib/trail.js";
+import { anchorAtRouteM, buildCumulatives, buildDays, snapToTrack } from "../../lib/trail.js";
 import ElevationProfile from "./ElevationProfile.jsx";
 import TrackShape from "./TrackShape.jsx";
 import CheckpointList from "./CheckpointList.jsx";
@@ -20,6 +20,7 @@ export default function TripWorkspace({
   onDeleteCheckpoint
 }) {
   const replaceRef = useRef(null);
+  const [addKm, setAddKm] = useState("");
 
   const dayCount = useMemo(() => {
     if (!track) return 0;
@@ -41,10 +42,27 @@ export default function TripWorkspace({
     e.target.value = "";
   };
 
+  const pushCheckpoint = (anchor) =>
+    onAddCheckpoint({ id: `cp_${id()}`, name: "", note: "", overnight: false, source: "manual", anchor });
+
+  // From an elevation-profile click (route distance).
   const addAtRoute = (routeM) => {
     const cumulatives = buildCumulatives(track.segments);
-    const anchor = anchorAtRouteM(track.segments, cumulatives, routeM);
-    onAddCheckpoint({ id: `cp_${id()}`, name: "", note: "", overnight: false, source: "manual", anchor });
+    pushCheckpoint(anchorAtRouteM(track.segments, cumulatives, routeM));
+  };
+
+  // From a track-map click (lat/lng snapped onto the track).
+  const addAtLatLng = (lat, lng) => {
+    pushCheckpoint(snapToTrack(track.segments, lat, lng));
+  };
+
+  // From the explicit "at km" input.
+  const totalKm = track ? buildCumulatives(track.segments).totalM / 1000 : 0;
+  const submitAddKm = () => {
+    const km = parseFloat(addKm);
+    if (!Number.isFinite(km)) return;
+    addAtRoute(Math.max(0, Math.min(totalKm, km)) * 1000);
+    setAddKm("");
   };
 
   const { stats } = trip;
@@ -143,11 +161,30 @@ export default function TripWorkspace({
 
           <div className="trip-graphics">
             <ElevationProfile track={track} checkpoints={trip.checkpoints} onAddAt={addAtRoute} />
-            <TrackShape track={track} checkpoints={trip.checkpoints} />
+            <TrackShape track={track} checkpoints={trip.checkpoints} onAddAt={addAtLatLng} />
           </div>
 
           <section className="trip-section">
-            <h3>Checkpoints</h3>
+            <div className="trip-section-head">
+              <h3>Checkpoints</h3>
+              <div className="add-km">
+                <span>Add at</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max={totalKm.toFixed(1)}
+                  value={addKm}
+                  placeholder="km"
+                  onChange={(e) => setAddKm(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submitAddKm()}
+                />
+                <span>km</span>
+                <button type="button" onClick={submitAddKm} disabled={addKm === ""}>
+                  Add
+                </button>
+              </div>
+            </div>
             <CheckpointList
               checkpoints={trip.checkpoints}
               onUpdate={onUpdateCheckpoint}

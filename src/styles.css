@@ -3330,6 +3330,10 @@ button[type="submit"]:active {
   width: 100%;
   height: auto;
   display: block;
+}
+
+.elevation-profile svg.clickable,
+.track-shape svg.clickable {
   cursor: crosshair;
 }
 
@@ -3697,4 +3701,35 @@ button[type="submit"]:active {
   color: var(--accent);
   font-size: 0.82rem;
   text-decoration: underline;
+}
+
+.trip-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.add-km {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+
+.add-km input {
+  width: 84px;
+  padding: 5px 8px;
+}
+
+.add-km button {
+  width: auto;
+  padding: 5px 12px;
+}
+
+.track-hint {
+  color: var(--text-3);
 }

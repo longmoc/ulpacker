@@ -201,6 +201,34 @@ export function buildCumulatives(segments) {
   return { cumulativeBySegment, segmentOffsets, segmentLengths, totalM };
 }
 
+// Fuse adjacent segments whose endpoints touch (end of one within thresholdM of
+// the start of the next). Routes exported as many contiguous OSM ways come in as
+// separate tracks/segments that are really one continuous line — joining them
+// removes phantom "gap" markers. A real gap (endpoints far apart) is preserved.
+export function joinContiguousSegments(segments, thresholdM = 30) {
+  if (!Array.isArray(segments) || segments.length <= 1) return segments;
+  const out = [];
+  for (const seg of segments) {
+    if (!seg?.points?.length) continue;
+    if (out.length === 0) {
+      out.push({ points: seg.points.slice() });
+      continue;
+    }
+    const prev = out[out.length - 1];
+    const a = prev.points[prev.points.length - 1];
+    const b = seg.points[0];
+    const d = haversine(a[0], a[1], b[0], b[1]);
+    if (d <= thresholdM) {
+      // Contiguous — append, dropping a duplicated shared node (< ~1 m).
+      const startIdx = d < 1 ? 1 : 0;
+      for (let i = startIdx; i < seg.points.length; i += 1) prev.points.push(seg.points[i]);
+    } else {
+      out.push({ points: seg.points.slice() });
+    }
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Elevation-aware ascent/descent
 // ---------------------------------------------------------------------------
@@ -477,8 +505,12 @@ export function projectTrack(segments, width, height, pad = 4) {
     // invert Y so north is up
     height - (offY + (lat - minLat) * scale)
   ];
+  const unproject = (x, y) => [
+    minLat + (height - y - offY) / scale,
+    minLng + (x - offX) / (kx * scale)
+  ];
   const paths = segments.map((seg) => seg.points.map(([lat, lng]) => project(lat, lng)));
-  return { paths, width, height, project };
+  return { paths, width, height, project, unproject };
 }
 
 // Per-segment [routeDistanceM, ele] series for the elevation profile. Segment
