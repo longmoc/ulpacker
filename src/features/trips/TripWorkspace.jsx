@@ -21,12 +21,21 @@ export default function TripWorkspace({
 }) {
   const replaceRef = useRef(null);
   const [addKm, setAddKm] = useState("");
+  const [hoverRouteM, setHoverRouteM] = useState(null);
+
+  const cums = useMemo(() => (track ? buildCumulatives(track.segments) : null), [track]);
 
   const dayCount = useMemo(() => {
-    if (!track) return 0;
-    const cumulatives = buildCumulatives(track.segments);
-    return buildDays({ checkpoints: trip?.checkpoints || [], segments: track.segments, cumulatives }).days.length;
-  }, [trip, track]);
+    if (!track || !cums) return 0;
+    return buildDays({ checkpoints: trip?.checkpoints || [], segments: track.segments, cumulatives: cums }).days.length;
+  }, [trip, track, cums]);
+
+  // Point on the track corresponding to the current elevation-profile hover.
+  const hoverPoint = useMemo(() => {
+    if (hoverRouteM == null || !track || !cums) return null;
+    const a = anchorAtRouteM(track.segments, cums, hoverRouteM);
+    return { lat: a.lat, lng: a.lng };
+  }, [hoverRouteM, track, cums]);
 
   if (!trip) {
     return (
@@ -47,8 +56,7 @@ export default function TripWorkspace({
 
   // From an elevation-profile click (route distance).
   const addAtRoute = (routeM) => {
-    const cumulatives = buildCumulatives(track.segments);
-    pushCheckpoint(anchorAtRouteM(track.segments, cumulatives, routeM));
+    pushCheckpoint(anchorAtRouteM(track.segments, cums, routeM));
   };
 
   // From a track-map click (lat/lng snapped onto the track).
@@ -57,7 +65,7 @@ export default function TripWorkspace({
   };
 
   // From the explicit "at km" input.
-  const totalKm = track ? buildCumulatives(track.segments).totalM / 1000 : 0;
+  const totalKm = cums ? cums.totalM / 1000 : 0;
   const submitAddKm = () => {
     const km = parseFloat(addKm);
     if (!Number.isFinite(km)) return;
@@ -160,8 +168,18 @@ export default function TripWorkspace({
           )}
 
           <div className="trip-graphics">
-            <ElevationProfile track={track} checkpoints={trip.checkpoints} onAddAt={addAtRoute} />
-            <TrackShape track={track} checkpoints={trip.checkpoints} onAddAt={addAtLatLng} />
+            <ElevationProfile
+              track={track}
+              checkpoints={trip.checkpoints}
+              onAddAt={addAtRoute}
+              onHover={setHoverRouteM}
+            />
+            <TrackShape
+              track={track}
+              checkpoints={trip.checkpoints}
+              onAddAt={addAtLatLng}
+              highlight={hoverPoint}
+            />
           </div>
 
           <section className="trip-section">

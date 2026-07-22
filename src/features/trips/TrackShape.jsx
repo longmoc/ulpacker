@@ -1,21 +1,38 @@
 import React, { useMemo, useRef } from "react";
 import { projectTrack, decimateForRender, detectAntimeridian } from "../../lib/trail.js";
 
-const W = 400;
-const H = 320;
+// Large working space; the viewBox is then cropped tight to the track so it
+// fills the panel (contain) regardless of portrait/landscape orientation.
+const SPACE = 1000;
 
 // 2D top-down shape of the track (one sub-path per segment). Click adds a
-// checkpoint at the nearest point on the track — the primary way to place
-// checkpoints on a track that has no elevation profile. Hidden with a notice
+// checkpoint at the nearest point on the track. `highlight` (a {lat,lng}) draws
+// a moving marker linked to the elevation-profile hover. Hidden with a notice
 // when the track crosses the antimeridian (deferred to a later phase).
-export default function TrackShape({ track, checkpoints, onAddAt }) {
+export default function TrackShape({ track, checkpoints, onAddAt, highlight }) {
   const svgRef = useRef(null);
   const antimeridian = useMemo(() => detectAntimeridian(track.segments), [track]);
 
   const model = useMemo(() => {
     if (antimeridian) return null;
     const thin = decimateForRender(track.segments, 1500);
-    return projectTrack(thin, W, H, 10);
+    const proj = projectTrack(thin, SPACE, SPACE, 0);
+    // Tight bounding box of the drawn points → crop the viewBox to it.
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const seg of proj.paths)
+      for (const [x, y] of seg) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    const unit = Math.max(maxX - minX, maxY - minY) || SPACE;
+    const pad = unit * 0.06;
+    return {
+      ...proj,
+      viewBox: `${minX - pad} ${minY - pad} ${maxX - minX + 2 * pad} ${maxY - minY + 2 * pad}`,
+      unit
+    };
   }, [track, antimeridian]);
 
   if (antimeridian) {
@@ -26,25 +43,36 @@ export default function TrackShape({ track, checkpoints, onAddAt }) {
     );
   }
 
-  const { paths, project, unproject } = model;
+  const { paths, project, unproject, viewBox, unit } = model;
   const start = paths[0]?.[0];
   const lastSeg = paths[paths.length - 1];
   const end = lastSeg?.[lastSeg.length - 1];
+  const stroke = unit * 0.006;
+  const rStartEnd = unit * 0.016;
+  const rCp = unit * 0.013;
 
   const handleClick = (e) => {
     if (!onAddAt) return;
-    const rect = svgRef.current.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * W;
-    const y = ((e.clientY - rect.top) / rect.height) * H;
-    const [lat, lng] = unproject(x, y);
+    // getScreenCTM maps screen px → user coords correctly through the viewBox
+    // crop + preserveAspectRatio letterboxing.
+    const ctm = svgRef.current.getScreenCTM();
+    if (!ctm) return;
+    const pt = svgRef.current.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const u = pt.matrixTransform(ctm.inverse());
+    const [lat, lng] = unproject(u.x, u.y);
     onAddAt(lat, lng);
   };
+
+  const hi = highlight ? project(highlight.lat, highlight.lng) : null;
 
   return (
     <div className="track-shape">
       <svg
         ref={svgRef}
-        viewBox={`0 0 ${W} ${H}`}
+        viewBox={viewBox}
+        preserveAspectRatio="xMidYMid meet"
         role="img"
         aria-label="Track shape"
         className={onAddAt ? "clickable" : ""}
@@ -55,14 +83,21 @@ export default function TrackShape({ track, checkpoints, onAddAt }) {
             key={i}
             points={pts.map(([x, y]) => `${x},${y}`).join(" ")}
             className="track-line"
+            style={{ strokeWidth: stroke }}
           />
         ))}
-        {start && <circle cx={start[0]} cy={start[1]} r={5} className="track-start" />}
-        {end && <circle cx={end[0]} cy={end[1]} r={5} className="track-end" />}
+        {start && <circle cx={start[0]} cy={start[1]} r={rStartEnd} className="track-start" />}
+        {end && <circle cx={end[0]} cy={end[1]} r={rStartEnd} className="track-end" />}
         {checkpoints.map((cp) => {
           const [x, y] = project(cp.anchor.lat, cp.anchor.lng);
-          return <circle key={cp.id} cx={x} cy={y} r={4} className={cp.overnight ? "track-cp overnight" : "track-cp"} />;
+          return <circle key={cp.id} cx={x} cy={y} r={rCp} className={cp.overnight ? "track-cp overnight" : "track-cp"} />;
         })}
+        {hi && (
+          <g className="track-hover">
+            <circle cx={hi[0]} cy={hi[1]} r={unit * 0.024} className="track-hover-halo" />
+            <circle cx={hi[0]} cy={hi[1]} r={unit * 0.013} className="track-hover-dot" style={{ strokeWidth: stroke }} />
+          </g>
+        )}
       </svg>
       <div className="track-legend">
         <span className="dot start" /> Start

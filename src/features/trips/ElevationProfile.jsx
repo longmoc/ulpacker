@@ -8,9 +8,14 @@ const PAD = { top: 16, right: 12, bottom: 24, left: 44 };
 // Elevation vs route-distance. Segment gaps are drawn as a vertical break
 // marker (a gap has 0 horizontal width, so a dashed line would be invisible).
 // Click adds a checkpoint at the nearest route distance.
-export default function ElevationProfile({ track, checkpoints, onAddAt }) {
+export default function ElevationProfile({ track, checkpoints, onAddAt, onHover }) {
   const svgRef = useRef(null);
   const [hover, setHover] = useState(null);
+
+  const clearHover = () => {
+    setHover(null);
+    onHover?.(null);
+  };
 
   const model = useMemo(() => {
     const cums = buildCumulatives(track.segments);
@@ -86,7 +91,9 @@ export default function ElevationProfile({ track, checkpoints, onAddAt }) {
     const rect = svgRef.current.getBoundingClientRect();
     const px = ((e.clientX - rect.left) / rect.width) * W;
     const frac = Math.max(0, Math.min(1, (px - PAD.left) / plotW));
-    setHover({ routeM: frac * totalM, x: PAD.left + frac * plotW });
+    const routeM = frac * totalM;
+    setHover({ routeM, x: PAD.left + frac * plotW });
+    onHover?.(routeM);
   };
 
   const hoverEle = (() => {
@@ -110,7 +117,7 @@ export default function ElevationProfile({ track, checkpoints, onAddAt }) {
         preserveAspectRatio="none"
         className={hasEle ? "clickable" : ""}
         onMouseMove={hasEle ? handleMove : undefined}
-        onMouseLeave={() => setHover(null)}
+        onMouseLeave={clearHover}
         onClick={() => hasEle && hover && onAddAt(hover.routeM)}
       >
         {!hasEle && (

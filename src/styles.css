@@ -3310,12 +3310,11 @@ button[type="submit"]:active {
   width: auto;
 }
 
-/* Graphics: profile full width, shape beside it on desktop */
+/* Graphics: elevation profile on top, larger map below. */
 .trip-graphics {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 14px;
-  align-items: start;
 }
 
 .elevation-profile,
@@ -3400,8 +3399,20 @@ button[type="submit"]:active {
 
 .track-shape svg {
   width: 100%;
-  height: auto;
+  height: 460px;
   display: block;
+}
+
+.track-hover-halo {
+  fill: #fff;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  opacity: 0.95;
+}
+
+.track-hover-dot {
+  fill: var(--accent);
+  stroke: #fff;
 }
 
 .track-line {
@@ -3675,8 +3686,8 @@ button[type="submit"]:active {
   .trip-summary {
     grid-template-columns: repeat(2, 1fr);
   }
-  .trip-graphics {
-    grid-template-columns: 1fr;
+  .track-shape svg {
+    height: 340px;
   }
 }
 
