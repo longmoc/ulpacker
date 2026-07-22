@@ -220,6 +220,16 @@ describe("normalizeTrips", () => {
     expect(trip.checkpoints[0].anchor.routeDistanceM).toBeLessThan(5000);
   });
 
+  it("sanitizes boundaries and clamps them to the track length", () => {
+    const tracks = { trk_a: track() }; // ~2.36 km straight track
+    const raw = tripWith("trk_a", { boundaries: [1000, -50, 99999, "x", 1500] });
+    const [trip] = normalizeTrips([raw], new Set(), tracks);
+    expect(trip.boundaries.every((n) => Number.isFinite(n) && n > 1)).toBe(true);
+    expect(trip.boundaries.every((n) => n < trip.stats.distanceM)).toBe(true);
+    // sorted ascending
+    expect(trip.boundaries).toEqual([...trip.boundaries].sort((a, b) => a - b));
+  });
+
   it("enforces the MAX_TRIPS cap", () => {
     const many = Array.from({ length: 30 }, (_, i) => tripWith("trk_a", { id: `t${i}` }));
     expect(normalizeTrips(many, new Set(), { trk_a: track() }).length).toBeLessThanOrEqual(20);

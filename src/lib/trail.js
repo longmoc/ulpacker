@@ -638,6 +638,49 @@ function peakProminence(eles, i) {
   return h - Math.max(left, right);
 }
 
+// Interior route distances of segment boundaries (each segment start/end is a
+// natural "potential checkpoint"). Computed from the pre-fusion segments.
+export function segmentBoundaryRouteMs(segments) {
+  const { segmentOffsets, totalM } = buildCumulatives(segments);
+  return segmentOffsets.slice(1).filter((r) => r > 1 && r < totalM - 1);
+}
+
+// Plan day-split positions, snapping each evenly-spaced target to the best
+// nearby anchor by priority: overnight checkpoint > other checkpoint > segment
+// boundary > the even position itself. Returns [{ routeM, source, id? }].
+export function suggestDaySplits(totalM, target, { checkpoints = [], boundaries = [] } = {}) {
+  const ideal = evenSplitRouteM(totalM, target);
+  if (ideal.length === 0) return [];
+  const span = target.days ? totalM / target.days : (target.everyKm || 1) * 1000;
+  const tol = span * 0.45; // snap window: up to ~45% of a day toward a real anchor
+  const anchors = [
+    ...checkpoints
+      .filter((cp) => Number.isFinite(cp?.anchor?.routeDistanceM))
+      .map((cp) => ({ routeM: cp.anchor.routeDistanceM, source: "checkpoint", id: cp.id, priority: cp.overnight ? 0 : 1 })),
+    ...boundaries
+      .filter((r) => Number.isFinite(r))
+      .map((routeM) => ({ routeM, source: "boundary", priority: 2 }))
+  ];
+  const used = new Set();
+  return ideal.map((pos) => {
+    let best = null;
+    for (const a of anchors) {
+      const key = a.id || `b${Math.round(a.routeM)}`;
+      if (used.has(key)) continue;
+      const d = Math.abs(a.routeM - pos);
+      if (d > tol) continue;
+      if (!best || a.priority < best.priority || (a.priority === best.priority && d < best.d)) {
+        best = { ...a, d, key };
+      }
+    }
+    if (best) {
+      used.add(best.key);
+      return { routeM: best.routeM, source: best.source, id: best.id };
+    }
+    return { routeM: pos, source: "even" };
+  });
+}
+
 // Detect topographic high/low points along the trail by 1-D prominence. Needs
 // elevation. Returns the most prominent first: [{ routeM, ele, kind }].
 export function detectExtrema(segments, cumulatives, { minProminenceM = 120, max = 12 } = {}) {

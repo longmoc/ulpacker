@@ -5,7 +5,7 @@ import {
   buildCumulatives,
   buildDays,
   snapToTrack,
-  evenSplitRouteM,
+  suggestDaySplits,
   detectExtrema
 } from "../../lib/trail.js";
 import ElevationProfile from "./ElevationProfile.jsx";
@@ -110,14 +110,42 @@ export default function TripWorkspace({
     }
   };
 
-  // Suggest: evenly split into N days (overnight camps).
+  // Suggest: split into N days, snapping each boundary to the best nearby
+  // anchor — an existing checkpoint (overnight first) or a segment boundary —
+  // before falling back to an even position.
   const submitSplitDays = () => {
     const n = parseInt(splitDays, 10);
     if (!Number.isFinite(n) || n < 2) return;
-    const splits = evenSplitRouteM(cums.totalM, { days: n });
-    if (splits.length === 0) return;
-    addMany(splits.map((routeM, i) => ({ routeM, name: `Camp ${i + 1}`, overnight: true })));
+    const plan = suggestDaySplits(cums.totalM, { days: n }, {
+      checkpoints: trip.checkpoints,
+      boundaries: trip.boundaries || []
+    });
+    if (plan.length === 0) return;
+    let camp = 1;
+    for (const it of plan) {
+      if (it.source === "checkpoint" && it.id) {
+        onUpdateCheckpoint(it.id, { overnight: true });
+      } else {
+        onAddCheckpoint({
+          id: `cp_${id()}`,
+          name: `Camp ${camp}`,
+          note: "",
+          overnight: true,
+          source: "manual",
+          anchor: anchorAtRouteM(track.segments, cums, it.routeM)
+        });
+      }
+      camp += 1;
+    }
     setSplitDays("");
+  };
+
+  // Suggest: a (non-overnight) checkpoint at every segment boundary. Offered
+  // only when the track has a handful of segments (not e.g. 20+ OSM ways).
+  const boundaries = trip.boundaries || [];
+  const canAddSegments = boundaries.length >= 1 && boundaries.length <= 20;
+  const addSegmentStops = () => {
+    addMany(boundaries.map((routeM, i) => ({ routeM, name: `Stop ${i + 1}`, overnight: false })));
   };
 
   // Suggest: passes / high & low points from the elevation profile.
@@ -321,6 +349,15 @@ export default function TripWorkspace({
               >
                 Detect passes &amp; high points
               </button>
+              {canAddSegments && (
+                <button
+                  type="button"
+                  onClick={addSegmentStops}
+                  title="Add a checkpoint at each segment boundary"
+                >
+                  Add segment stops ({boundaries.length})
+                </button>
+              )}
             </div>
             <CheckpointList
               checkpoints={trip.checkpoints}

@@ -227,6 +227,16 @@ export function normalizeTrips(rawTrips, validPackIds, tracks) {
         };
       }
 
+      // Segment-boundary route distances (potential day-split anchors). Clamp
+      // to the track length when we have it; keep sorted + de-duped.
+      const totalM = stats.distanceM;
+      let boundaries = (Array.isArray(raw.boundaries) ? raw.boundaries : [])
+        .map((n) => parseNumber(n, NaN))
+        .filter((n) => Number.isFinite(n) && n > 1 && (!track || n < totalM - 1))
+        .sort((a, b) => a - b)
+        .slice(0, MAX_SEGMENTS);
+      boundaries = boundaries.filter((n, i) => i === 0 || n - boundaries[i - 1] > 1);
+
       const packId = raw.packId && validPackIds.has(raw.packId) ? raw.packId : "";
       return {
         id: raw.id || id(),
@@ -236,6 +246,7 @@ export function normalizeTrips(rawTrips, validPackIds, tracks) {
         createdAt: raw.createdAt || new Date().toISOString(),
         trackRef,
         stats,
+        boundaries,
         checkpoints
       };
     })

@@ -21,6 +21,7 @@ import {
   snapToTrack,
   anchorAtRouteM,
   joinContiguousSegments,
+  segmentBoundaryRouteMs,
   MAX_TRIPS,
   MAX_SEGMENTS,
   MAX_TRACK_STORAGE_BYTES,
@@ -892,7 +893,7 @@ export default function App() {
   }
 
   // Import a chosen candidate as a new trip (transactional: tracks first).
-  function createTripFromTrack({ name, track, checkpoints = [] }) {
+  function createTripFromTrack({ name, track, checkpoints = [], boundaries = [] }) {
     if (trips.length >= MAX_TRIPS) {
       window.alert(`You can have at most ${MAX_TRIPS} trips.`);
       return;
@@ -908,6 +909,7 @@ export default function App() {
       createdAt: new Date().toISOString(),
       trackRef: makeTrackRef(trackId, track, 1),
       stats: persistedStats(track),
+      boundaries,
       checkpoints
     };
     setTracks(nextTracks);
@@ -917,7 +919,7 @@ export default function App() {
   }
 
   // Replace a trip's track with a new immutable asset (add → swap → GC old).
-  function replaceTripTrack(tripId, { track, checkpoints }) {
+  function replaceTripTrack(tripId, { track, checkpoints, boundaries }) {
     const target = trips.find((t) => t.id === tripId);
     if (!target) return;
     const trackId = `trk_${id()}`;
@@ -929,6 +931,7 @@ export default function App() {
             ...t,
             trackRef: makeTrackRef(trackId, track, (t.trackRef?.revision || 1) + 1),
             stats: persistedStats(track),
+            boundaries: boundaries || t.boundaries || [],
             checkpoints: checkpoints || t.checkpoints
           }
         : t
@@ -994,9 +997,13 @@ export default function App() {
       .map((cid) => gi.candidates.find((c) => c.id === cid))
       .filter(Boolean);
     if (chosen.length === 0) return;
-    // Record each track's route distance BEFORE fusing (fusion preserves total
-    // distance, so these boundary offsets stay valid on the fused track).
-    const preCums = buildCumulatives(chosen.flatMap((c) => c.segments));
+    // Record boundary route distances BEFORE fusing (fusion preserves total
+    // distance, so these offsets stay valid on the fused track). Two kinds:
+    // per-track boundaries (for named overnight checkpoints) and ALL segment
+    // boundaries (persisted as trip.boundaries — potential day-split anchors).
+    const preSegments = chosen.flatMap((c) => c.segments);
+    const preCums = buildCumulatives(preSegments);
+    const segmentBoundaries = segmentBoundaryRouteMs(preSegments);
     const boundaryRouteM = [];
     let segCursor = 0;
     chosen.forEach((c, i) => {
@@ -1050,11 +1057,15 @@ export default function App() {
           preferRouteM: cp.anchor.routeDistanceM
         })
       }));
-      replaceTripTrack(gi.tripId, { track, checkpoints: sortCheckpoints([...resnapped, ...checkpoints]) });
+      replaceTripTrack(gi.tripId, {
+        track,
+        checkpoints: sortCheckpoints([...resnapped, ...checkpoints]),
+        boundaries: segmentBoundaries
+      });
     } else {
       // Single track → use its name; multiple merged → use the file name.
       const name = chosen.length === 1 ? chosen[0].name || gi.fileName : gi.fileName;
-      createTripFromTrack({ name, track, checkpoints: sortCheckpoints(checkpoints) });
+      createTripFromTrack({ name, track, checkpoints: sortCheckpoints(checkpoints), boundaries: segmentBoundaries });
     }
     setGpxImport(null);
   }

@@ -14,6 +14,8 @@ import {
   buildDays,
   joinContiguousSegments,
   evenSplitRouteM,
+  suggestDaySplits,
+  segmentBoundaryRouteMs,
   detectExtrema,
   MAX_TRACK_POINTS
 } from "../trail.js";
@@ -300,6 +302,50 @@ describe("evenSplitRouteM", () => {
   it("returns nothing when the route is shorter than one span", () => {
     expect(evenSplitRouteM(2000, { everyKm: 3 })).toEqual([]);
     expect(evenSplitRouteM(0, { days: 3 })).toEqual([]);
+  });
+});
+
+describe("segmentBoundaryRouteMs", () => {
+  it("returns interior boundary distances for a multi-segment track", () => {
+    const segs = [
+      { points: [[45, 6.0, 0], [45, 6.02, 0]] },
+      { points: [[45, 6.02, 0], [45, 6.04, 0]] },
+      { points: [[45, 6.04, 0], [45, 6.06, 0]] }
+    ];
+    const b = segmentBoundaryRouteMs(segs);
+    expect(b).toHaveLength(2);
+    expect(b[0]).toBeGreaterThan(0);
+    expect(b[1]).toBeGreaterThan(b[0]);
+  });
+  it("returns nothing for a single segment", () => {
+    expect(segmentBoundaryRouteMs([{ points: [[45, 6, 0], [45, 6.01, 0]] }])).toEqual([]);
+  });
+});
+
+describe("suggestDaySplits", () => {
+  it("snaps an even split to a nearby segment boundary", () => {
+    const plan = suggestDaySplits(12000, { days: 2 }, { boundaries: [6200] });
+    expect(plan).toHaveLength(1);
+    expect(plan[0].routeM).toBe(6200);
+    expect(plan[0].source).toBe("boundary");
+  });
+  it("prefers an overnight checkpoint over a boundary at the same distance", () => {
+    const plan = suggestDaySplits(12000, { days: 2 }, {
+      checkpoints: [{ id: "c1", overnight: true, anchor: { routeDistanceM: 6100 } }],
+      boundaries: [6050]
+    });
+    expect(plan[0].source).toBe("checkpoint");
+    expect(plan[0].id).toBe("c1");
+  });
+  it("falls back to the even position when no anchor is near", () => {
+    const plan = suggestDaySplits(12000, { days: 2 }, { boundaries: [500] });
+    expect(plan[0].routeM).toBe(6000);
+    expect(plan[0].source).toBe("even");
+  });
+  it("does not reuse the same anchor for two splits", () => {
+    const plan = suggestDaySplits(12000, { days: 3 }, { boundaries: [4000] });
+    const boundaryUses = plan.filter((p) => p.source === "boundary").length;
+    expect(boundaryUses).toBeLessThanOrEqual(1);
   });
 });
 
