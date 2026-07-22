@@ -605,6 +605,80 @@ function statsForRange(samples, startM, endM) {
   };
 }
 
+// Evenly-spaced interior route distances for a day split. Pass either a day
+// count (N → N-1 splits) or a target spacing in km. Returns [] when nothing fits.
+export function evenSplitRouteM(totalM, { days, everyKm } = {}) {
+  if (!Number.isFinite(totalM) || totalM <= 0) return [];
+  const out = [];
+  if (Number.isFinite(days) && days >= 2) {
+    for (let i = 1; i < Math.floor(days); i += 1) out.push(Math.round((totalM * i) / days));
+  } else if (Number.isFinite(everyKm) && everyKm > 0) {
+    for (let d = everyKm * 1000; d < totalM - 1; d += everyKm * 1000) out.push(Math.round(d));
+  }
+  return out.filter((r) => r > 1 && r < totalM - 1);
+}
+
+// True 1-D topographic prominence of a peak at index i: its height above the
+// highest saddle that separates it from any higher ground (or the lowest point
+// reached on a side if there is no higher ground that way).
+function peakProminence(eles, i) {
+  const h = eles[i];
+  let left = Infinity;
+  for (let k = i - 1; k >= 0; k -= 1) {
+    if (eles[k] > h) break;
+    if (eles[k] < left) left = eles[k];
+  }
+  let right = Infinity;
+  for (let k = i + 1; k < eles.length; k += 1) {
+    if (eles[k] > h) break;
+    if (eles[k] < right) right = eles[k];
+  }
+  if (left === Infinity) left = -Infinity; // peak sits at the start
+  if (right === Infinity) right = -Infinity; // …or the end
+  return h - Math.max(left, right);
+}
+
+// Detect topographic high/low points along the trail by 1-D prominence. Needs
+// elevation. Returns the most prominent first: [{ routeM, ele, kind }].
+export function detectExtrema(segments, cumulatives, { minProminenceM = 120, max = 12 } = {}) {
+  const { cumulativeBySegment, segmentOffsets } = cumulatives;
+  const pts = [];
+  segments.forEach((seg, s) => {
+    seg.points.forEach(([, , ele], i) => {
+      if (Number.isFinite(ele)) pts.push([segmentOffsets[s] + cumulativeBySegment[s][i], ele]);
+    });
+  });
+  if (pts.length < 3) return [];
+
+  const eles = smooth(pts.map((p) => p[1]));
+  const inv = eles.map((e) => -e); // for low points, prominence of the inverted profile
+
+  // Turning points (slope sign flips), collapsing flats.
+  const extrema = [];
+  let dir = 0;
+  for (let i = 1; i < eles.length; i += 1) {
+    const d = eles[i] - eles[i - 1];
+    if (d === 0) continue;
+    const s = d > 0 ? 1 : -1;
+    if (dir !== 0 && s !== dir) extrema.push({ i: i - 1, kind: dir > 0 ? "high" : "low" });
+    dir = s;
+  }
+  if (extrema.length === 0) return [];
+
+  const scored = extrema.map((e) => ({
+    routeM: Math.round(pts[e.i][0]),
+    ele: Math.round(pts[e.i][1]),
+    kind: e.kind,
+    prom: e.kind === "high" ? peakProminence(eles, e.i) : peakProminence(inv, e.i)
+  }));
+
+  return scored
+    .filter((e) => e.prom >= minProminenceM)
+    .sort((a, b) => b.prom - a.prom)
+    .slice(0, max)
+    .map(({ prom, ...rest }) => rest);
+}
+
 // Derive day segments from overnight checkpoints. Virtual Start/Finish always
 // bound the trip; only overnight checkpoints STRICTLY inside the route create a
 // boundary. Days are never persisted.

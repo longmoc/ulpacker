@@ -13,6 +13,8 @@ import {
   detectAntimeridian,
   buildDays,
   joinContiguousSegments,
+  evenSplitRouteM,
+  detectExtrema,
   MAX_TRACK_POINTS
 } from "../trail.js";
 
@@ -285,6 +287,41 @@ describe("joinContiguousSegments", () => {
   it("leaves a single segment untouched", () => {
     const segs = [{ points: [[45, 6, 1], [45.001, 6, 2]] }];
     expect(joinContiguousSegments(segs)).toBe(segs);
+  });
+});
+
+describe("evenSplitRouteM", () => {
+  it("splits into N-1 interior points for a day count", () => {
+    expect(evenSplitRouteM(12000, { days: 3 })).toEqual([4000, 8000]);
+  });
+  it("splits by target spacing", () => {
+    expect(evenSplitRouteM(10000, { everyKm: 3 })).toEqual([3000, 6000, 9000]);
+  });
+  it("returns nothing when the route is shorter than one span", () => {
+    expect(evenSplitRouteM(2000, { everyKm: 3 })).toEqual([]);
+    expect(evenSplitRouteM(0, { days: 3 })).toEqual([]);
+  });
+});
+
+describe("detectExtrema", () => {
+  it("finds a prominent high point and low point on a wave", () => {
+    // one segment: up to 2000, down to 1000, up to 1500
+    const pts = [];
+    const profile = [];
+    for (let i = 0; i <= 20; i += 1) profile.push(1000 + 1000 * Math.sin((Math.PI * i) / 20)); // hill to 2000
+    for (let i = 1; i <= 20; i += 1) profile.push(2000 - 1000 * (i / 20)); // down to 1000
+    for (let i = 1; i <= 20; i += 1) profile.push(1000 + 500 * (i / 20)); // up to 1500
+    profile.forEach((ele, i) => pts.push([45 + i * 0.001, 6, Math.round(ele)]));
+    const segments = [{ points: pts }];
+    const out = detectExtrema(segments, buildCumulatives(segments), { minProminenceM: 100 });
+    expect(out.some((e) => e.kind === "high")).toBe(true);
+    expect(out.some((e) => e.kind === "low")).toBe(true);
+    expect(out[0].prom).toBeUndefined(); // prom is stripped from the result
+  });
+
+  it("returns nothing without elevation", () => {
+    const segments = [{ points: [[45, 6, null], [45.001, 6, null], [45.002, 6, null]] }];
+    expect(detectExtrema(segments, buildCumulatives(segments))).toEqual([]);
   });
 });
 

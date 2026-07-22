@@ -989,8 +989,10 @@ export default function App() {
   function confirmGpxImport({ candidateIds, importWaypoints, addBoundaries }) {
     const gi = gpxImport;
     if (!gi) return;
-    const ids = new Set(candidateIds || []);
-    const chosen = gi.candidates.filter((c) => ids.has(c.id));
+    // Preserve the order the modal passed (the user may have reordered tracks).
+    const chosen = (candidateIds || [])
+      .map((cid) => gi.candidates.find((c) => c.id === cid))
+      .filter(Boolean);
     if (chosen.length === 0) return;
     // Record each track's route distance BEFORE fusing (fusion preserves total
     // distance, so these boundary offsets stay valid on the fused track).

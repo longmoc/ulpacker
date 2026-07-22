@@ -3744,3 +3744,58 @@ button[type="submit"]:active {
 .track-hint {
   color: var(--text-3);
 }
+
+.suggest-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+
+.suggest-label {
+  color: var(--text-3);
+}
+
+.suggest-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.suggest-group input {
+  width: 56px;
+  padding: 5px 8px;
+}
+
+.suggest-bar button {
+  width: auto;
+  padding: 5px 12px;
+  font-size: 0.83rem;
+}
+
+.gpx-candidate-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.gpx-reorder {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.gpx-reorder button {
+  width: 26px;
+  padding: 2px 0;
+  font-size: 0.85rem;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.gpx-reorder button:disabled {
+  opacity: 0.35;
+}

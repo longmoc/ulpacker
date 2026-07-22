@@ -1,6 +1,13 @@
 import React, { useMemo, useRef, useState } from "react";
 import { id } from "../../lib/util.js";
-import { anchorAtRouteM, buildCumulatives, buildDays, snapToTrack } from "../../lib/trail.js";
+import {
+  anchorAtRouteM,
+  buildCumulatives,
+  buildDays,
+  snapToTrack,
+  evenSplitRouteM,
+  detectExtrema
+} from "../../lib/trail.js";
 import ElevationProfile from "./ElevationProfile.jsx";
 import TrackShape from "./TrackShape.jsx";
 import CheckpointList from "./CheckpointList.jsx";
@@ -21,6 +28,7 @@ export default function TripWorkspace({
 }) {
   const replaceRef = useRef(null);
   const [addKm, setAddKm] = useState("");
+  const [splitDays, setSplitDays] = useState("");
   const [hoverRouteM, setHoverRouteM] = useState(null);
 
   const cums = useMemo(() => (track ? buildCumulatives(track.segments) : null), [track]);
@@ -71,6 +79,46 @@ export default function TripWorkspace({
     if (!Number.isFinite(km)) return;
     addAtRoute(Math.max(0, Math.min(totalKm, km)) * 1000);
     setAddKm("");
+  };
+
+  const addMany = (items) => {
+    for (const it of items) {
+      onAddCheckpoint({
+        id: `cp_${id()}`,
+        name: it.name,
+        note: "",
+        overnight: Boolean(it.overnight),
+        source: "manual",
+        anchor: anchorAtRouteM(track.segments, cums, it.routeM)
+      });
+    }
+  };
+
+  // Suggest: evenly split into N days (overnight camps).
+  const submitSplitDays = () => {
+    const n = parseInt(splitDays, 10);
+    if (!Number.isFinite(n) || n < 2) return;
+    const splits = evenSplitRouteM(cums.totalM, { days: n });
+    if (splits.length === 0) return;
+    addMany(splits.map((routeM, i) => ({ routeM, name: `Camp ${i + 1}`, overnight: true })));
+    setSplitDays("");
+  };
+
+  // Suggest: passes / high & low points from the elevation profile.
+  const hasEle = (trip.stats?.elevationCoverage || 0) > 0;
+  const suggestHighPoints = () => {
+    const ex = detectExtrema(track.segments, cums, { minProminenceM: 120 });
+    if (ex.length === 0) {
+      window.alert("No prominent high or low points found on this track.");
+      return;
+    }
+    addMany(
+      ex.map((e) => ({
+        routeM: e.routeM,
+        name: `${e.kind === "high" ? "High point" : "Low point"} ${e.ele} m`,
+        overnight: false
+      }))
+    );
   };
 
   const { stats } = trip;
@@ -202,6 +250,33 @@ export default function TripWorkspace({
                   Add
                 </button>
               </div>
+            </div>
+            <div className="suggest-bar">
+              <span className="suggest-label">Suggest:</span>
+              <span className="suggest-group">
+                Split into
+                <input
+                  type="number"
+                  min="2"
+                  max="30"
+                  value={splitDays}
+                  placeholder="N"
+                  onChange={(e) => setSplitDays(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submitSplitDays()}
+                />
+                days
+                <button type="button" onClick={submitSplitDays} disabled={splitDays === ""}>
+                  Add camps
+                </button>
+              </span>
+              <button
+                type="button"
+                onClick={suggestHighPoints}
+                disabled={!hasEle}
+                title={hasEle ? "" : "This track has no elevation data"}
+              >
+                Detect passes &amp; high points
+              </button>
             </div>
             <CheckpointList
               checkpoints={trip.checkpoints}
