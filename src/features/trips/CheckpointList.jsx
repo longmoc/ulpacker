@@ -1,5 +1,6 @@
 import React from "react";
-import { OFF_ROUTE_M, CHECKPOINT_KINDS, CHECKPOINT_KIND_KEYS } from "../../lib/trail.js";
+import { OFF_ROUTE_M } from "../../lib/trail.js";
+import KindPicker from "./KindPicker.jsx";
 
 const km = (m) => (m / 1000).toFixed(2);
 
@@ -14,21 +15,9 @@ export default function CheckpointList({ checkpoints, onUpdate, onDelete }) {
     <ul className="checkpoint-list">
       {checkpoints.map((cp) => {
         const offRoute = cp.anchor.offsetM > OFF_ROUTE_M;
-        const kind = CHECKPOINT_KINDS[cp.kind] ? cp.kind : "poi";
         return (
           <li key={cp.id} className="checkpoint-row">
-            <select
-              className={`cp-kind kind-${kind}`}
-              value={kind}
-              title={CHECKPOINT_KINDS[kind].label}
-              onChange={(e) => onUpdate(cp.id, { kind: e.target.value })}
-            >
-              {CHECKPOINT_KIND_KEYS.map((k) => (
-                <option key={k} value={k}>
-                  {CHECKPOINT_KINDS[k].emoji} {CHECKPOINT_KINDS[k].label}
-                </option>
-              ))}
-            </select>
+            <KindPicker value={cp.kind} onChange={(k) => onUpdate(cp.id, { kind: k })} />
             <input
               className="cp-name"
               value={cp.name}

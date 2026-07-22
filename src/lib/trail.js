@@ -23,6 +23,8 @@ export const METRICS_VERSION = 1;
 // The rest are informational markers shown on the map/profile.
 export const CHECKPOINT_KINDS = {
   overnight: { label: "Overnight", emoji: "⛺" },
+  refuge: { label: "Refuge / hotel", emoji: "🏨" },
+  food: { label: "Food", emoji: "🍴" },
   water: { label: "Water", emoji: "💧" },
   resupply: { label: "Resupply", emoji: "🛒" },
   pass: { label: "Pass / summit", emoji: "⛰️" },
@@ -46,10 +48,12 @@ export function classifyCheckpoint(name) {
   const s = (name || "").toLowerCase();
   if (/hazard|ladder|footbridge|exposed|cable|chain|danger|scree|\bford\b|crevasse|snowfield|rockfall/.test(s)) return "hazard";
   if (/resupply|supermarket|grocery|\bshop\b|\bstore\b|market|provision|\bgas\b|\bfuel\b/.test(s)) return "resupply";
+  if (/lunch|restaurant|\bfood\b|dining|caf[eé]|\bbar\b|snack|picnic|\beat\b|\bmeal\b|breakfast|dinner|buvette/.test(s)) return "food";
   if (/water|refill|fountain|spring|\bsource\b|potable|\beau\b/.test(s)) return "water";
   if (/viewpoint|panorama|balcony|belv[eé]d|overlook|vista|belvedere/.test(s)) return "viewpoint";
   if (/\bcol\b|\bpass\b|summit|weather gate|\bpeak\b|t[eê]te|aiguillette|\bcime\b/.test(s)) return "pass";
-  if (/camping|bivouac|bivacco|g[iî]te|dortoir|\bcamp\b|hostel|\bhut\b|\bdorm\b/.test(s)) return "overnight";
+  if (/refuge|rifugio|auberge|g[iî]te|hostel|hotel|\bhut\b|hospice|berghaus|lodge|\binn\b/.test(s)) return "refuge";
+  if (/camping|bivouac|bivacco|dortoir|\bcamp\b|\bdorm\b|\btent\b/.test(s)) return "overnight";
   return "poi";
 }
 

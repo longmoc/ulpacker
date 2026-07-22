@@ -67,7 +67,7 @@ export default function TrackMap({ track, checkpoints, onAddAt, highlight }) {
       const kind = CHECKPOINT_KINDS[cp.kind] ? cp.kind : "poi";
       const emoji = CHECKPOINT_KINDS[kind].emoji;
       const icon = L.divIcon({
-        className: `cp-marker cp-marker-${kind}`,
+        className: `cp-marker kind-${kind}`,
         html: `<span class="cp-marker-pin">${emoji}</span>`,
         iconSize: [28, 28],
         iconAnchor: [14, 14],

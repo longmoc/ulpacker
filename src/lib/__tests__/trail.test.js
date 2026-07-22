@@ -314,6 +314,8 @@ describe("classifyCheckpoint", () => {
     expect(classifyCheckpoint("Rest/water — Refuge des Mottets")).toBe("water");
     expect(classifyCheckpoint("Viewpoint — Mont de la Saxe balcony")).toBe("viewpoint");
     expect(classifyCheckpoint("Day 2 — Camping des Glaciers")).toBe("overnight");
+    expect(classifyCheckpoint("Lunch/rest — Refuge de Miage")).toBe("food");
+    expect(classifyCheckpoint("Backup shelter — Refuge de la Croix du Bonhomme")).toBe("refuge");
     expect(classifyCheckpoint("Route checkpoint — Dolonne")).toBe("poi");
     expect(classifyCheckpoint("")).toBe("poi");
   });

@@ -3853,30 +3853,69 @@ button[type="submit"]:active {
   }
 }
 
-/* Checkpoint categories (kinds) */
-.cp-kind {
-  width: 60px;
-  padding: 5px 4px;
-  flex: 0 0 auto;
-  border-left-width: 3px;
-  border-left-style: solid;
-  border-left-color: #5b6472;
+/* Checkpoint categories (kinds) — one colour variable per kind */
+.kind-overnight { --kc: #1b5e3f; }
+.kind-refuge    { --kc: #8a5a2b; }
+.kind-food      { --kc: #e06c00; }
+.kind-water     { --kc: #2b8fd6; }
+.kind-resupply  { --kc: #0d9488; }
+.kind-pass      { --kc: #6b7280; }
+.kind-viewpoint { --kc: #7c3aed; }
+.kind-hazard    { --kc: #b42318; }
+.kind-poi       { --kc: #5b6472; }
+
+/* Compact category picker (emoji-only collapsed, labels in the dropdown) */
+.kind-picker { position: relative; flex: 0 0 auto; }
+.kind-picker-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-2);
+  border-left: 3px solid var(--kc, #5b6472);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: none;
 }
-.cp-kind.kind-overnight { border-left-color: var(--accent); }
-.cp-kind.kind-water { border-left-color: #2b8fd6; }
-.cp-kind.kind-resupply { border-left-color: #b4690e; }
-.cp-kind.kind-pass { border-left-color: #6b7280; }
-.cp-kind.kind-viewpoint { border-left-color: #7c3aed; }
-.cp-kind.kind-hazard { border-left-color: #b42318; }
-.cp-kind.kind-poi { border-left-color: #5b6472; }
+.kind-emoji { font-size: 15px; line-height: 1; }
+.kind-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 60;
+  min-width: 170px;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 300px;
+  overflow: auto;
+}
+.kind-option {
+  width: 100%;
+  text-align: left;
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.kind-option:hover { background: var(--surface-2); }
+.kind-option.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 
 /* Profile + shape checkpoint dots, coloured by kind */
-.cp-dot.kind-water, .track-cp.kind-water { stroke: #2b8fd6; }
-.cp-dot.kind-resupply, .track-cp.kind-resupply { stroke: #b4690e; }
-.cp-dot.kind-pass, .track-cp.kind-pass { stroke: #6b7280; }
-.cp-dot.kind-viewpoint, .track-cp.kind-viewpoint { stroke: #7c3aed; }
-.cp-dot.kind-hazard, .track-cp.kind-hazard { stroke: #b42318; }
-.cp-dot.kind-poi, .track-cp.kind-poi { stroke: #5b6472; }
+.cp-dot, .track-cp { stroke: var(--kc, var(--accent)); }
+.cp-dot.overnight, .track-cp.overnight { fill: var(--kc); }
 
 /* Leaflet emoji markers */
 .cp-marker { background: none; border: none; }
@@ -3888,15 +3927,8 @@ button[type="submit"]:active {
   height: 28px;
   border-radius: 50%;
   background: #fff;
-  border: 2px solid #5b6472;
+  border: 2px solid var(--kc, #5b6472);
   box-shadow: 0 1px 3px rgba(16, 17, 26, 0.4);
   font-size: 15px;
   line-height: 1;
 }
-.cp-marker-overnight .cp-marker-pin { border-color: var(--accent); }
-.cp-marker-water .cp-marker-pin { border-color: #2b8fd6; }
-.cp-marker-resupply .cp-marker-pin { border-color: #b4690e; }
-.cp-marker-pass .cp-marker-pin { border-color: #6b7280; }
-.cp-marker-viewpoint .cp-marker-pin { border-color: #7c3aed; }
-.cp-marker-hazard .cp-marker-pin { border-color: #b42318; }
-.cp-marker-poi .cp-marker-pin { border-color: #5b6472; }
