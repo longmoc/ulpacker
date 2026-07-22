@@ -96,6 +96,15 @@ describe("parseGpx", () => {
     expect(candidates[0].segments[0].points).toHaveLength(2);
   });
 
+  it("flags candidates with a real <name> vs. positional fallback", () => {
+    const withName = gpxDoc(`<trk><name>Stage 1</name><trkseg>${trkpt(45, 6, 1)}${trkpt(45.001, 6, 2)}</trkseg></trk>`);
+    expect(parseGpx(withName).candidates[0].named).toBe(true);
+    const noName = gpxDoc(`<trk><trkseg>${trkpt(45, 6, 1)}${trkpt(45.001, 6, 2)}</trkseg></trk>`);
+    const c = parseGpx(noName).candidates[0];
+    expect(c.named).toBe(false);
+    expect(c.name).toMatch(/track/i);
+  });
+
   it("ignores namespace prefixes (reads by localName)", () => {
     const xml =
       `<?xml version="1.0"?><g:gpx xmlns:g="http://www.topografix.com/GPX/1/1">` +

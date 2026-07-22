@@ -19,6 +19,7 @@ import {
   buildCumulatives,
   parseGpx,
   snapToTrack,
+  anchorAtRouteM,
   joinContiguousSegments,
   MAX_TRIPS,
   MAX_SEGMENTS,
@@ -985,12 +986,21 @@ export default function App() {
 
   // Commit the staged import: merge the chosen candidates' segments in file
   // order (gaps between tracks stay segment breaks, never phantom distance).
-  function confirmGpxImport({ candidateIds, importWaypoints }) {
+  function confirmGpxImport({ candidateIds, importWaypoints, addBoundaries }) {
     const gi = gpxImport;
     if (!gi) return;
     const ids = new Set(candidateIds || []);
     const chosen = gi.candidates.filter((c) => ids.has(c.id));
     if (chosen.length === 0) return;
+    // Record each track's route distance BEFORE fusing (fusion preserves total
+    // distance, so these boundary offsets stay valid on the fused track).
+    const preCums = buildCumulatives(chosen.flatMap((c) => c.segments));
+    const boundaryRouteM = [];
+    let segCursor = 0;
+    chosen.forEach((c, i) => {
+      if (i > 0) boundaryRouteM.push({ routeM: preCums.segmentOffsets[segCursor], endsName: chosen[i - 1].name });
+      segCursor += c.segments.length;
+    });
     // Fuse touching segments (contiguous OSM ways) so a split route doesn't show
     // phantom gaps; genuinely separate segments stay separate.
     let segments = joinContiguousSegments(chosen.flatMap((c) => c.segments));
@@ -1011,6 +1021,22 @@ export default function App() {
         source: "waypoint",
         anchor: snapToTrack(track.segments, wp.lat, wp.lng, { cumulatives: cums })
       }));
+    }
+
+    // One overnight checkpoint at each track boundary, named after the stage that
+    // ends there (destination-style naming is common; the user can rename).
+    if (addBoundaries) {
+      for (const b of boundaryRouteM) {
+        if (b.routeM <= 1 || b.routeM >= cums.totalM - 1) continue;
+        checkpoints.push({
+          id: `cp_${id()}`,
+          name: b.endsName,
+          note: "",
+          overnight: true,
+          source: "manual",
+          anchor: anchorAtRouteM(track.segments, cums, b.routeM)
+        });
+      }
     }
 
     if (gi.mode === "replace" && gi.tripId) {

@@ -129,7 +129,16 @@ export function parseGpx(xmlText, limits = {}) {
       cleaned.length = maxSegments;
       warnings.push(`"${name || kind}" had more than ${maxSegments} segments; extra dropped.`);
     }
-    candidates.push({ id: id(), kind, name: clampText(name) || `${kind} ${candidates.length + 1}`, segments: cleaned });
+    const trimmed = clampText(name);
+    // `named` marks a real <name> from the file (vs. our positional fallback),
+    // so the UI can decide whether track names are meaningful stage labels.
+    candidates.push({
+      id: id(),
+      kind,
+      named: Boolean(trimmed),
+      name: trimmed || `${kind} ${candidates.length + 1}`,
+      segments: cleaned
+    });
   };
 
   // Tracks: one candidate per <trk>, one segment per <trkseg>.

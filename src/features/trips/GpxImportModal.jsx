@@ -10,9 +10,18 @@ export default function GpxImportModal({ data, onConfirm, onClose }) {
   // Default to all candidates selected; they merge in file order.
   const [selectedIds, setSelectedIds] = useState(() => candidates.map((c) => c.id));
   const [importWaypoints, setImportWaypoints] = useState(waypoints.length > 0);
+  const [addBoundaries, setAddBoundaries] = useState(true);
 
   // Keep file order regardless of toggle order.
   const chosen = candidates.filter((c) => selectedIds.includes(c.id));
+
+  // Offer boundary checkpoints only when merging ≥2 tracks that carry real,
+  // distinct names (i.e. look like stages), never for unnamed/duplicate ways.
+  const boundaryEligible =
+    mode === "create" &&
+    chosen.length >= 2 &&
+    chosen.every((c) => c.named) &&
+    new Set(chosen.map((c) => c.name)).size === chosen.length;
   const mergedSegments = chosen.flatMap((c) => c.segments);
   const stats = useMemo(
     () => (mergedSegments.length ? buildTrackStats(mergedSegments) : null),
@@ -80,6 +89,17 @@ export default function GpxImportModal({ data, onConfirm, onClose }) {
           </label>
         )}
 
+        {boundaryEligible && (
+          <label className="gpx-waypoints">
+            <input
+              type="checkbox"
+              checked={addBoundaries}
+              onChange={(e) => setAddBoundaries(e.target.checked)}
+            />
+            Add an overnight checkpoint at each track boundary ({chosen.length - 1}, named from the tracks)
+          </label>
+        )}
+
         {warnings.length > 0 && (
           <ul className="gpx-warnings">
             {warnings.map((w, i) => (
@@ -96,7 +116,13 @@ export default function GpxImportModal({ data, onConfirm, onClose }) {
             type="button"
             className="primary"
             disabled={!canConfirm}
-            onClick={() => onConfirm({ candidateIds: chosen.map((c) => c.id), importWaypoints })}
+            onClick={() =>
+              onConfirm({
+                candidateIds: chosen.map((c) => c.id),
+                importWaypoints,
+                addBoundaries: addBoundaries && boundaryEligible
+              })
+            }
           >
             {mode === "replace" ? "Replace" : chosen.length > 1 ? `Create trip (${chosen.length} tracks)` : "Create trip"}
           </button>
