@@ -61,8 +61,16 @@ export function useGoogleSync({ buildData, applyCloud, updatedAt }) {
       const cloud = await driveCall((token) => downloadData(token));
       const { use, data } = resolveSync(buildRef.current(), cloud);
       if (use === "cloud") {
+        // Suppress the debounced push that applying cloud state would trigger.
+        // If apply throws (e.g. a quota error while writing the pulled tracks),
+        // reset the flag so we don't silently swallow the next real push.
         skipNextPush.current = true;
-        applyRef.current(data);
+        try {
+          applyRef.current(data);
+        } catch (applyError) {
+          skipNextPush.current = false;
+          throw applyError;
+        }
       } else {
         await driveCall((token) => uploadData(token, buildRef.current()));
       }

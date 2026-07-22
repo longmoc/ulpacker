@@ -1,5 +1,19 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { STORAGE_KEY, readStorage, normalizeData, defaultData } from "../storage.js";
+import {
+  STORAGE_KEY,
+  LEGACY_STORAGE_KEY_V3,
+  TRACKS_KEY,
+  SCHEMA_VERSION,
+  readStorage,
+  readLocalBundle,
+  normalizeData,
+  normalizeTrips,
+  sanitizeTracks,
+  buildPortableBundle,
+  applyPortableBundle,
+  gcTracks,
+  defaultData
+} from "../storage.js";
 
 beforeEach(() => {
   const store = new Map();
@@ -152,5 +166,117 @@ describe("normalizeData", () => {
 describe("defaultData", () => {
   it("returns fresh objects on each call (no shared references)", () => {
     expect(defaultData()).not.toBe(defaultData());
+  });
+
+  it("includes schemaVersion 4 and an empty trips array", () => {
+    const d = defaultData();
+    expect(d.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(d.trips).toEqual([]);
+  });
+});
+
+const track = () => ({ segments: [{ points: [[45, 6, 100], [45, 6.01, 110], [45, 6.02, 120]] }] });
+
+const tripWith = (trackId, extra = {}) => ({
+  id: "trip1",
+  name: "TMB",
+  packId: "",
+  trackRef: { id: trackId, revision: 1 },
+  stats: { distanceM: 0 },
+  checkpoints: [],
+  ...extra
+});
+
+describe("normalizeTrips", () => {
+  it("recomputes canonical stats from geometry, ignoring cached values", () => {
+    const tracks = { trk_a: track() };
+    const forged = tripWith("trk_a", { stats: { distanceM: 999999, ascentM: 999999 } });
+    const [trip] = normalizeTrips([forged], new Set(), tracks);
+    expect(trip.stats.distanceM).toBeLessThan(5000);
+    expect(trip.stats.metricsVersion).toBe(1);
+    expect(trip.trackRef.pointCount).toBe(3);
+    expect(trip.trackRef.segmentCount).toBe(1);
+  });
+
+  it("keeps a trip whose track asset is missing (not dropped)", () => {
+    const [trip] = normalizeTrips([tripWith("gone")], new Set(), {});
+    expect(trip).toBeTruthy();
+    expect(trip.trackRef.id).toBe("gone");
+  });
+
+  it("resets packId to '' when the linked pack does not exist", () => {
+    const [trip] = normalizeTrips([tripWith("trk_a", { packId: "nope" })], new Set(), { trk_a: track() });
+    expect(trip.packId).toBe("");
+  });
+
+  it("clamps a checkpoint anchor to the real track length and recomputes routeDistanceM", () => {
+    const tracks = { trk_a: track() };
+    const cp = {
+      id: "c1", name: "Camp", overnight: true,
+      anchor: { segmentIndex: 5, alongSegmentM: 99999, routeDistanceM: 99999, lat: 45, lng: 6.01 }
+    };
+    const [trip] = normalizeTrips([tripWith("trk_a", { checkpoints: [cp] })], new Set(), tracks);
+    expect(trip.checkpoints[0].anchor.segmentIndex).toBe(0);
+    expect(trip.checkpoints[0].anchor.routeDistanceM).toBeLessThan(5000);
+  });
+
+  it("enforces the MAX_TRIPS cap", () => {
+    const many = Array.from({ length: 30 }, (_, i) => tripWith("trk_a", { id: `t${i}` }));
+    expect(normalizeTrips(many, new Set(), { trk_a: track() }).length).toBeLessThanOrEqual(20);
+  });
+});
+
+describe("sanitizeTracks", () => {
+  it("drops segments with fewer than two valid points", () => {
+    const out = sanitizeTracks({ a: { segments: [{ points: [[45, 6, 1]] }, { points: [[45, 6, 1], [45.001, 6, 2]] }] } });
+    expect(out.a.segments).toHaveLength(1);
+  });
+
+  it("drops out-of-range coordinates", () => {
+    const out = sanitizeTracks({ a: { segments: [{ points: [[999, 6, 1], [45, 6, 1], [45.001, 6, 2]] }] } });
+    expect(out.a.segments[0].points).toHaveLength(2);
+  });
+});
+
+describe("bundle codec", () => {
+  it("round-trips a doc + tracks through build/apply and GCs orphans", () => {
+    const doc = { ...defaultData(), trips: [tripWith("trk_a")], updatedAt: "2026-01-01T00:00:00Z" };
+    const tracks = { trk_a: track(), trk_orphan: track() };
+    const bundle = buildPortableBundle(doc, tracks);
+    const applied = applyPortableBundle(bundle);
+    expect(applied.doc.trips).toHaveLength(1);
+    expect(applied.tracks.trk_a).toBeTruthy();
+    expect(applied.tracks.trk_orphan).toBeUndefined(); // orphan GC'd
+  });
+
+  it("gcTracks keeps only referenced assets", () => {
+    const kept = gcTracks([{ trackRef: { id: "keep" } }], { keep: track(), drop: track() });
+    expect(kept.keep).toBeTruthy();
+    expect(kept.drop).toBeUndefined();
+  });
+});
+
+describe("readLocalBundle migration", () => {
+  it("migrates v3 → v4 without bumping updatedAt and leaves v3 in place", () => {
+    const v3 = { gears: defaultData().gears, packs: defaultData().packs, packItems: [], updatedAt: "2026-05-01T00:00:00Z" };
+    localStorage.setItem(LEGACY_STORAGE_KEY_V3, JSON.stringify(v3));
+    const { doc, migrated } = readLocalBundle();
+    expect(migrated).toBe(true);
+    expect(doc.schemaVersion).toBe(SCHEMA_VERSION);
+    expect(doc.trips).toEqual([]);
+    expect(doc.updatedAt).toBe("2026-05-01T00:00:00Z"); // NOT bumped
+    expect(localStorage.getItem(LEGACY_STORAGE_KEY_V3)).toBeTruthy(); // kept for rollback
+  });
+
+  it("preserves an empty updatedAt through migration (never overwrites cloud on first sign-in)", () => {
+    const v3 = { gears: defaultData().gears, packs: defaultData().packs, packItems: [] };
+    localStorage.setItem(LEGACY_STORAGE_KEY_V3, JSON.stringify(v3));
+    expect(readLocalBundle().doc.updatedAt).toBe("");
+  });
+
+  it("prefers v4 when present", () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...defaultData(), updatedAt: "2026-06-01T00:00:00Z" }));
+    localStorage.setItem(LEGACY_STORAGE_KEY_V3, JSON.stringify({ gears: defaultData().gears, packs: [], packItems: [], updatedAt: "2020-01-01T00:00:00Z" }));
+    expect(readLocalBundle().doc.updatedAt).toBe("2026-06-01T00:00:00Z");
   });
 });

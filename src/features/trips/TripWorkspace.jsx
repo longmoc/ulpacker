@@ -1,0 +1,166 @@
+import React, { useMemo, useRef } from "react";
+import { id } from "../../lib/util.js";
+import { anchorAtRouteM, buildCumulatives, buildDays } from "../../lib/trail.js";
+import ElevationProfile from "./ElevationProfile.jsx";
+import TrackShape from "./TrackShape.jsx";
+import CheckpointList from "./CheckpointList.jsx";
+import ItineraryDays from "./ItineraryDays.jsx";
+
+const km = (m) => (m / 1000).toFixed(1);
+
+export default function TripWorkspace({
+  trip,
+  track,
+  packs,
+  onUpdateTrip,
+  onDeleteTrip,
+  onReplaceGpx,
+  onAddCheckpoint,
+  onUpdateCheckpoint,
+  onDeleteCheckpoint
+}) {
+  const replaceRef = useRef(null);
+
+  const dayCount = useMemo(() => {
+    if (!track) return 0;
+    const cumulatives = buildCumulatives(track.segments);
+    return buildDays({ checkpoints: trip?.checkpoints || [], segments: track.segments, cumulatives }).days.length;
+  }, [trip, track]);
+
+  if (!trip) {
+    return (
+      <div className="trip-empty">
+        <p>Select a trip, or import a GPX file to start planning a route.</p>
+      </div>
+    );
+  }
+
+  const handleReplaceInput = (e) => {
+    const file = e.target.files?.[0];
+    if (file) onReplaceGpx(file);
+    e.target.value = "";
+  };
+
+  const addAtRoute = (routeM) => {
+    const cumulatives = buildCumulatives(track.segments);
+    const anchor = anchorAtRouteM(track.segments, cumulatives, routeM);
+    onAddCheckpoint({ id: `cp_${id()}`, name: "", note: "", overnight: false, source: "manual", anchor });
+  };
+
+  const { stats } = trip;
+
+  return (
+    <div className="trip-workspace">
+      <div className="workspace-titles trip-titles">
+        <input
+          className="trip-name-input"
+          value={trip.name}
+          onChange={(e) => onUpdateTrip({ name: e.target.value })}
+          placeholder="Trip name"
+        />
+        <input
+          className="trip-desc-input"
+          value={trip.description}
+          onChange={(e) => onUpdateTrip({ description: e.target.value })}
+          placeholder="Description"
+        />
+        <div className="trip-actions">
+          <label className="trip-pack-link">
+            Pack:
+            <select value={trip.packId} onChange={(e) => onUpdateTrip({ packId: e.target.value })}>
+              <option value="">No pack</option>
+              {packs.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button type="button" onClick={() => replaceRef.current?.click()}>
+            Replace GPX
+          </button>
+          <input
+            ref={replaceRef}
+            type="file"
+            accept=".gpx,application/gpx+xml,application/xml,text/xml"
+            hidden
+            onChange={handleReplaceInput}
+          />
+          <button
+            type="button"
+            className="danger"
+            onClick={() => window.confirm(`Delete trip "${trip.name}"?`) && onDeleteTrip()}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+
+      {!track ? (
+        <div className="track-missing">
+          <p>This trip's track data is missing. Re-import a GPX file to restore it.</p>
+          <button type="button" className="primary" onClick={() => replaceRef.current?.click()}>
+            Re-import GPX
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="summary-grid trip-summary">
+            <div className="summary-card">
+              <small>Distance</small>
+              <strong>{km(stats.distanceM)} km</strong>
+            </div>
+            <div className="summary-card">
+              <small>Ascent</small>
+              <strong>{stats.ascentM != null ? `+${stats.ascentM} m` : "—"}</strong>
+            </div>
+            <div className="summary-card">
+              <small>Descent</small>
+              <strong>{stats.descentM != null ? `−${stats.descentM} m` : "—"}</strong>
+            </div>
+            <div className="summary-card">
+              <small>High / Low</small>
+              <strong>{stats.maxEle != null ? `${stats.maxEle} / ${stats.minEle} m` : "—"}</strong>
+            </div>
+            <div className="summary-card">
+              <small>Days</small>
+              <strong>{dayCount}</strong>
+            </div>
+            <div className="summary-card">
+              <small>Track</small>
+              <strong>
+                {trip.trackRef.pointCount.toLocaleString()} pts · ~{Math.round(trip.trackRef.sizeBytes / 1024)} KB
+              </strong>
+            </div>
+          </div>
+
+          {stats.elevationCoverage > 0 && stats.elevationCoverage < 1 && (
+            <p className="status warn">
+              Partial elevation data ({Math.round(stats.elevationCoverage * 100)}% of points) — ascent/descent
+              are approximate.
+            </p>
+          )}
+
+          <div className="trip-graphics">
+            <ElevationProfile track={track} checkpoints={trip.checkpoints} onAddAt={addAtRoute} />
+            <TrackShape track={track} checkpoints={trip.checkpoints} />
+          </div>
+
+          <section className="trip-section">
+            <h3>Checkpoints</h3>
+            <CheckpointList
+              checkpoints={trip.checkpoints}
+              onUpdate={onUpdateCheckpoint}
+              onDelete={onDeleteCheckpoint}
+            />
+          </section>
+
+          <section className="trip-section">
+            <h3>Itinerary</h3>
+            <ItineraryDays trip={trip} track={track} />
+          </section>
+        </>
+      )}
+    </div>
+  );
+}

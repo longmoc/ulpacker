@@ -1,7 +1,12 @@
 // Read/write a single JSON file in the user's private Drive appDataFolder.
 // The app can only see this hidden folder, never the user's other files.
 
-const FILE_NAME = "ulpacker.json";
+// v4 uses a NEW Drive file. An old client build only ever reads/writes the v3
+// file, so it can never pull-then-push the v4 bundle and strip Trips. On first
+// v4 sync we fall back to reading the v3 file once (migration); we never write
+// back to it.
+const FILE_NAME = "ulpacker-v4.json";
+const LEGACY_FILE_NAME_V3 = "ulpacker.json";
 const API = "https://www.googleapis.com/drive/v3";
 const UPLOAD = "https://www.googleapis.com/upload/drive/v3";
 
@@ -10,8 +15,8 @@ function permissionError() {
   return Object.assign(new Error("permission"), { code: "permission" });
 }
 
-async function findFileId(token) {
-  const query = encodeURIComponent(`name='${FILE_NAME}'`);
+async function findFileId(token, name = FILE_NAME) {
+  const query = encodeURIComponent(`name='${name}'`);
   const res = await fetch(
     `${API}/files?spaces=appDataFolder&q=${query}&fields=files(id,modifiedTime)&pageSize=1`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -22,9 +27,7 @@ async function findFileId(token) {
   return data.files?.[0]?.id || null;
 }
 
-export async function downloadData(token) {
-  const id = await findFileId(token);
-  if (!id) return null;
+async function fetchContent(token, id) {
   const res = await fetch(`${API}/files/${id}?alt=media`, {
     headers: { Authorization: `Bearer ${token}` }
   });
@@ -33,8 +36,18 @@ export async function downloadData(token) {
   return res.json();
 }
 
+export async function downloadData(token) {
+  const v4Id = await findFileId(token, FILE_NAME);
+  if (v4Id) return fetchContent(token, v4Id);
+  // Migration: read the legacy v3 file once; the app normalizes it and the next
+  // push creates the v4 file (leaving v3 untouched for rollback).
+  const v3Id = await findFileId(token, LEGACY_FILE_NAME_V3);
+  if (v3Id) return fetchContent(token, v3Id);
+  return null;
+}
+
 export async function uploadData(token, data) {
-  const id = await findFileId(token);
+  const id = await findFileId(token, FILE_NAME);
   const body = JSON.stringify(data);
 
   if (id) {

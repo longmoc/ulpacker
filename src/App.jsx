@@ -4,9 +4,30 @@ import { id, parseNumber, normalizeWeightType, normalizeText, gramsToKg, reorder
 import { normalizeCategories, primaryCategory, mergeOrCreateGear, nextPurchase } from "./lib/gear.js";
 import { parseLighterpackCsv, parseLighterpackHtml, mapImportedEntry, packToCsv } from "./lib/import.js";
 import { buildPieSegments, describeDonutArc } from "./lib/chart.js";
-import { STORAGE_KEY, readStorage, normalizeData, defaultData } from "./lib/storage.js";
+import {
+  STORAGE_KEY,
+  TRACKS_KEY,
+  SCHEMA_VERSION,
+  readLocalBundle,
+  buildPortableBundle,
+  applyPortableBundle,
+  gcTracks,
+  defaultData
+} from "./lib/storage.js";
+import {
+  buildTrackStats,
+  buildCumulatives,
+  parseGpx,
+  snapToTrack,
+  MAX_TRIPS,
+  MAX_TRACK_STORAGE_BYTES,
+  MAX_GPX_BYTES
+} from "./lib/trail.js";
 import { useGoogleSync } from "./hooks/useGoogleSync.js";
 import Landing from "./components/Landing.jsx";
+import TripsSidebar from "./features/trips/TripsSidebar.jsx";
+import TripWorkspace from "./features/trips/TripWorkspace.jsx";
+import GpxImportModal from "./features/trips/GpxImportModal.jsx";
 import logoUrl from "./logo.png";
 
 // Currency symbol shown before the number.
@@ -75,17 +96,6 @@ function syncLabel(status) {
   if (status === "permission") return "Drive access needed";
   if (status === "error") return "Sync error";
   return "";
-}
-
-// Empty string (epoch 0) when nothing was ever saved, so default/unedited local
-// data never wins last-write-wins against real cloud data on first sign-in.
-// A real timestamp is only set once the user actually edits something.
-function readInitialUpdatedAt() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}").updatedAt || "";
-  } catch {
-    return "";
-  }
 }
 
 function createEmptyDraft(category = "") {
@@ -632,22 +642,31 @@ function PackHoverPreview({ pack, pos, weights }) {
 }
 
 export default function App() {
-  const initial = readStorage();
+  const initial = readLocalBundle();
 
-  const [gears, setGears] = useState(initial.gears);
-  const [packs, setPacks] = useState(initial.packs);
-  const [packItems, setPackItems] = useState(initial.packItems);
-  const [activePackId, setActivePackId] = useState(initial.packs[0]?.id || "");
+  const [gears, setGears] = useState(initial.doc.gears);
+  const [packs, setPacks] = useState(initial.doc.packs);
+  const [packItems, setPackItems] = useState(initial.doc.packItems);
+  const [trips, setTrips] = useState(initial.doc.trips);
+  const [tracks, setTracks] = useState(initial.tracks);
+  const [activePackId, setActivePackId] = useState(initial.doc.packs[0]?.id || "");
+  const [activeTripId, setActiveTripId] = useState(initial.doc.trips[0]?.id || "");
+  const [gpxImport, setGpxImport] = useState(null); // staged GPX preview modal
   const [dragOverIndex, setDragOverIndex] = useState(null);
-  const [updatedAt, setUpdatedAt] = useState(readInitialUpdatedAt);
+  const [updatedAt, setUpdatedAt] = useState(initial.doc.updatedAt || "");
   const [entered, setEntered] = useState(
     () =>
       localStorage.getItem("ulpacker.entered") === "1" ||
       localStorage.getItem("ulpacker.googleSignedIn") === "1"
   );
   const updatedAtRef = useRef(updatedAt);
-  const lastSavedRef = useRef(JSON.stringify({ gears: initial.gears, packs: initial.packs, packItems: initial.packItems }));
+  const lastSavedRef = useRef(
+    JSON.stringify({ gears: initial.doc.gears, packs: initial.doc.packs, packItems: initial.doc.packItems, trips: initial.doc.trips })
+  );
   const appliedUpdatedAt = useRef(null);
+  // Set true right after we apply cloud/import data so the doc-save effect does
+  // NOT immediately re-persist the tracks map (already written by the apply).
+  const skipTrackWrite = useRef(false);
 
   const [newPack, setNewPack] = useState({ name: "" });
   const [newGear, setNewGear] = useState(blankNewGear);
@@ -763,7 +782,7 @@ export default function App() {
   }, [activePackId]);
 
   useEffect(() => {
-    const serialized = JSON.stringify({ gears, packs, packItems });
+    const serialized = JSON.stringify({ gears, packs, packItems, trips });
     let ts = updatedAtRef.current;
     if (serialized !== lastSavedRef.current) {
       // Real change: bump the timestamp (or keep a just-applied cloud one).
@@ -773,20 +792,53 @@ export default function App() {
       updatedAtRef.current = ts;
       setUpdatedAt(ts);
     }
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ gears, packs, packItems, updatedAt: ts }));
-  }, [gears, packs, packItems]);
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ schemaVersion: SCHEMA_VERSION, gears, packs, packItems, trips, updatedAt: ts })
+    );
+  }, [gears, packs, packItems, trips]);
+
+  // Persist the cold tracks map. Returns false (and leaves the previous value
+  // intact) on quota failure, so callers can abort a track import transactionally.
+  function persistTracks(nextTracks) {
+    try {
+      const body = JSON.stringify(nextTracks);
+      if (body.length > MAX_TRACK_STORAGE_BYTES) {
+        window.alert(
+          `Track store too large (~${Math.round(body.length / 1024)} KB, limit ${Math.round(
+            MAX_TRACK_STORAGE_BYTES / 1024
+          )} KB). Import cancelled.`
+        );
+        return false;
+      }
+      localStorage.setItem(TRACKS_KEY, body);
+      return true;
+    } catch (e) {
+      window.alert("Storage is full — the track is too large to save. Import cancelled.");
+      return false;
+    }
+  }
 
   function applyCloud(cloud) {
-    const norm = normalizeData(cloud) || defaultData();
-    appliedUpdatedAt.current = cloud?.updatedAt || new Date().toISOString();
+    const applied = applyPortableBundle(cloud);
+    const norm = applied ? applied.doc : { ...defaultData(), updatedAt: new Date().toISOString() };
+    const nextTracks = applied ? applied.tracks : {};
+    // Write the pulled tracks first so the doc never references a missing asset;
+    // if it throws, useGoogleSync resets skipNextPush and surfaces the error.
+    localStorage.setItem(TRACKS_KEY, JSON.stringify(nextTracks));
+    appliedUpdatedAt.current = norm.updatedAt || new Date().toISOString();
     setGears(norm.gears);
     setPacks(norm.packs);
     setPackItems(norm.packItems);
+    setTracks(nextTracks);
+    setTrips(norm.trips);
     setActivePackId((prev) => (norm.packs.some((pack) => pack.id === prev) ? prev : norm.packs[0]?.id || ""));
+    setActiveTripId((prev) => (norm.trips.some((trip) => trip.id === prev) ? prev : norm.trips[0]?.id || ""));
   }
 
   const sync = useGoogleSync({
-    buildData: () => ({ gears, packs, packItems, updatedAt }),
+    buildData: () =>
+      buildPortableBundle({ schemaVersion: SCHEMA_VERSION, gears, packs, packItems, trips, updatedAt }, tracks),
     applyCloud,
     updatedAt
   });
@@ -794,6 +846,179 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("ulpacker.settings", JSON.stringify({ hideZeroQty, sidebarOpen, showPrice }));
   }, [hideZeroQty, sidebarOpen, showPrice]);
+
+  // Unlink trips from a pack that no longer exists (does not delete the trip).
+  useEffect(() => {
+    const validPackIds = new Set(packs.map((pack) => pack.id));
+    setTrips((prev) => {
+      let changed = false;
+      const next = prev.map((trip) => {
+        if (trip.packId && !validPackIds.has(trip.packId)) {
+          changed = true;
+          return { ...trip, packId: "" };
+        }
+        return trip;
+      });
+      return changed ? next : prev;
+    });
+  }, [packs]);
+
+  // --- Trip CRUD ---------------------------------------------------------
+
+  function persistedStats(track) {
+    const s = buildTrackStats(track.segments);
+    return {
+      distanceM: s.distanceM,
+      ascentM: s.ascentM,
+      descentM: s.descentM,
+      minEle: s.minEle,
+      maxEle: s.maxEle,
+      elevationCoverage: s.elevationCoverage,
+      metricsVersion: s.metricsVersion
+    };
+  }
+
+  function makeTrackRef(trackId, track, revision) {
+    return {
+      id: trackId,
+      revision,
+      pointCount: track.segments.reduce((n, seg) => n + seg.points.length, 0),
+      sizeBytes: JSON.stringify(track).length,
+      segmentCount: track.segments.length
+    };
+  }
+
+  // Import a chosen candidate as a new trip (transactional: tracks first).
+  function createTripFromTrack({ name, track, checkpoints = [] }) {
+    if (trips.length >= MAX_TRIPS) {
+      window.alert(`You can have at most ${MAX_TRIPS} trips.`);
+      return;
+    }
+    const trackId = `trk_${id()}`;
+    const nextTracks = { ...tracks, [trackId]: track };
+    if (!persistTracks(nextTracks)) return;
+    const trip = {
+      id: `trip_${id()}`,
+      name: name || "Untitled trip",
+      description: "",
+      packId: "",
+      createdAt: new Date().toISOString(),
+      trackRef: makeTrackRef(trackId, track, 1),
+      stats: persistedStats(track),
+      checkpoints
+    };
+    setTracks(nextTracks);
+    setTrips((prev) => [...prev, trip]);
+    setActiveTripId(trip.id);
+    setView("trips");
+  }
+
+  // Replace a trip's track with a new immutable asset (add → swap → GC old).
+  function replaceTripTrack(tripId, { track, checkpoints }) {
+    const target = trips.find((t) => t.id === tripId);
+    if (!target) return;
+    const trackId = `trk_${id()}`;
+    const withNew = { ...tracks, [trackId]: track };
+    if (!persistTracks(withNew)) return;
+    const nextTrips = trips.map((t) =>
+      t.id === tripId
+        ? {
+            ...t,
+            trackRef: makeTrackRef(trackId, track, (t.trackRef?.revision || 1) + 1),
+            stats: persistedStats(track),
+            checkpoints: checkpoints || t.checkpoints
+          }
+        : t
+    );
+    const gced = gcTracks(nextTrips, withNew);
+    persistTracks(gced);
+    setTracks(gced);
+    setTrips(nextTrips);
+  }
+
+  function deleteTrip(tripId) {
+    const nextTrips = trips.filter((t) => t.id !== tripId);
+    setTrips(nextTrips);
+    // Doc-first ordering: state update persists the doc; then GC orphaned assets.
+    const gced = gcTracks(nextTrips, tracks);
+    persistTracks(gced);
+    setTracks(gced);
+    setActiveTripId((prev) => (prev === tripId ? nextTrips[0]?.id || "" : prev));
+  }
+
+  function updateTrip(tripId, patch) {
+    setTrips((prev) => prev.map((t) => (t.id === tripId ? { ...t, ...patch } : t)));
+  }
+
+  function setTripCheckpoints(tripId, updater) {
+    setTrips((prev) =>
+      prev.map((t) => (t.id === tripId ? { ...t, checkpoints: updater(t.checkpoints) } : t))
+    );
+  }
+
+  const sortCheckpoints = (list) =>
+    [...list].sort(
+      (a, b) =>
+        a.anchor.segmentIndex - b.anchor.segmentIndex || a.anchor.alongSegmentM - b.anchor.alongSegmentM
+    );
+
+  // Parse a GPX file and open the staged preview modal.
+  async function openGpxImport(file, mode = "create", tripId = null) {
+    if (!file) return;
+    if (file.size > MAX_GPX_BYTES) {
+      window.alert("GPX file is too large.");
+      return;
+    }
+    try {
+      const parsed = parseGpx(await file.text());
+      if (parsed.candidates.length === 0) {
+        window.alert(parsed.warnings.join("\n") || "No track or route found in this file.");
+        return;
+      }
+      setGpxImport({ mode, tripId, fileName: file.name.replace(/\.gpx$/i, ""), ...parsed });
+    } catch (e) {
+      window.alert(e.message || "Could not read the GPX file.");
+    }
+  }
+
+  // Commit the staged import for the chosen candidate.
+  function confirmGpxImport({ candidateId, importWaypoints }) {
+    const gi = gpxImport;
+    if (!gi) return;
+    const candidate = gi.candidates.find((c) => c.id === candidateId) || gi.candidates[0];
+    const track = { segments: candidate.segments };
+    const cums = buildCumulatives(track.segments);
+
+    let checkpoints = [];
+    if (importWaypoints && gi.waypoints.length) {
+      checkpoints = gi.waypoints.map((wp) => ({
+        id: `cp_${id()}`,
+        name: wp.name,
+        note: "",
+        overnight: false,
+        source: "waypoint",
+        anchor: snapToTrack(track.segments, wp.lat, wp.lng, { cumulatives: cums })
+      }));
+    }
+
+    if (gi.mode === "replace" && gi.tripId) {
+      const existing = trips.find((t) => t.id === gi.tripId);
+      const resnapped = (existing?.checkpoints || []).map((cp) => ({
+        ...cp,
+        anchor: snapToTrack(track.segments, cp.anchor.sourceLat, cp.anchor.sourceLng, {
+          cumulatives: cums,
+          preferRouteM: cp.anchor.routeDistanceM
+        })
+      }));
+      replaceTripTrack(gi.tripId, { track, checkpoints: sortCheckpoints([...resnapped, ...checkpoints]) });
+    } else {
+      createTripFromTrack({ name: candidate.name || gi.fileName, track, checkpoints: sortCheckpoints(checkpoints) });
+    }
+    setGpxImport(null);
+  }
+
+  const activeTrip = trips.find((t) => t.id === activeTripId) || null;
+  const activeTripTrack = activeTrip ? tracks[activeTrip.trackRef?.id] || null : null;
 
   useEffect(() => {
     setPackItems((prev) => {
@@ -1594,7 +1819,11 @@ export default function App() {
   }
 
   function exportBackup() {
-    const blob = new Blob([JSON.stringify({ gears, packs, packItems }, null, 2)], {
+    const bundle = buildPortableBundle(
+      { schemaVersion: SCHEMA_VERSION, gears, packs, packItems, trips, updatedAt },
+      tracks
+    );
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], {
       type: "application/json"
     });
     const url = URL.createObjectURL(blob);
@@ -1631,16 +1860,23 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const data = normalizeData(JSON.parse(await file.text()));
-      if (!data) {
+      const applied = applyPortableBundle(JSON.parse(await file.text()));
+      if (!applied) {
         window.alert("Invalid backup file.");
         return;
       }
-      if (!window.confirm("Replace all current gear and packs with the data from this file?")) return;
-      setGears(data.gears);
-      setPacks(data.packs);
-      setPackItems(data.packItems);
-      setActivePackId(data.packs[0]?.id || "");
+      if (!window.confirm("Replace all current gear, packs, and trips with the data from this file?")) return;
+      // Persist tracks first so the doc never references a missing asset.
+      if (!persistTracks(applied.tracks)) return;
+      const { doc } = applied;
+      appliedUpdatedAt.current = new Date().toISOString();
+      setGears(doc.gears);
+      setPacks(doc.packs);
+      setPackItems(doc.packItems);
+      setTracks(applied.tracks);
+      setTrips(doc.trips);
+      setActivePackId(doc.packs[0]?.id || "");
+      setActiveTripId(doc.trips[0]?.id || "");
     } catch {
       window.alert("Could not read the backup file.");
     } finally {
@@ -1790,6 +2026,13 @@ export default function App() {
             onClick={() => setView("library")}
           >
             Gear Library
+          </button>
+          <button
+            type="button"
+            className={view === "trips" ? "active" : ""}
+            onClick={() => setView("trips")}
+          >
+            Trips
           </button>
         </div>
       </div>
@@ -1941,6 +2184,17 @@ export default function App() {
             })}
           </div>
         </aside>
+        )}
+
+        {view === "trips" && sidebarOpen && (
+          <TripsSidebar
+            trips={trips}
+            packs={packs}
+            activeTripId={activeTripId}
+            onSelect={setActiveTripId}
+            onDelete={deleteTrip}
+            onImportGpx={(file) => openGpxImport(file, "create")}
+          />
         )}
 
         <section className={`panel workspace ${!sidebarOpen ? "centered" : ""}`}>
@@ -3048,8 +3302,38 @@ export default function App() {
               )}
             </>
           )}
+
+          {view === "trips" && (
+            <TripWorkspace
+              trip={activeTrip}
+              track={activeTripTrack}
+              packs={packs}
+              onUpdateTrip={(patch) => activeTrip && updateTrip(activeTrip.id, patch)}
+              onDeleteTrip={() => activeTrip && deleteTrip(activeTrip.id)}
+              onReplaceGpx={(file) => activeTrip && openGpxImport(file, "replace", activeTrip.id)}
+              onAddCheckpoint={(cp) =>
+                activeTrip && setTripCheckpoints(activeTrip.id, (list) => sortCheckpoints([...list, cp]))
+              }
+              onUpdateCheckpoint={(cpId, patch) =>
+                activeTrip &&
+                setTripCheckpoints(activeTrip.id, (list) =>
+                  list.map((c) => (c.id === cpId ? { ...c, ...patch } : c))
+                )
+              }
+              onDeleteCheckpoint={(cpId) =>
+                activeTrip && setTripCheckpoints(activeTrip.id, (list) => list.filter((c) => c.id !== cpId))
+              }
+            />
+          )}
         </section>
       </main>
+      {gpxImport && (
+        <GpxImportModal
+          data={gpxImport}
+          onConfirm={confirmGpxImport}
+          onClose={() => setGpxImport(null)}
+        />
+      )}
       {addToPackGear && (
         <div className="modal-overlay" onClick={closeAddToPack}>
           <div className="modal-panel add-to-pack-modal" onClick={(e) => e.stopPropagation()}>

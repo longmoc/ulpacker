@@ -19,9 +19,10 @@ Live demo: https://longmoc.github.io/ulpacker/
 - Track per-variant prices: a `Show prices` setting adds a price column to the pack list, the chart legend, and a total price to the breakdown.
 - Flag gear as favorite (★) and/or to-buy (cart), from the library or the pack; filter both views by those markers.
 - Visualize carried weight with a donut chart, category percentages, and total/base/consumable/worn breakdown.
+- Plan trips in the `Trips` view: import a GPX track, see an elevation profile and a 2D track shape, mark checkpoints, and get a day-by-day itinerary.
 - Sign in with Google to sync everything to your Drive (`appDataFolder`) across devices — or use the app fully offline without an account.
 - Import from LighterPack by URL or CSV; export a pack back to LighterPack-compatible CSV.
-- Export and import the whole profile as a JSON file.
+- Export and import the whole profile as a JSON file (packs, gear, and trips with their tracks).
 
 ## Gear Library
 
@@ -57,13 +58,53 @@ A pack item references one library gear item, but can still keep pack-specific v
 
 This means the same gear can exist in the library once, then appear in different packs or categories with pack-specific quantities and flags. Unit price comes from the referenced variant, so a price edit in either place is reflected everywhere.
 
+## Trips
+
+The `Trips` view turns a GPX file into a route plan. Import a `.gpx` file (up to
+20 trips) and a staged preview lets you:
+
+- Pick which track or route to import when the file has more than one (a `<trk>`
+  or `<rte>` is never merged with another).
+- Import the file's waypoints as checkpoints.
+
+Each trip shows an **elevation profile** (elevation vs. route distance) and a 2D
+**track shape**, both drawn as inline SVG — no map tiles, no network calls, works
+offline. Click the profile to drop a checkpoint at that distance. A trip can
+optionally **link to a pack**; deleting that pack just unlinks it (the trip is
+kept).
+
+A few correctness details worth knowing:
+
+- The track is stored as **segments** (`<trkseg>` boundaries). The gap between two
+  segments is never counted as distance — it appears as a break marker in the
+  profile and a `gap` badge on any day that spans it.
+- Distance / ascent / descent / min–max elevation are **recomputed from the
+  geometry** whenever a trip is imported, restored, or pulled from Drive — cached
+  numbers in a backup are never trusted. Ascent uses a 5-point moving average to
+  suppress GPS jitter, reset at each segment and at each elevation gap. A track
+  with no elevation reports `—` rather than zeros.
+- Mark a checkpoint as an **overnight stop** (🌙) to split the route into days;
+  each day's distance and ascent/descent are derived, never stored.
+- Checkpoints are anchored to `(segmentIndex, distance-along-segment)` plus their
+  original coordinates, so **replacing a trip's GPX** re-snaps them onto the new
+  track instead of losing them.
+- GPX timestamps, links, and extensions are **not** stored (privacy by default).
+  Files with a `<!DOCTYPE>`/`<!ENTITY>` declaration are rejected before parsing.
+
 ## Google Drive Sync
 
 Signing in (Google Identity Services, token flow — no client secret) stores a single
-`ulpacker.json` in your Drive's hidden `appDataFolder`. Sync is last-write-wins by
+`ulpacker-v4.json` in your Drive's hidden `appDataFolder`. Sync is last-write-wins by
 `updatedAt`: local edits push (debounced), sign-in pulls, and the newer copy wins.
 Unedited/default data carries an empty `updatedAt` so a fresh device can never
 overwrite real cloud data on first sign-in.
+
+The v4 file holds both the light document and the trip **tracks** in one bundle.
+A previous-generation client only reads/writes the older `ulpacker.json`, so it can
+never pull-then-push the v4 bundle and strip Trips via last-write-wins. On the first
+v4 sync the app reads the old `ulpacker.json` once to migrate, then leaves it in
+place for rollback. **After updating, refresh the app on every device** so no tab is
+still running the pre-Trips build.
 
 Setup requires a Google OAuth client ID exposed as `VITE_GOOGLE_CLIENT_ID`
 (a `.env.local` entry for local dev; a repository **variable** of the same name for
@@ -136,7 +177,9 @@ On app load (and on every Drive pull / profile import), stored data is normalize
 App data is stored in browser `localStorage`:
 
 ```text
-ulpacker.v3            gear / packs / pack items
+ulpacker.v4            gear / packs / pack items / trips (the main document)
+ulpacker.tracks        trip GPX geometry, keyed by immutable track id
+ulpacker.v3            legacy pre-Trips document (kept for one-way migration + rollback)
 ulpacker.settings      UI settings (show prices, hide qty-0, sidebar state)
 ulpacker.entered       landing-page dismissal
 ulpacker.googleToken   cached short-lived OAuth token (+ expiry)
@@ -144,9 +187,17 @@ ulpacker.googleProfile cached account name/email/avatar
 ulpacker.googleSignedIn sign-in flag
 ```
 
-When signed in, the same document is mirrored to `ulpacker.json` in the Drive
-`appDataFolder`. Pack cover images are embedded in the document as compressed
-data URLs (1200×400 JPEG), which is why packs are capped at 20.
+Trip geometry lives in the separate `ulpacker.tracks` "cold" store so editing a
+checkpoint only rewrites the light document, not the whole track. A track is
+written under a fresh id, then the document is pointed at it, then the old id is
+garbage-collected — so a crash mid-import can at worst orphan an unreferenced
+track, never leave the document pointing at missing geometry. On first run the app
+migrates `ulpacker.v3` into `ulpacker.v4` without touching the v3 copy.
+
+When signed in, the document **and** the tracks are mirrored to `ulpacker-v4.json`
+in the Drive `appDataFolder` as one bundle. Pack cover images are embedded in the
+document as compressed data URLs (1200×400 JPEG), which is why packs are capped at
+20; trips are capped at 20 as well.
 
 ## Security
 
@@ -157,6 +208,11 @@ data URLs (1200×400 JPEG), which is why packs are capped at 20.
 - Imported backups are sanitized: pack cover images must be `data:image/` URLs.
 - CSV exports neutralise spreadsheet formula injection (`= + - @` cells are
   prefixed with `'`; the importer strips it again on round-trip).
+- GPX and imported bundles are validated against shared hard limits (file size,
+  point/segment/trip/checkpoint counts, text length) applied at every entry point,
+  and `<!DOCTYPE>`/`<!ENTITY>` declarations are refused before the XML is parsed
+  (XXE / entity-expansion surface). Trip/checkpoint/track data from a hostile
+  backup is clamped so one malformed trip can never drop valid gear or packs.
 
 ## Tech Stack
 
@@ -215,10 +271,12 @@ npm run preview
 - `src/lib/gear.js`: gear/variant normalization and merge logic.
 - `src/lib/import.js`: LighterPack CSV/HTML parsing, import mapping, CSV export.
 - `src/lib/chart.js`: donut-chart geometry and the category color palette.
-- `src/lib/storage.js`: defaults, seed, migration, and `localStorage` read.
+- `src/lib/trail.js`: pure GPX parsing, geo/elevation metrics, snapping/anchors, itinerary, and SVG geometry.
+- `src/lib/storage.js`: defaults, seed, v3→v4 migration, trip/track sanitizers, and the doc+tracks bundle codec.
 - `src/lib/sync.js`: last-write-wins resolution between local and cloud data.
 - `src/lib/googleAuth.js`: Google Identity Services wrapper (token flow).
 - `src/lib/googleDrive.js`: Drive `appDataFolder` REST calls.
+- `src/features/trips/`: the Trips UI (sidebar, workspace, GPX import modal, elevation profile, track shape, checkpoints, itinerary).
 - `src/lib/__tests__/`: Vitest unit tests for the modules above.
 - `src/styles.css`: app styling (CSS variables / design tokens).
 - `src/raw_background.jpg`: the illustrated page background.

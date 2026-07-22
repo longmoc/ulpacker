@@ -1,7 +1,24 @@
 import { id, parseNumber, normalizeWeightType } from "./util.js";
 import { normalizeCategories, normalizeVariants, normalizePurchase, mergeGears, primaryCategory } from "./gear.js";
+import {
+  buildTrackStats,
+  buildCumulatives,
+  clampText,
+  MAX_TRIPS,
+  MAX_CHECKPOINTS_PER_TRIP,
+  MAX_SEGMENTS,
+  MAX_TRACK_POINTS,
+  METRICS_VERSION
+} from "./trail.js";
 
-export const STORAGE_KEY = "ulpacker.v3";
+// v4 introduces `trips` + a separate tracks store. It uses a NEW local key and
+// (in googleDrive.js) a NEW Drive file so an OLD client build — whose normalizer
+// strips unknown keys — can never pull-then-push and wipe Trips via last-write-
+// wins. v3 is read once for migration and then left untouched for rollback.
+export const STORAGE_KEY = "ulpacker.v4";
+export const LEGACY_STORAGE_KEY_V3 = "ulpacker.v3";
+export const TRACKS_KEY = "ulpacker.tracks";
+export const SCHEMA_VERSION = 4;
 
 export function eggSeed() {
   return {
@@ -67,8 +84,168 @@ export function ensurePackDefaults(data) {
   return { packs, packItems };
 }
 
+// --- Tracks (cold store, keyed by immutable trackId) ---------------------
+
+function sanitizeTrack(raw) {
+  if (!raw || !Array.isArray(raw.segments)) return null;
+  let budget = MAX_TRACK_POINTS;
+  const segments = [];
+  for (const seg of raw.segments.slice(0, MAX_SEGMENTS)) {
+    if (!seg || !Array.isArray(seg.points)) continue;
+    const points = [];
+    for (const p of seg.points) {
+      if (budget <= 0) break;
+      if (!Array.isArray(p)) continue;
+      const lat = Number(p[0]);
+      const lng = Number(p[1]);
+      if (!Number.isFinite(lat) || lat < -90 || lat > 90) continue;
+      if (!Number.isFinite(lng) || lng < -180 || lng > 180) continue;
+      const ele = Number.isFinite(Number(p[2])) ? Math.round(Number(p[2])) : null;
+      points.push([lat, lng, ele]);
+      budget -= 1;
+    }
+    if (points.length >= 2) segments.push({ points });
+  }
+  return segments.length > 0 ? { segments } : null;
+}
+
+// Normalize the whole tracks map; drops malformed assets.
+export function sanitizeTracks(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object") return out;
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof key !== "string") continue;
+    const track = sanitizeTrack(value);
+    if (track) out[key] = track;
+  }
+  return out;
+}
+
+function sanitizeCheckpoint(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const a = raw.anchor || {};
+  const segmentIndex = Number.isFinite(Number(a.segmentIndex)) ? Math.max(0, a.segmentIndex | 0) : 0;
+  const alongSegmentM = Math.max(0, parseNumber(a.alongSegmentM, 0));
+  const routeDistanceM = Math.max(0, parseNumber(a.routeDistanceM, 0));
+  const lat = Number(a.lat);
+  const lng = Number(a.lng);
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90) return null;
+  if (!Number.isFinite(lng) || lng < -180 || lng > 180) return null;
+  const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+  return {
+    id: raw.id || id(),
+    name: clampText(raw.name),
+    note: clampText(raw.note),
+    overnight: Boolean(raw.overnight),
+    source: raw.source === "waypoint" ? "waypoint" : "manual",
+    anchor: {
+      segmentIndex,
+      alongSegmentM,
+      routeDistanceM,
+      lat,
+      lng,
+      ele: num(a.ele) == null ? null : Math.round(num(a.ele)),
+      offsetM: Math.max(0, Math.round(parseNumber(a.offsetM, 0))),
+      sourceLat: num(a.sourceLat) == null ? lat : num(a.sourceLat),
+      sourceLng: num(a.sourceLng) == null ? lng : num(a.sourceLng)
+    }
+  };
+}
+
+// Clamp a checkpoint's anchor to the actual track geometry (segment shorter than
+// stored alongSegmentM, or missing segment). Recomputes routeDistanceM from the
+// canonical cumulatives so cached values can't drift.
+function resolveCheckpoints(checkpoints, track) {
+  if (!track) return checkpoints;
+  const { cumulativeBySegment, segmentOffsets, segmentLengths } = buildCumulatives(track.segments);
+  const segCount = track.segments.length;
+  return checkpoints.map((cp) => {
+    const a = cp.anchor;
+    const s = Math.min(a.segmentIndex, segCount - 1);
+    const along = Math.min(a.alongSegmentM, segmentLengths[s] || 0);
+    return {
+      ...cp,
+      anchor: { ...a, segmentIndex: s, alongSegmentM: along, routeDistanceM: (segmentOffsets[s] || 0) + along }
+    };
+  });
+}
+
+// Sanitize trips; when `tracks` is provided, resolve trackRef, recompute
+// canonical stats from geometry (never trust cached), and re-clamp checkpoints.
+// A trip whose trackRef.id has no asset is KEPT (rendered as "track missing").
+export function normalizeTrips(rawTrips, validPackIds, tracks) {
+  if (!Array.isArray(rawTrips)) return [];
+  return rawTrips
+    .slice(0, MAX_TRIPS)
+    .map((raw) => {
+      if (!raw || typeof raw !== "object") return null;
+      const ref = raw.trackRef || {};
+      const trackId = typeof ref.id === "string" ? ref.id : "";
+      const track = tracks && trackId ? tracks[trackId] : null;
+
+      let checkpoints = (Array.isArray(raw.checkpoints) ? raw.checkpoints : [])
+        .slice(0, MAX_CHECKPOINTS_PER_TRIP)
+        .map(sanitizeCheckpoint)
+        .filter(Boolean);
+      checkpoints = resolveCheckpoints(checkpoints, track)
+        .sort((x, y) => x.anchor.segmentIndex - y.anchor.segmentIndex || x.anchor.alongSegmentM - y.anchor.alongSegmentM);
+
+      let stats;
+      let trackRef;
+      if (track) {
+        const s = buildTrackStats(track.segments);
+        stats = {
+          distanceM: s.distanceM, ascentM: s.ascentM, descentM: s.descentM,
+          minEle: s.minEle, maxEle: s.maxEle, elevationCoverage: s.elevationCoverage,
+          metricsVersion: METRICS_VERSION
+        };
+        trackRef = {
+          id: trackId,
+          revision: Math.max(1, parseNumber(ref.revision, 1)),
+          pointCount: track.segments.reduce((n, seg) => n + seg.points.length, 0),
+          sizeBytes: JSON.stringify(track).length,
+          segmentCount: track.segments.length
+        };
+      } else {
+        // No asset available (missing, or normalizing without the tracks map):
+        // keep whatever the doc claims, sanitized.
+        stats = {
+          distanceM: Math.max(0, parseNumber(raw.stats?.distanceM, 0)),
+          ascentM: raw.stats?.ascentM == null ? null : Math.max(0, parseNumber(raw.stats.ascentM, 0)),
+          descentM: raw.stats?.descentM == null ? null : Math.max(0, parseNumber(raw.stats.descentM, 0)),
+          minEle: raw.stats?.minEle == null ? null : parseNumber(raw.stats.minEle, 0),
+          maxEle: raw.stats?.maxEle == null ? null : parseNumber(raw.stats.maxEle, 0),
+          elevationCoverage: Math.max(0, Math.min(1, parseNumber(raw.stats?.elevationCoverage, 0))),
+          metricsVersion: parseNumber(raw.stats?.metricsVersion, 0)
+        };
+        trackRef = {
+          id: trackId,
+          revision: Math.max(1, parseNumber(ref.revision, 1)),
+          pointCount: Math.max(0, parseNumber(ref.pointCount, 0)),
+          sizeBytes: Math.max(0, parseNumber(ref.sizeBytes, 0)),
+          segmentCount: Math.max(0, parseNumber(ref.segmentCount, 0))
+        };
+      }
+
+      const packId = raw.packId && validPackIds.has(raw.packId) ? raw.packId : "";
+      return {
+        id: raw.id || id(),
+        name: clampText(raw.name) || "Untitled trip",
+        description: clampText(raw.description),
+        packId,
+        createdAt: raw.createdAt || new Date().toISOString(),
+        trackRef,
+        stats,
+        checkpoints
+      };
+    })
+    .filter(Boolean);
+}
+
 export function defaultData() {
   return {
+    schemaVersion: SCHEMA_VERSION,
+    trips: [],
     gears: [
       {
         id: id(),
@@ -114,7 +291,7 @@ export function defaultData() {
 // Validate + normalize a raw data object (from localStorage or an imported
 // backup file) into the shape the app expects. Returns null when the input is
 // not recognizable so callers can decide how to handle the failure.
-export function normalizeData(parsed) {
+export function normalizeData(parsed, tracks = null) {
   if (!parsed || !Array.isArray(parsed.gears)) return null;
 
   const parsedGears = parsed.gears
@@ -167,19 +344,91 @@ export function normalizeData(parsed) {
       })
       .filter(Boolean);
 
+  const trips = normalizeTrips(parsed.trips, validPackIds, tracks);
+
   return {
+    schemaVersion: SCHEMA_VERSION,
     gears,
     packs: withPackDefaults.packs,
-    packItems
+    packItems,
+    trips
   };
 }
 
-export function readStorage() {
+// --- Bundle codec (doc + tracks) -----------------------------------------
+//
+// A "bundle" is the pair the app persists/syncs: the light document plus the
+// heavy tracks map. buildPortableBundle() flattens them into one object for
+// export/Drive; applyPortableBundle() is the single normalize gate for every
+// untrusted ingress (profile import, Drive pull).
+
+export function readTracks() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return defaultData();
-    return normalizeData(JSON.parse(raw)) || defaultData();
+    const raw = localStorage.getItem(TRACKS_KEY);
+    return raw ? sanitizeTracks(JSON.parse(raw)) : {};
   } catch {
-    return defaultData();
+    return {};
   }
+}
+
+// Read the local bundle, migrating v3 → v4 once (v3 is left in place). Returns
+// { doc, tracks } where doc is normalized app data incl. updatedAt.
+export function readLocalBundle() {
+  const tracks = readTracks();
+  let rawDoc = null;
+  let migrated = false;
+  try {
+    const v4 = localStorage.getItem(STORAGE_KEY);
+    if (v4) {
+      rawDoc = JSON.parse(v4);
+    } else {
+      const v3 = localStorage.getItem(LEGACY_STORAGE_KEY_V3);
+      if (v3) {
+        rawDoc = JSON.parse(v3);
+        migrated = true; // backfill happens via normalizeData/defaults
+      }
+    }
+  } catch {
+    rawDoc = null;
+  }
+  if (!rawDoc) {
+    const doc = defaultData();
+    return { doc: { ...doc, updatedAt: "" }, tracks: {}, migrated: false };
+  }
+  const norm = normalizeData(rawDoc, tracks) || defaultData();
+  // Migration must NOT bump updatedAt (carry v3's value, incl. "").
+  return { doc: { ...norm, updatedAt: rawDoc.updatedAt || "" }, tracks, migrated };
+}
+
+// Prune track assets no longer referenced by any trip (orphan GC).
+export function gcTracks(trips, tracks) {
+  const referenced = new Set(
+    (trips || []).map((t) => t.trackRef?.id).filter(Boolean)
+  );
+  const out = {};
+  for (const [key, value] of Object.entries(tracks || {})) {
+    if (referenced.has(key)) out[key] = value;
+  }
+  return out;
+}
+
+// Flatten doc + tracks into one portable object (export / Drive push).
+export function buildPortableBundle(doc, tracks) {
+  return { ...doc, schemaVersion: SCHEMA_VERSION, tracks: tracks || {} };
+}
+
+// Normalize an untrusted flattened bundle back into { doc, tracks }. Order:
+// sanitize doc → sanitize tracks → resolve trackRefs + recompute stats +
+// re-clamp checkpoints (all inside normalizeData) → GC orphans.
+export function applyPortableBundle(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const tracks = sanitizeTracks(raw.tracks);
+  const norm = normalizeData(raw, tracks);
+  if (!norm) return null;
+  const doc = { ...norm, updatedAt: raw.updatedAt || new Date().toISOString() };
+  return { doc, tracks: gcTracks(doc.trips, tracks) };
+}
+
+export function readStorage() {
+  return readLocalBundle().doc;
 }
