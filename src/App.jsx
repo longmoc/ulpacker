@@ -727,6 +727,7 @@ export default function App() {
   const [cropZoom, setCropZoom] = useState(1);
   const [croppedPx, setCroppedPx] = useState(null);
   const [savingCover, setSavingCover] = useState(false);
+  const [cropTarget, setCropTarget] = useState("pack"); // "pack" | "trip"
   const coverInputRef = useRef(null);
   const [categoryDragSource, setCategoryDragSource] = useState(null);
   const [categoryDragOver, setCategoryDragOver] = useState(null);
@@ -1277,7 +1278,8 @@ export default function App() {
     setPacks((prev) => prev.map((pack) => (pack.id === activePack.id ? { ...pack, ...patch } : pack)));
   }
 
-  function onCoverFileSelected(e) {
+  // `target` decides where the cropped cover lands: the active pack or trip.
+  function onCoverFileSelected(e, target = "pack") {
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-selecting the same file later
     if (!file) return;
@@ -1286,6 +1288,7 @@ export default function App() {
       setCrop({ x: 0, y: 0 });
       setCropZoom(1);
       setCroppedPx(null);
+      setCropTarget(target);
       setCropSource(String(reader.result || ""));
     };
     reader.readAsDataURL(file);
@@ -1302,7 +1305,8 @@ export default function App() {
     setSavingCover(true);
     try {
       const dataUrl = await getCroppedImg(cropSource, croppedPx);
-      updateActivePack({ image: dataUrl });
+      if (cropTarget === "trip" && activeTrip) updateTrip(activeTrip.id, { image: dataUrl });
+      else updateActivePack({ image: dataUrl });
       closeCropModal();
     } catch {
       setSavingCover(false);
@@ -3199,56 +3203,6 @@ export default function App() {
                 </section>
               </div>
 
-                  {cropSource && (
-                    <div className="modal-overlay" onClick={closeCropModal}>
-                      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
-                        <div className="modal-head">
-                          <h3>Crop cover image</h3>
-                          <button type="button" onClick={closeCropModal}>
-                            ✕
-                          </button>
-                        </div>
-                        <div className="crop-stage">
-                          <Cropper
-                            image={cropSource}
-                            crop={crop}
-                            zoom={cropZoom}
-                            aspect={COVER_ASPECT}
-                            onCropChange={setCrop}
-                            onZoomChange={setCropZoom}
-                            onCropComplete={(_, px) => setCroppedPx(px)}
-                          />
-                        </div>
-                        <div className="crop-controls">
-                          <label className="crop-zoom">
-                            Zoom
-                            <input
-                              type="range"
-                              min={1}
-                              max={3}
-                              step={0.01}
-                              value={cropZoom}
-                              onChange={(e) => setCropZoom(Number(e.target.value))}
-                            />
-                          </label>
-                          <div className="crop-actions">
-                            <button type="button" onClick={closeCropModal}>
-                              Cancel
-                            </button>
-                            <button
-                              type="button"
-                              className="crop-save"
-                              disabled={!croppedPx || savingCover}
-                              onClick={saveCover}
-                            >
-                              {savingCover ? "Saving…" : "Save cover"}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
                   {importModal && (
                     <div className="modal-overlay" onClick={closeImportModal}>
                       <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
@@ -3384,10 +3338,62 @@ export default function App() {
                 })
               }
               onSetExtraDays={(list) => activeTrip && updateTrip(activeTrip.id, { extraDays: list })}
+              onPickCover={(e) => onCoverFileSelected(e, "trip")}
             />
           )}
         </section>
       </main>
+      {/* Cover cropper — top level so it works from the Packs AND Trips views. */}
+        {cropSource && (
+          <div className="modal-overlay" onClick={closeCropModal}>
+            <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-head">
+                <h3>Crop cover image</h3>
+                <button type="button" onClick={closeCropModal}>
+                  ✕
+                </button>
+              </div>
+              <div className="crop-stage">
+                <Cropper
+                  image={cropSource}
+                  crop={crop}
+                  zoom={cropZoom}
+                  aspect={COVER_ASPECT}
+                  onCropChange={setCrop}
+                  onZoomChange={setCropZoom}
+                  onCropComplete={(_, px) => setCroppedPx(px)}
+                />
+              </div>
+              <div className="crop-controls">
+                <label className="crop-zoom">
+                  Zoom
+                  <input
+                    type="range"
+                    min={1}
+                    max={3}
+                    step={0.01}
+                    value={cropZoom}
+                    onChange={(e) => setCropZoom(Number(e.target.value))}
+                  />
+                </label>
+                <div className="crop-actions">
+                  <button type="button" onClick={closeCropModal}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="crop-save"
+                    disabled={!croppedPx || savingCover}
+                    onClick={saveCover}
+                  >
+                    {savingCover ? "Saving…" : "Save cover"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       {gpxImport && (
         <GpxImportModal
           data={gpxImport}

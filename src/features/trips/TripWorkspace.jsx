@@ -27,9 +27,11 @@ export default function TripWorkspace({
   onUpdateCheckpoint,
   onDeleteCheckpoint,
   onSetDayNote,
-  onSetExtraDays
+  onSetExtraDays,
+  onPickCover
 }) {
   const replaceRef = useRef(null);
+  const coverRef = useRef(null);
   const [addKm, setAddKm] = useState("");
   const [splitDays, setSplitDays] = useState("");
   const [cpOpen, setCpOpen] = useState(true);
@@ -250,32 +252,58 @@ export default function TripWorkspace({
         </div>
       ) : (
         <>
-          <div className="summary-grid trip-summary">
-            <div className="summary-card">
-              <small>Distance</small>
-              <strong>{km(stats.distanceM)} km</strong>
-            </div>
-            <div className="summary-card">
-              <small>Ascent</small>
-              <strong>{stats.ascentM != null ? `+${stats.ascentM} m` : "—"}</strong>
-            </div>
-            <div className="summary-card">
-              <small>Descent</small>
-              <strong>{stats.descentM != null ? `−${stats.descentM} m` : "—"}</strong>
-            </div>
-            <div className="summary-card">
-              <small>High / Low</small>
-              <strong>{stats.maxEle != null ? `${stats.maxEle} / ${stats.minEle} m` : "—"}</strong>
-            </div>
-            <div className="summary-card">
-              <small>Days</small>
-              <strong>{dayCount}</strong>
-            </div>
-            <div className="summary-card">
-              <small>Track</small>
-              <strong>
-                {trip.trackRef.pointCount.toLocaleString()} pts · ~{Math.round(trip.trackRef.sizeBytes / 1024)} KB
-              </strong>
+          <div className={`trip-hero ${trip.image ? "has-image" : ""}`}>
+            <input
+              ref={coverRef}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => onPickCover?.(e)}
+            />
+            {trip.image ? (
+              <>
+                <img className="trip-hero-img" src={trip.image} alt={`${trip.name} cover`} />
+                <div className="trip-hero-actions">
+                  <button type="button" title="Change cover image" onClick={() => coverRef.current?.click()}>
+                    Change
+                  </button>
+                  <button
+                    type="button"
+                    className="cover-remove"
+                    title="Remove cover image"
+                    onClick={() => onUpdateTrip({ image: "" })}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button type="button" className="trip-hero-empty" onClick={() => coverRef.current?.click()}>
+                + Add cover image
+              </button>
+            )}
+
+            <div className="summary-grid trip-summary">
+              <div className="summary-card">
+                <small>Distance</small>
+                <strong>{km(stats.distanceM)} km</strong>
+              </div>
+              <div className="summary-card">
+                <small>Ascent</small>
+                <strong>{stats.ascentM != null ? `+${stats.ascentM} m` : "—"}</strong>
+              </div>
+              <div className="summary-card">
+                <small>Descent</small>
+                <strong>{stats.descentM != null ? `−${stats.descentM} m` : "—"}</strong>
+              </div>
+              <div className="summary-card">
+                <small>High / Low</small>
+                <strong>{stats.maxEle != null ? `${stats.maxEle} / ${stats.minEle} m` : "—"}</strong>
+              </div>
+              <div className="summary-card">
+                <small>Days</small>
+                <strong>{dayCount}</strong>
+              </div>
             </div>
           </div>
 

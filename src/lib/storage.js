@@ -282,6 +282,7 @@ export function normalizeTrips(rawTrips, validPackIds, tracks) {
         id: raw.id || id(),
         name: clampText(raw.name) || "Untitled trip",
         description: clampText(raw.description),
+        image: sanitizeCoverImage(raw.image),
         packId,
         createdAt: raw.createdAt || new Date().toISOString(),
         trackRef,
