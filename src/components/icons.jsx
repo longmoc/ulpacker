@@ -79,6 +79,19 @@ export function PeakIcon({ size = 16 }) {
   );
 }
 
+export function ChevronIcon({ size = 14, open = false }) {
+  return (
+    <svg
+      {...base}
+      width={size}
+      height={size}
+      style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.12s ease" }}
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
 export function ClockIcon({ size = 16 }) {
   return (
     <svg {...base} width={size} height={size}>

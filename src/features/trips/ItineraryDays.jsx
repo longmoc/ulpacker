@@ -1,11 +1,9 @@
 import React, { useMemo, useState } from "react";
 import { buildDays, buildCumulatives } from "../../lib/trail.js";
 import Markdown from "./Markdown.jsx";
-import { PencilIcon, TrashIcon, PinIcon, TrendUpIcon, TrendDownIcon } from "../../components/icons.jsx";
+import { PencilIcon, TrashIcon, PinIcon, TrendUpIcon, TrendDownIcon, ChevronIcon } from "../../components/icons.jsx";
 
 const km = (m) => (m / 1000).toFixed(1);
-// Notes longer than this get clamped to ~2 lines behind "Show more".
-const LONG_NOTE = 140;
 
 // Derived day-by-day itinerary. Trail days come from overnight checkpoints;
 // off-route days (travel/rest/shuttle) are stored on the trip and interleaved,
@@ -23,7 +21,7 @@ export default function ItineraryDays({
 }) {
   const [editing, setEditing] = useState(null); // note key
   const [draft, setDraft] = useState("");
-  const [expanded, setExpanded] = useState({});
+  const [detail, setDetail] = useState({}); // note key -> detail panel open
   const [adding, setAdding] = useState(false);
   const [newDay, setNewDay] = useState({ title: "", before: "finish" });
 
@@ -52,13 +50,12 @@ export default function ItineraryDays({
   const startEdit = (key, current) => {
     setDraft(current || "");
     setEditing(key);
+    setDetail((p) => ({ ...p, [key]: true }));
   };
+  const toggleDetail = (key) => setDetail((p) => ({ ...p, [key]: !p[key] }));
 
   const NoteBlock = ({ noteKey, note, onSave }) => {
-    const isEditing = editing === noteKey;
-    const isLong = note.length > LONG_NOTE;
-    const open = expanded[noteKey];
-    if (isEditing) {
+    if (editing === noteKey) {
       return (
         <div className="day-note">
           <textarea
@@ -91,20 +88,9 @@ export default function ItineraryDays({
     }
     return (
       <div className="day-note">
-        <div className={`day-note-body ${isLong && !open ? "clamped" : ""}`}>
+        <div className="day-note-body">
           <Markdown text={note} />
         </div>
-        {isLong && (
-          <div className="day-note-more">
-            <button
-              type="button"
-              className="link-btn"
-              onClick={() => setExpanded((p) => ({ ...p, [noteKey]: !p[noteKey] }))}
-            >
-              {open ? "Show less" : "Show more"}
-            </button>
-          </div>
-        )}
       </div>
     );
   };
@@ -185,36 +171,49 @@ export default function ItineraryDays({
                     <span className="cp-flag off-route-badge">off-route</span>
                   </div>
                   <div className="day-card-actions">
+                    <div className="day-action-icons">
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        title="Edit description"
+                        aria-label="Edit description"
+                        onClick={() => startEdit(key, x.note || "")}
+                      >
+                        <PencilIcon />
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-btn danger"
+                        title="Remove day"
+                        aria-label="Remove day"
+                        onClick={() => onDeleteExtraDay?.(x.id)}
+                      >
+                        <TrashIcon />
+                      </button>
+                    </div>
                     <button
                       type="button"
-                      className="icon-btn"
-                      title="Edit description"
-                      aria-label="Edit description"
-                      onClick={() => startEdit(key, x.note || "")}
+                      className="day-detail-toggle"
+                      aria-expanded={Boolean(detail[key])}
+                      onClick={() => toggleDetail(key)}
                     >
-                      <PencilIcon />
-                    </button>
-                    <button
-                      type="button"
-                      className="icon-btn danger"
-                      title="Remove day"
-                      aria-label="Remove day"
-                      onClick={() => onDeleteExtraDay?.(x.id)}
-                    >
-                      <TrashIcon />
+                      {detail[key] ? "Hide detail" : "Show detail"}
+                      <ChevronIcon size={13} open={Boolean(detail[key])} />
                     </button>
                   </div>
                 </div>
                 <div className="day-stats muted">Not on the track — no distance or elevation counted.</div>
-                <NoteBlock
-                  noteKey={key}
-                  note={x.note || ""}
-                  onSave={() => {
-                    onUpdateExtraDay?.(x.id, { note: draft });
-                    setEditing(null);
-                    setDraft("");
-                  }}
-                />
+                {detail[key] && (
+                  <NoteBlock
+                    noteKey={key}
+                    note={x.note || ""}
+                    onSave={() => {
+                      onUpdateExtraDay?.(x.id, { note: draft });
+                      setEditing(null);
+                      setDraft("");
+                    }}
+                  />
+                )}
               </div>
             );
           }
@@ -232,14 +231,25 @@ export default function ItineraryDays({
                   Day {n} · {day.startName || "Start"} → {day.endName || "Finish"}
                 </div>
                 <div className="day-card-actions" onClick={(e) => e.stopPropagation()}>
+                  <div className="day-action-icons">
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      title="Edit description"
+                      aria-label="Edit description"
+                      onClick={() => startEdit(key, notes[key] || "")}
+                    >
+                      <PencilIcon />
+                    </button>
+                  </div>
                   <button
                     type="button"
-                    className="icon-btn"
-                    title="Edit description"
-                    aria-label="Edit description"
-                    onClick={() => startEdit(key, notes[key] || "")}
+                    className="day-detail-toggle"
+                    aria-expanded={Boolean(detail[key])}
+                    onClick={() => toggleDetail(key)}
                   >
-                    <PencilIcon />
+                    {detail[key] ? "Hide detail" : "Show detail"}
+                    <ChevronIcon size={13} open={Boolean(detail[key])} />
                   </button>
                 </div>
               </div>
@@ -269,17 +279,19 @@ export default function ItineraryDays({
                 )}
               </div>
 
-              <div onClick={(e) => e.stopPropagation()}>
-                <NoteBlock
-                  noteKey={key}
-                  note={notes[key] || ""}
-                  onSave={() => {
-                    onSetDayNote?.(key, draft);
-                    setEditing(null);
-                    setDraft("");
-                  }}
-                />
-              </div>
+              {detail[key] && (
+                <div onClick={(e) => e.stopPropagation()}>
+                  <NoteBlock
+                    noteKey={key}
+                    note={notes[key] || ""}
+                    onSave={() => {
+                      onSetDayNote?.(key, draft);
+                      setEditing(null);
+                      setDraft("");
+                    }}
+                  />
+                </div>
+              )}
             </div>
           );
         })}

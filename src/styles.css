@@ -4044,12 +4044,6 @@ button[type="submit"]:active {
   color: var(--text-2);
   line-height: 1.55;
 }
-.day-note-body.clamped {
-  max-height: 3.2em;
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(#000 60%, transparent);
-  mask-image: linear-gradient(#000 60%, transparent);
-}
 .day-note-actions {
   display: flex;
   gap: 12px;
@@ -4314,13 +4308,19 @@ button[type="submit"]:active {
 .day-top .day-head { flex: 1; min-width: 0; }
 .day-card-actions {
   display: flex;
-  gap: 4px;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
   flex: 0 0 auto;
+}
+.day-action-icons {
+  display: flex;
+  gap: 4px;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
-.day-card:hover .day-card-actions,
-.day-card:focus-within .day-card-actions { opacity: 1; }
+.day-card:hover .day-action-icons,
+.day-card:focus-within .day-action-icons { opacity: 1; }
 .icon-btn {
   width: auto;
   padding: 4px 6px;
@@ -4352,22 +4352,37 @@ button[type="submit"]:active {
   color: var(--text-2);
 }
 .day-stat b { font-weight: 650; color: var(--text); }
-.day-stat.up { color: #1b5e3f; }
-.day-stat.up b { color: #1b5e3f; }
-.day-stat.down { color: #b4530e; }
-.day-stat.down b { color: #b4530e; }
+.day-stat.up { color: #c0392b; }
+.day-stat.up b { color: #c0392b; }
+.day-stat.down { color: #2b6cb0; }
+.day-stat.down b { color: #2b6cb0; }
 
 /* --- Note: centred Show more, revealed on hover --- */
-.day-note-more {
-  display: flex;
-  justify-content: center;
-  margin-top: 2px;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-.day-card:hover .day-note-more,
-.day-card:focus-within .day-note-more { opacity: 1; }
 @media (hover: none) {
-  .day-note-more, .day-card-actions { opacity: 1; }
+  .day-action-icons { opacity: 1; }
 }
 .day-note-add { font-size: 0.83rem; }
+
+/* Show/Hide detail toggle under the day's icon actions */
+.day-detail-toggle {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 4px;
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.day-detail-toggle:hover { text-decoration: underline; }
+
+/* Checkpoint filter chips sit on the heading row, right-aligned */
+.trip-section-head .cp-filters {
+  margin-left: auto;
+  margin-bottom: 0;
+  justify-content: flex-end;
+}

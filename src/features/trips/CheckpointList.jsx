@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { OFF_ROUTE_M, CHECKPOINT_KINDS, CHECKPOINT_KIND_KEYS } from "../../lib/trail.js";
+import { OFF_ROUTE_M } from "../../lib/trail.js";
 import KindPicker from "./KindPicker.jsx";
 
 const km = (m) => (m / 1000).toFixed(2);
@@ -9,46 +9,18 @@ const PREVIEW = 8;
 // note, off-route / ambiguous flags, delete. A long list stays manageable via
 // per-category filter chips plus "show all" (rather than an overflow-scroll
 // container, which would clip the category dropdown).
-export default function CheckpointList({ checkpoints, onUpdate, onDelete, filter, onFilterChange, onHoverCheckpoint }) {
+export default function CheckpointList({ checkpoints, onUpdate, onDelete, onHoverCheckpoint }) {
   const [expanded, setExpanded] = useState(false);
-  const setFilter = (k) => onFilterChange?.(k);
 
   if (checkpoints.length === 0) {
     return <p className="empty-hint">No checkpoints yet. Click the map or elevation profile to add one.</p>;
   }
 
-  const counts = {};
-  for (const cp of checkpoints) {
-    const k = CHECKPOINT_KINDS[cp.kind] ? cp.kind : "poi";
-    counts[k] = (counts[k] || 0) + 1;
-  }
-  const matching = filter ? checkpoints.filter((cp) => (CHECKPOINT_KINDS[cp.kind] ? cp.kind : "poi") === filter) : checkpoints;
-  const shown = expanded ? matching : matching.slice(0, PREVIEW);
-  const hidden = matching.length - shown.length;
+  const shown = expanded ? checkpoints : checkpoints.slice(0, PREVIEW);
+  const hidden = checkpoints.length - shown.length;
 
   return (
     <>
-      <div className="cp-filters">
-        <button
-          type="button"
-          className={`cp-chip ${filter === null ? "active" : ""}`}
-          onClick={() => setFilter(null)}
-        >
-          All {checkpoints.length}
-        </button>
-        {CHECKPOINT_KIND_KEYS.filter((k) => counts[k]).map((k) => (
-          <button
-            key={k}
-            type="button"
-            title={CHECKPOINT_KINDS[k].label}
-            className={`cp-chip kind-${k} ${filter === k ? "active" : ""}`}
-            onClick={() => setFilter(filter === k ? null : k)}
-          >
-            {CHECKPOINT_KINDS[k].emoji} {counts[k]}
-          </button>
-        ))}
-      </div>
-
       <ul className="checkpoint-list">
         {shown.map((cp) => {
           const offRoute = cp.anchor.offsetM > OFF_ROUTE_M;
@@ -84,9 +56,9 @@ export default function CheckpointList({ checkpoints, onUpdate, onDelete, filter
         })}
       </ul>
 
-      {(hidden > 0 || expanded) && matching.length > PREVIEW && (
+      {(hidden > 0 || expanded) && checkpoints.length > PREVIEW && (
         <button type="button" className="link-btn cp-more" onClick={() => setExpanded((v) => !v)}>
-          {expanded ? "Show fewer" : `Show all ${matching.length}`}
+          {expanded ? "Show fewer" : `Show all ${checkpoints.length}`}
         </button>
       )}
     </>

@@ -6,7 +6,9 @@ import {
   buildDays,
   snapToTrack,
   suggestDaySplits,
-  detectExtrema
+  detectExtrema,
+  CHECKPOINT_KINDS,
+  CHECKPOINT_KIND_KEYS
 } from "../../lib/trail.js";
 import ElevationProfile from "./ElevationProfile.jsx";
 import TrackShape from "./TrackShape.jsx";
@@ -194,6 +196,11 @@ export default function TripWorkspace({
   };
 
   const { stats } = trip;
+  const kindCounts = {};
+  for (const cp of trip.checkpoints) {
+    const k = CHECKPOINT_KINDS[cp.kind] ? cp.kind : "poi";
+    kindCounts[k] = (kindCounts[k] || 0) + 1;
+  }
   // The category filter applies everywhere: list, elevation profile and map.
   const visibleCheckpoints = cpFilter
     ? trip.checkpoints.filter((cp) => (cp.kind || "poi") === cpFilter)
@@ -417,6 +424,28 @@ export default function TripWorkspace({
                   <span className="section-count">{trip.checkpoints.length}</span>
                 </button>
               </h3>
+              {cpOpen && (
+                <div className="cp-filters">
+                  <button
+                    type="button"
+                    className={`cp-chip ${cpFilter === null ? "active" : ""}`}
+                    onClick={() => setCpFilter(null)}
+                  >
+                    All {trip.checkpoints.length}
+                  </button>
+                  {CHECKPOINT_KIND_KEYS.filter((k) => kindCounts[k]).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      title={CHECKPOINT_KINDS[k].label}
+                      className={`cp-chip kind-${k} ${cpFilter === k ? "active" : ""}`}
+                      onClick={() => setCpFilter(cpFilter === k ? null : k)}
+                    >
+                      {CHECKPOINT_KINDS[k].emoji} {kindCounts[k]}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
             {cpOpen && (
               <>
@@ -497,11 +526,9 @@ export default function TripWorkspace({
               </div>
             )}
             <CheckpointList
-              checkpoints={trip.checkpoints}
+              checkpoints={visibleCheckpoints}
               onUpdate={onUpdateCheckpoint}
               onDelete={onDeleteCheckpoint}
-              filter={cpFilter}
-              onFilterChange={setCpFilter}
               onHoverCheckpoint={setHoverCpId}
             />
               </>
