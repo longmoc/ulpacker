@@ -4386,3 +4386,6 @@ button[type="submit"]:active {
   margin-bottom: 0;
   justify-content: flex-end;
 }
+
+/* Day cards carry their trail colour on the left edge */
+.day-card { border-left-width: 4px; }

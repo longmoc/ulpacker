@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { buildDays, buildCumulatives } from "../../lib/trail.js";
+import { buildDays, buildCumulatives, dayColor, OFF_ROUTE_COLOR } from "../../lib/trail.js";
 import Markdown from "./Markdown.jsx";
 import { PencilIcon, TrashIcon, PinIcon, TrendUpIcon, TrendDownIcon, ChevronIcon } from "../../components/icons.jsx";
 
@@ -39,9 +39,11 @@ export default function ItineraryDays({
   const base = trip.startDayNumber === 0 ? 0 : 1;
   const ordered = [];
   let num = base;
+  let trailIdx = 0;
   for (const day of days) {
     for (const x of extras.filter((e) => e.before === day.startBoundary)) ordered.push({ extra: x, num: num++ });
-    ordered.push({ day, num: num++ });
+    ordered.push({ day, num: num++, color: days.length > 1 ? dayColor(trailIdx) : null });
+    trailIdx += 1;
   }
   for (const x of extras.filter((e) => e.before === "finish" || !days.some((d) => d.startBoundary === e.before)))
     ordered.push({ extra: x, num: num++ });
@@ -164,7 +166,11 @@ export default function ItineraryDays({
             const x = row.extra;
             const key = `x:${x.id}`;
             return (
-              <div key={x.id} className="day-card off-route">
+              <div
+                key={x.id}
+                className="day-card off-route"
+                style={{ borderColor: OFF_ROUTE_COLOR, borderLeftColor: OFF_ROUTE_COLOR }}
+              >
                 <div className="day-top">
                   <div className="day-head">
                     Day {n} · {x.title}
@@ -224,6 +230,7 @@ export default function ItineraryDays({
             <div
               key={`d${day.index}`}
               className={`day-card ${active ? "active" : ""}`}
+              style={row.color ? { borderColor: row.color, borderLeftColor: row.color } : undefined}
               onClick={() => onSelectDay?.(active ? null : day.index)}
             >
               <div className="day-top">

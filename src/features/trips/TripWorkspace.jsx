@@ -8,7 +8,8 @@ import {
   suggestDaySplits,
   detectExtrema,
   CHECKPOINT_KINDS,
-  CHECKPOINT_KIND_KEYS
+  CHECKPOINT_KIND_KEYS,
+  dayColor
 } from "../../lib/trail.js";
 import ElevationProfile from "./ElevationProfile.jsx";
 import TrackShape from "./TrackShape.jsx";
@@ -46,7 +47,7 @@ export default function TripWorkspace({
   const coverRef = useRef(null);
   const [addKm, setAddKm] = useState("");
   const [splitDays, setSplitDays] = useState("");
-  const [cpOpen, setCpOpen] = useState(true);
+  const [cpOpen, setCpOpen] = useState(false);
   const [cpFilter, setCpFilter] = useState(null); // kind filter, shared with map/profile
   const [hoverCpId, setHoverCpId] = useState(null);
   const [openTool, setOpenTool] = useState(null); // "km" | "split" | null
@@ -90,6 +91,20 @@ export default function TripWorkspace({
     const d = days.find((x) => x.index === selectedDay);
     return d ? { startRouteM: d.startRouteM, endRouteM: d.endRouteM } : null;
   }, [selectedDay, trip, track, cums]);
+
+  // One colour band per trail day, shared by the map, the profile and the
+  // itinerary card borders so a day reads the same everywhere.
+  const dayBands = useMemo(() => {
+    if (!cums || !track || !trip) return [];
+    const { days } = buildDays({ checkpoints: trip.checkpoints, segments: track.segments, cumulatives: cums });
+    if (days.length < 2) return [];
+    return days.map((d, i) => ({
+      index: d.index,
+      startRouteM: d.startRouteM,
+      endRouteM: d.endRouteM,
+      color: dayColor(i)
+    }));
+  }, [trip, track, cums]);
 
   if (!trip) {
     return (
@@ -369,6 +384,7 @@ export default function TripWorkspace({
               hoverCpId={hoverCpId}
               onHoverCheckpoint={setHoverCpId}
               dayRange={dayRange}
+              dayBands={dayBands}
             />
             <div className="map-panel">
               <div className="map-toggle">
@@ -397,6 +413,7 @@ export default function TripWorkspace({
                   hoverCpId={hoverCpId}
                   onHoverCheckpoint={setHoverCpId}
                   dayRange={dayRange}
+                  dayBands={dayBands}
                 />
               ) : (
                 <TrackShape
@@ -406,6 +423,7 @@ export default function TripWorkspace({
                   highlight={hoverPoint}
                   hoverCpId={hoverCpId}
                   dayRange={dayRange}
+                  dayBands={dayBands}
                 />
               )}
             </div>

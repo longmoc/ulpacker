@@ -15,7 +15,8 @@ export default function ElevationProfile({
   onHover,
   hoverCpId,
   onHoverCheckpoint,
-  dayRange
+  dayRange,
+  dayBands
 }) {
   const svgRef = useRef(null);
   const [hover, setHover] = useState(null);
@@ -59,45 +60,46 @@ export default function ElevationProfile({
   const xOf = (routeM) => PAD.left + (totalM > 0 ? (routeM / totalM) * plotW : 0);
   const yOf = (ele) => PAD.top + plotH - ((ele - minEle) / eleSpan) * plotH;
 
-  // Build per-segment line + area paths, breaking at null elevations.
-  const paths = [];
-  const areas = [];
+  // Build line + area paths. When day bands are known each path is clipped to a
+  // day's route range so the profile is coloured the same way as the map.
+  const bands =
+    dayBands && dayBands.length > 1
+      ? dayBands
+      : [{ startRouteM: -1, endRouteM: Infinity, color: null }];
+  const strokes = []; // { line, area, color }
   if (hasEle) {
-    for (const seg of series) {
-      let line = "";
-      let area = "";
-      let runStart = null;
-      const closeArea = (endX) => {
-        if (runStart != null) area += ` L ${endX} ${PAD.top + plotH} L ${runStart} ${PAD.top + plotH} Z`;
-      };
-      for (const [routeM, ele] of seg) {
-        if (!Number.isFinite(ele)) {
+    for (const band of bands) {
+      for (const seg of series) {
+        let line = "";
+        let area = "";
+        let runStart = null;
+        const flush = (endX) => {
           if (line) {
-            paths.push(line);
-            closeArea(xOf(routeM));
-            areas.push(area);
+            if (runStart != null) area += ` L ${endX} ${PAD.top + plotH} L ${runStart} ${PAD.top + plotH} Z`;
+            strokes.push({ line, area, color: band.color });
           }
           line = "";
           area = "";
           runStart = null;
-          continue;
+        };
+        for (const [routeM, ele] of seg) {
+          const inBand = routeM >= band.startRouteM && routeM <= band.endRouteM;
+          if (!Number.isFinite(ele) || !inBand) {
+            flush(xOf(routeM));
+            continue;
+          }
+          const x = xOf(routeM);
+          const y = yOf(ele);
+          if (!line) {
+            line = `M ${x} ${y}`;
+            area = `M ${x} ${y}`;
+            runStart = x;
+          } else {
+            line += ` L ${x} ${y}`;
+            area += ` L ${x} ${y}`;
+          }
         }
-        const x = xOf(routeM);
-        const y = yOf(ele);
-        if (!line) {
-          line = `M ${x} ${y}`;
-          area = `M ${x} ${y}`;
-          runStart = x;
-        } else {
-          line += ` L ${x} ${y}`;
-          area += ` L ${x} ${y}`;
-        }
-      }
-      if (line) {
-        const lastX = xOf(seg[seg.length - 1][0]);
-        paths.push(line);
-        closeArea(lastX);
-        areas.push(area);
+        flush(xOf(seg[seg.length - 1][0]));
       }
     }
   }
@@ -166,11 +168,21 @@ export default function ElevationProfile({
             <text x={PAD.left - 6} y={PAD.top + plotH} textAnchor="end" className="axis-label">
               {Math.round(minEle)}
             </text>
-            {areas.map((d, i) => (
-              <path key={`a${i}`} d={d} className="profile-area" />
+            {strokes.map((st, i) => (
+              <path
+                key={`a${i}`}
+                d={st.area}
+                className="profile-area"
+                style={st.color ? { fill: st.color, fillOpacity: 0.18 } : undefined}
+              />
             ))}
-            {paths.map((d, i) => (
-              <path key={`l${i}`} d={d} className="profile-line" />
+            {strokes.map((st, i) => (
+              <path
+                key={`l${i}`}
+                d={st.line}
+                className="profile-line"
+                style={st.color ? { stroke: st.color } : undefined}
+              />
             ))}
           </>
         )}
@@ -215,7 +227,6 @@ export default function ElevationProfile({
               cp.anchor.routeDistanceM > dayRange.endRouteM + 1);
           return (
             <g key={cp.id} className={`profile-cp${active ? " active" : ""}${outside ? " dim" : ""}`}>
-              <line x1={x} y1={PAD.top} x2={x} y2={PAD.top + plotH} className="cp-line" />
               <circle
                 cx={x}
                 cy={hasEle && cp.anchor.ele != null ? yOf(cp.anchor.ele) : PAD.top + 6}

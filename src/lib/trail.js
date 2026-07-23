@@ -21,6 +21,28 @@ export const OFF_ROUTE_M = 200;
 // Bumping this recomputes cached trip stats on load.
 export const METRICS_VERSION = 1;
 
+// Categorical palette used to colour each day's stretch of trail (map, profile
+// and the itinerary card border). Validated for adjacent-pair separation:
+// worst adjacent CVD ΔE 9.1, normal-vision ΔE 19.6 — which is what matters here,
+// since consecutive days are the ones that touch. Days beyond the eighth reuse
+// the order; repeats land far apart on the route and every day is labelled.
+export const DAY_COLORS = [
+  "#2a78d6", // blue
+  "#eb6834", // orange
+  "#1baf7a", // aqua
+  "#eda100", // yellow
+  "#e87ba4", // magenta
+  "#008300", // green
+  "#4a3aa7", // violet
+  "#e34948" // red
+];
+// Off-route days are never on the track; one fixed neutral, clearly not a hue.
+export const OFF_ROUTE_COLOR = "#64748b";
+
+export function dayColor(i) {
+  return DAY_COLORS[((i % DAY_COLORS.length) + DAY_COLORS.length) % DAY_COLORS.length];
+}
+
 // Checkpoint categories. "overnight" is special — it drives the day itinerary.
 // The rest are informational markers shown on the map/profile.
 export const CHECKPOINT_KINDS = {

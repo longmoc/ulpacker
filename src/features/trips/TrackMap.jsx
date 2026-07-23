@@ -28,7 +28,8 @@ export default function TrackMap({
   highlight,
   hoverCpId,
   onHoverCheckpoint,
-  dayRange
+  dayRange,
+  dayBands
 }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
@@ -127,8 +128,21 @@ export default function TrackMap({
     if (!map) return;
     if (trackLayer.current) trackLayer.current.remove();
     const group = L.featureGroup();
-    for (const seg of track.segments) {
-      L.polyline(seg.points.map((p) => [p[0], p[1]]), { color: ACCENT, weight: 4, opacity: 0.9 }).addTo(group);
+    const cums = buildCumulatives(track.segments);
+    // White casing under every stroke keeps the colours legible over any tile.
+    const draw = (segs, color) => {
+      for (const seg of segs) {
+        const latlngs = seg.points.map((p) => [p[0], p[1]]);
+        L.polyline(latlngs, { color: "#fff", weight: 8, opacity: 0.9 }).addTo(group);
+        L.polyline(latlngs, { color, weight: 4, opacity: 1 }).addTo(group);
+      }
+    };
+    if (dayBands && dayBands.length > 1) {
+      for (const band of dayBands) {
+        draw(sliceSegments(track.segments, cums, band.startRouteM, band.endRouteM), band.color);
+      }
+    } else {
+      draw(track.segments, ACCENT);
     }
     const first = track.segments[0]?.points[0];
     const lastSeg = track.segments[track.segments.length - 1]?.points;
@@ -139,7 +153,7 @@ export default function TrackMap({
     trackLayer.current = group;
     const bounds = group.getBounds();
     if (bounds.isValid()) map.fitBounds(bounds, { padding: [24, 24] });
-  }, [track]);
+  }, [track, dayBands]);
 
   // Checkpoint markers.
   useEffect(() => {
