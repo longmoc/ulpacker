@@ -1,4 +1,5 @@
 import React, { useRef } from "react";
+import { TrashIcon } from "../../components/icons.jsx";
 
 const km = (m) => (m / 1000).toFixed(1);
 
@@ -40,7 +41,10 @@ export default function TripsSidebar({ trips, packs, activeTripId, onSelect, onD
           <div className="pack-card-wrap" key={trip.id}>
             <button
               type="button"
-              className={`pack-card trip-card ${trip.id === activeTripId ? "active" : ""}`}
+              className={`pack-card trip-card ${trip.id === activeTripId ? "active" : ""} ${
+                trip.image ? "has-image" : ""
+              }`}
+              style={trip.image ? { "--pack-img": `url(${trip.image})` } : undefined}
               onClick={() => onSelect(trip.id)}
             >
               <strong>{trip.name}</strong>
@@ -54,12 +58,13 @@ export default function TripsSidebar({ trips, packs, activeTripId, onSelect, onD
               type="button"
               className="pack-card-delete"
               title="Delete trip"
+              aria-label="Delete trip"
               onClick={(e) => {
                 e.stopPropagation();
                 if (window.confirm(`Delete trip "${trip.name}"?`)) onDelete(trip.id);
               }}
             >
-              ×
+              <TrashIcon />
             </button>
           </div>
         ))}

@@ -13,6 +13,16 @@ import TrackShape from "./TrackShape.jsx";
 import TrackMap from "./TrackMap.jsx";
 import CheckpointList from "./CheckpointList.jsx";
 import ItineraryDays from "./ItineraryDays.jsx";
+import {
+  PencilIcon,
+  TrashIcon,
+  ImageIcon,
+  PinIcon,
+  TrendUpIcon,
+  TrendDownIcon,
+  PeakIcon,
+  ClockIcon
+} from "../../components/icons.jsx";
 
 const km = (m) => (m / 1000).toFixed(1);
 
@@ -261,48 +271,77 @@ export default function TripWorkspace({
               onChange={(e) => onPickCover?.(e)}
             />
             {trip.image ? (
-              <>
-                <img className="trip-hero-img" src={trip.image} alt={`${trip.name} cover`} />
-                <div className="trip-hero-actions">
-                  <button type="button" title="Change cover image" onClick={() => coverRef.current?.click()}>
-                    Change
+              <div className="pack-cover">
+                <img src={trip.image} alt={`${trip.name} cover`} />
+                <div className="pack-cover-actions">
+                  <button
+                    type="button"
+                    title="Change cover image"
+                    aria-label="Change cover image"
+                    onClick={() => coverRef.current?.click()}
+                  >
+                    <PencilIcon />
                   </button>
                   <button
                     type="button"
                     className="cover-remove"
                     title="Remove cover image"
+                    aria-label="Remove cover image"
                     onClick={() => onUpdateTrip({ image: "" })}
                   >
-                    Remove
+                    <TrashIcon />
                   </button>
                 </div>
-              </>
+              </div>
             ) : (
-              <button type="button" className="trip-hero-empty" onClick={() => coverRef.current?.click()}>
-                + Add cover image
+              <button type="button" className="pack-cover-empty" onClick={() => coverRef.current?.click()}>
+                <ImageIcon />
+                Add cover image
               </button>
             )}
 
-            <div className="summary-grid trip-summary">
-              <div className="summary-card">
-                <small>Distance</small>
-                <strong>{km(stats.distanceM)} km</strong>
+            <div className="trip-stats">
+              <div className="trip-stat">
+                <span className="trip-stat-value">
+                  <PinIcon />
+                  <strong>{km(stats.distanceM)}</strong>
+                  <em>km</em>
+                </span>
+                <span className="trip-stat-label">Distance</span>
               </div>
-              <div className="summary-card">
-                <small>Ascent</small>
-                <strong>{stats.ascentM != null ? `+${stats.ascentM} m` : "—"}</strong>
+              <div className="trip-stat">
+                <span className="trip-stat-value">
+                  <TrendUpIcon />
+                  <strong>{stats.ascentM != null ? stats.ascentM.toLocaleString() : "—"}</strong>
+                  {stats.ascentM != null && <em>m</em>}
+                </span>
+                <span className="trip-stat-label">Ascent</span>
               </div>
-              <div className="summary-card">
-                <small>Descent</small>
-                <strong>{stats.descentM != null ? `−${stats.descentM} m` : "—"}</strong>
+              <div className="trip-stat">
+                <span className="trip-stat-value">
+                  <TrendDownIcon />
+                  <strong>{stats.descentM != null ? stats.descentM.toLocaleString() : "—"}</strong>
+                  {stats.descentM != null && <em>m</em>}
+                </span>
+                <span className="trip-stat-label">Descent</span>
               </div>
-              <div className="summary-card">
-                <small>High / Low</small>
-                <strong>{stats.maxEle != null ? `${stats.maxEle} / ${stats.minEle} m` : "—"}</strong>
+              <div className="trip-stat">
+                <span className="trip-stat-value">
+                  <PeakIcon />
+                  <strong>
+                    {stats.maxEle != null ? `${stats.maxEle.toLocaleString()} / ${stats.minEle.toLocaleString()}` : "—"}
+                  </strong>
+                  {stats.maxEle != null && <em>m</em>}
+                </span>
+                <span className="trip-stat-label">High / Low</span>
               </div>
-              <div className="summary-card">
-                <small>Days</small>
-                <strong>{dayCount}</strong>
+              <div className="trip-stat">
+                <span className="trip-stat-value">
+                  <ClockIcon />
+                  <strong>{dayCount}</strong>
+                  <em>days</em>
+                </span>
+                <span className="trip-stat-label">Duration</span>
               </div>
             </div>
           </div>

@@ -4197,84 +4197,93 @@ button[type="submit"]:active {
 .profile-cp.dim { opacity: 0.28; }
 .track-cp.dim { opacity: 0.28; }
 
-/* --- Trip hero: cover image with a glass summary bar near its bottom --- */
-.trip-hero {
-  position: relative;
+
+
+/* --- Trip hero: cover image (identical to packs) + centred glass stat pill --- */
+.trip-hero { position: relative; }
+
+/* The cover itself reuses .pack-cover / .pack-cover-actions / .pack-cover-empty
+   so the Trips and Packs views look and behave identically. */
+
+.trip-stats {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
   border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: var(--surface-2);
+  background: rgba(255, 255, 255, 0.55);
   border: 1px solid var(--border);
-}
-
-.trip-hero-img {
-  display: block;
-  width: 100%;
-  aspect-ratio: 3 / 1;
-  object-fit: cover;
-}
-
-.trip-hero-empty {
-  width: 100%;
-  aspect-ratio: 4 / 1;
-  border: none;
-  border-radius: 0;
-  background: var(--surface-2);
-  color: var(--text-3);
-  box-shadow: none;
-  font-size: 0.9rem;
-}
-.trip-hero-empty:hover { background: #eef0f3; color: var(--text-2); }
-
-.trip-hero-actions {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  display: flex;
-  gap: 6px;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-.trip-hero:hover .trip-hero-actions { opacity: 1; }
-.trip-hero-actions button {
-  width: auto;
-  padding: 4px 10px;
-  font-size: 0.78rem;
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(255, 255, 255, 0.6);
-  backdrop-filter: blur(6px);
-}
-.trip-hero-actions .cover-remove { color: #b42318; }
-
-/* Compact, glassy stat bar sitting over the image */
-.trip-summary {
-  grid-template-columns: repeat(5, 1fr);
-  gap: 6px;
-  padding: 10px;
-}
-.trip-hero.has-image .trip-summary {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-}
-.trip-summary .summary-card {
-  padding: 6px 8px;
-  background: rgba(255, 255, 255, 0.42);
-  border-color: rgba(255, 255, 255, 0.5);
   backdrop-filter: blur(10px) saturate(140%);
   -webkit-backdrop-filter: blur(10px) saturate(140%);
-  box-shadow: 0 1px 3px rgba(16, 17, 26, 0.12);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
-.trip-summary .summary-card small { font-size: 0.66rem; }
-.trip-summary .summary-card strong { font-size: 0.94rem; }
-.trip-hero.has-image .trip-summary .summary-card {
-  background: rgba(20, 24, 22, 0.4);
-  border-color: rgba(255, 255, 255, 0.22);
-  color: #fff;
+
+/* Centred over the bottom of the cover when there is one. */
+.trip-hero.has-image .trip-stats {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  background: rgba(20, 24, 22, 0.42);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 4px 18px rgba(16, 17, 26, 0.28);
 }
-.trip-hero.has-image .trip-summary .summary-card small { color: rgba(255, 255, 255, 0.75); }
-.trip-hero.has-image .trip-summary .summary-card strong { color: #fff; }
+
+/* No cover: sit centred just below the (empty) hero. */
+.trip-hero:not(.has-image) .trip-stats {
+  display: inline-flex;
+  margin: 12px auto 0;
+}
+.trip-hero:not(.has-image) { display: flex; flex-direction: column; align-items: center; }
+
+.trip-stat {
+  padding: 10px 22px;
+  text-align: center;
+  border-left: 1px solid var(--border);
+  min-width: 0;
+}
+.trip-stat:first-child { border-left: none; }
+.trip-hero.has-image .trip-stat { border-left-color: rgba(255, 255, 255, 0.2); }
+
+.trip-stat-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.trip-stat-value svg { color: var(--text-3); flex: 0 0 auto; }
+.trip-stat-value strong {
+  font-size: 1.12rem;
+  font-weight: 680;
+  letter-spacing: -0.015em;
+  font-variant-numeric: tabular-nums;
+}
+.trip-stat-value em {
+  font-style: normal;
+  font-size: 0.8rem;
+  color: var(--text-3);
+}
+.trip-stat-label {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+
+.trip-hero.has-image .trip-stat-value,
+.trip-hero.has-image .trip-stat-value strong { color: #fff; }
+.trip-hero.has-image .trip-stat-value svg,
+.trip-hero.has-image .trip-stat-value em,
+.trip-hero.has-image .trip-stat-label { color: rgba(255, 255, 255, 0.8); }
 
 @media (max-width: 768px) {
-  .trip-summary { grid-template-columns: repeat(3, 1fr); }
+  .trip-stats { flex-wrap: wrap; }
+  .trip-stat { padding: 8px 14px; }
+  .trip-stat-value strong { font-size: 1rem; }
+  .trip-hero.has-image .trip-stats { position: static; transform: none; margin: 10px auto 0; }
+  .trip-hero.has-image { display: flex; flex-direction: column; align-items: center; }
 }
