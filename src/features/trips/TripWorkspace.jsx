@@ -424,28 +424,28 @@ export default function TripWorkspace({
                   <span className="section-count">{trip.checkpoints.length}</span>
                 </button>
               </h3>
-              {cpOpen && (
-                <div className="cp-filters">
+              {/* Kept visible when the list is collapsed: the filter still
+                  drives the map and the elevation profile. */}
+              <div className="cp-filters">
+                <button
+                  type="button"
+                  className={`cp-chip ${cpFilter === null ? "active" : ""}`}
+                  onClick={() => setCpFilter(null)}
+                >
+                  All {trip.checkpoints.length}
+                </button>
+                {CHECKPOINT_KIND_KEYS.filter((k) => kindCounts[k]).map((k) => (
                   <button
+                    key={k}
                     type="button"
-                    className={`cp-chip ${cpFilter === null ? "active" : ""}`}
-                    onClick={() => setCpFilter(null)}
+                    title={CHECKPOINT_KINDS[k].label}
+                    className={`cp-chip kind-${k} ${cpFilter === k ? "active" : ""}`}
+                    onClick={() => setCpFilter(cpFilter === k ? null : k)}
                   >
-                    All {trip.checkpoints.length}
+                    {CHECKPOINT_KINDS[k].emoji} {kindCounts[k]}
                   </button>
-                  {CHECKPOINT_KIND_KEYS.filter((k) => kindCounts[k]).map((k) => (
-                    <button
-                      key={k}
-                      type="button"
-                      title={CHECKPOINT_KINDS[k].label}
-                      className={`cp-chip kind-${k} ${cpFilter === k ? "active" : ""}`}
-                      onClick={() => setCpFilter(cpFilter === k ? null : k)}
-                    >
-                      {CHECKPOINT_KINDS[k].emoji} {kindCounts[k]}
-                    </button>
-                  ))}
-                </div>
-              )}
+                ))}
+              </div>
             </div>
             {cpOpen && (
               <>
