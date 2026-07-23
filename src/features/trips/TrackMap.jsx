@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { CHECKPOINT_KINDS } from "../../lib/trail.js";
@@ -6,6 +6,16 @@ import { CHECKPOINT_KINDS } from "../../lib/trail.js";
 const ACCENT = "#1b5e3f";
 const GREEN = "#2e9e5b";
 const RED = "#b42318";
+
+const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || "");
+const ZOOM_KEY_LABEL = isMac ? "⌘" : "Ctrl";
+
+// Escape user-supplied text before it goes into a Leaflet tooltip (HTML string).
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]
+  );
+}
 
 // Real basemap (OpenStreetMap tiles) with the track drawn on top. Uses vector
 // CircleMarkers only — no marker image assets — so it stays within the app's
@@ -19,19 +29,51 @@ export default function TrackMap({ track, checkpoints, onAddAt, highlight }) {
   const hoverMarker = useRef(null);
   const onAddRef = useRef(onAddAt);
   onAddRef.current = onAddAt;
+  const [scrollHint, setScrollHint] = useState(false);
+  const hintTimer = useRef(null);
 
   // Init the map once.
   useEffect(() => {
-    const map = L.map(elRef.current, { zoomControl: true, attributionControl: true });
+    const map = L.map(elRef.current, {
+      zoomControl: true,
+      attributionControl: true,
+      // Plain wheel must scroll the PAGE, not the map (see the wheel handler
+      // below, which zooms only with Ctrl/⌘ — and with trackpad pinch, which
+      // browsers deliver as a ctrlKey wheel event).
+      scrollWheelZoom: false,
+      // Finer granularity than Leaflet's default whole-level steps.
+      zoomSnap: 0.25,
+      zoomDelta: 0.5
+    });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 17,
       attribution: "© OpenStreetMap contributors"
     }).addTo(map);
     map.on("click", (e) => onAddRef.current?.(e.latlng.lat, e.latlng.lng));
     mapRef.current = map;
+
+    const el = elRef.current;
+    const onWheel = (e) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        // ~4x gentler than one zoom level per notch.
+        const next = map.getZoom() - e.deltaY / 240;
+        map.setZoom(Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), next)), { animate: false });
+        setScrollHint(false);
+        return;
+      }
+      // Let the page scroll, but tell the user how to zoom.
+      setScrollHint(true);
+      clearTimeout(hintTimer.current);
+      hintTimer.current = setTimeout(() => setScrollHint(false), 1400);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+
     // The container starts at its final size, but guard against a 0-size init.
     setTimeout(() => map.invalidateSize(), 0);
     return () => {
+      el.removeEventListener("wheel", onWheel);
+      clearTimeout(hintTimer.current);
       map.remove();
       mapRef.current = null;
     };
@@ -73,8 +115,13 @@ export default function TrackMap({ track, checkpoints, onAddAt, highlight }) {
         iconAnchor: [14, 14],
         tooltipAnchor: [0, -16]
       });
+      const title = esc(cp.name || CHECKPOINT_KINDS[kind].label);
+      const note = cp.note ? `<span class="cp-tip-note">${esc(cp.note)}</span>` : "";
       L.marker([cp.anchor.lat, cp.anchor.lng], { icon })
-        .bindTooltip(`${emoji} ${cp.name || CHECKPOINT_KINDS[kind].label}`, { direction: "top" })
+        .bindTooltip(`<span class="cp-tip-name">${emoji} ${title}</span>${note}`, {
+          direction: "top",
+          className: "cp-tip"
+        })
         .addTo(group);
     }
     group.addTo(map);
@@ -109,6 +156,9 @@ export default function TrackMap({ track, checkpoints, onAddAt, highlight }) {
   return (
     <div className="track-map">
       <div ref={elRef} className="track-map-canvas" />
+      {scrollHint && (
+        <div className="map-scroll-hint">Use {ZOOM_KEY_LABEL} + scroll (or pinch) to zoom the map</div>
+      )}
       <div className="track-legend">
         <span className="dot start" /> Start
         <span className="dot end" /> Finish

@@ -3377,6 +3377,12 @@ export default function App() {
               onDeleteCheckpoint={(cpId) =>
                 activeTrip && setTripCheckpoints(activeTrip.id, (list) => list.filter((c) => c.id !== cpId))
               }
+              onSetDayNote={(key, text) =>
+                activeTrip &&
+                updateTrip(activeTrip.id, {
+                  dayNotes: { ...(activeTrip.dayNotes || {}), [key]: text }
+                })
+              }
             />
           )}
         </section>

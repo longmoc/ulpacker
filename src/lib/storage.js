@@ -5,6 +5,8 @@ import {
   buildCumulatives,
   clampText,
   isCheckpointKind,
+  MAX_DAY_NOTE_LENGTH,
+  MAX_DAY_NOTES,
   MAX_TRIPS,
   MAX_CHECKPOINTS_PER_TRIP,
   MAX_SEGMENTS,
@@ -241,6 +243,20 @@ export function normalizeTrips(rawTrips, validPackIds, tracks) {
         .slice(0, MAX_SEGMENTS);
       boundaries = boundaries.filter((n, i) => i === 0 || n - boundaries[i - 1] > 1);
 
+      // Per-day Markdown descriptions, keyed by the boundary that starts the day
+      // ("start" or a checkpoint id). Values are plain text — rendered as React
+      // elements, never as HTML — but still capped.
+      const rawNotes =
+        raw.dayNotes && typeof raw.dayNotes === "object" && !Array.isArray(raw.dayNotes) ? raw.dayNotes : {};
+      const dayNotes = {};
+      let noteCount = 0;
+      for (const [k, v] of Object.entries(rawNotes)) {
+        if (noteCount >= MAX_DAY_NOTES) break;
+        if (typeof k !== "string" || !k || typeof v !== "string" || !v) continue;
+        dayNotes[k.slice(0, 64)] = v.slice(0, MAX_DAY_NOTE_LENGTH);
+        noteCount += 1;
+      }
+
       const packId = raw.packId && validPackIds.has(raw.packId) ? raw.packId : "";
       return {
         id: raw.id || id(),
@@ -251,6 +267,7 @@ export function normalizeTrips(rawTrips, validPackIds, tracks) {
         trackRef,
         stats,
         boundaries,
+        dayNotes,
         checkpoints
       };
     })

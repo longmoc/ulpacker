@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from "react";
-import { buildCumulatives, buildElevationSeries } from "../../lib/trail.js";
+import { buildCumulatives, buildElevationSeries, CHECKPOINT_KINDS } from "../../lib/trail.js";
 
 const W = 1000;
 const H = 220;
@@ -11,9 +11,11 @@ const PAD = { top: 16, right: 12, bottom: 24, left: 44 };
 export default function ElevationProfile({ track, checkpoints, onAddAt, onHover }) {
   const svgRef = useRef(null);
   const [hover, setHover] = useState(null);
+  const [hoverCp, setHoverCp] = useState(null);
 
   const clearHover = () => {
     setHover(null);
+    setHoverCp(null);
     onHover?.(null);
   };
 
@@ -92,8 +94,17 @@ export default function ElevationProfile({ track, checkpoints, onAddAt, onHover 
     const px = ((e.clientX - rect.left) / rect.width) * W;
     const frac = Math.max(0, Math.min(1, (px - PAD.left) / plotW));
     const routeM = frac * totalM;
-    setHover({ routeM, x: PAD.left + frac * plotW });
+    const x = PAD.left + frac * plotW;
+    setHover({ routeM, x });
     onHover?.(routeM);
+    // Snap a tooltip to the nearest checkpoint marker within ~12 viewBox units.
+    let near = null;
+    for (const cp of checkpoints) {
+      const cx = xOf(cp.anchor.routeDistanceM);
+      const d = Math.abs(cx - x);
+      if (d <= 12 && (!near || d < near.d)) near = { cp, d, cx };
+    }
+    setHoverCp(near ? near.cp : null);
   };
 
   const hoverEle = (() => {
@@ -165,13 +176,14 @@ export default function ElevationProfile({ track, checkpoints, onAddAt, onHover 
         {/* Checkpoint markers */}
         {checkpoints.map((cp) => {
           const x = xOf(cp.anchor.routeDistanceM);
+          const active = hoverCp?.id === cp.id;
           return (
-            <g key={cp.id} className="profile-cp">
+            <g key={cp.id} className={`profile-cp${active ? " active" : ""}`}>
               <line x1={x} y1={PAD.top} x2={x} y2={PAD.top + plotH} className="cp-line" />
               <circle
                 cx={x}
                 cy={hasEle && cp.anchor.ele != null ? yOf(cp.anchor.ele) : PAD.top + 6}
-                r={4}
+                r={active ? 6 : 4}
                 className={`cp-dot kind-${cp.kind || "poi"}${cp.kind === "overnight" ? " overnight" : ""}`}
               />
             </g>
@@ -188,6 +200,25 @@ export default function ElevationProfile({ track, checkpoints, onAddAt, onHover 
           />
         )}
       </svg>
+      {hoverCp && (
+        <div
+          className={`cp-tip profile-cp-tip kind-${hoverCp.kind || "poi"}`}
+          style={{
+            left: `${(xOf(hoverCp.anchor.routeDistanceM) / W) * 100}%`,
+            top: `${((hasEle && hoverCp.anchor.ele != null ? yOf(hoverCp.anchor.ele) : PAD.top + 6) / H) * 100}%`
+          }}
+        >
+          <span className="cp-tip-name">
+            {(CHECKPOINT_KINDS[hoverCp.kind] || CHECKPOINT_KINDS.poi).emoji}{" "}
+            {hoverCp.name || (CHECKPOINT_KINDS[hoverCp.kind] || CHECKPOINT_KINDS.poi).label}
+          </span>
+          {hoverCp.note && <span className="cp-tip-note">{hoverCp.note}</span>}
+          <span className="cp-tip-meta">
+            {(hoverCp.anchor.routeDistanceM / 1000).toFixed(2)} km
+            {hoverCp.anchor.ele != null && ` · ${hoverCp.anchor.ele} m`}
+          </span>
+        </div>
+      )}
       <div className="profile-caption">
         {!hasEle
           ? "No elevation data in this GPX — add checkpoints on the map or by distance below."

@@ -3932,3 +3932,168 @@ button[type="submit"]:active {
   font-size: 15px;
   line-height: 1;
 }
+
+/* --- Map scroll hint --- */
+.track-map { position: relative; }
+.map-scroll-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 900;
+  background: rgba(16, 17, 26, 0.28);
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 500;
+  border-radius: var(--radius-lg);
+}
+
+/* --- Checkpoint tooltip (map + elevation profile) --- */
+.cp-tip .cp-tip-name,
+.profile-cp-tip .cp-tip-name { display: block; font-weight: 600; }
+.cp-tip .cp-tip-note,
+.profile-cp-tip .cp-tip-note {
+  display: block;
+  margin-top: 2px;
+  opacity: 0.85;
+  font-size: 0.78rem;
+  max-width: 240px;
+  white-space: normal;
+}
+.profile-cp-tip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 10px));
+  z-index: 20;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-left: 3px solid var(--kc, #5b6472);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 6px 9px;
+  font-size: 0.84rem;
+  pointer-events: none;
+  max-width: 260px;
+}
+.profile-cp-tip .cp-tip-meta {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+.profile-cp.active .cp-line { opacity: 0.8; stroke-width: 1.5; }
+
+/* --- Collapsible section head --- */
+.section-toggle {
+  width: auto;
+  border: none;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.section-toggle .caret {
+  display: inline-block;
+  transition: transform 0.12s ease;
+  color: var(--text-3);
+}
+.section-toggle .caret.open { transform: rotate(90deg); }
+.section-count {
+  color: var(--text-3);
+  font-weight: 500;
+  font-size: 0.82rem;
+}
+
+/* --- Checkpoint filter chips --- */
+.cp-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.cp-chip {
+  width: auto;
+  padding: 3px 9px;
+  font-size: 0.8rem;
+  border-radius: 999px;
+  box-shadow: none;
+  color: var(--text-2);
+  border-color: var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.cp-chip.active {
+  border-color: var(--kc, var(--accent));
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+.cp-more { margin-top: 8px; }
+
+/* --- Day description (Markdown) --- */
+.day-note {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.day-note-body {
+  font-size: 0.88rem;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.day-note-body.clamped {
+  max-height: 6.5em;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(#000 60%, transparent);
+  mask-image: linear-gradient(#000 60%, transparent);
+}
+.day-note-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 6px;
+}
+.day-note-actions button { width: auto; }
+.day-note-actions .primary {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+  padding: 5px 14px;
+}
+.day-note-input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  resize: vertical;
+}
+
+/* Markdown output */
+.md p { margin: 0 0 6px; }
+.md p:last-child { margin-bottom: 0; }
+.md ul, .md ol { margin: 0 0 6px; padding-left: 20px; }
+.md ul { list-style: disc; }
+.md ol { list-style: decimal; }
+.md li { margin: 2px 0; }
+.md h4, .md h5, .md h6 {
+  margin: 6px 0 4px;
+  font-size: 0.9rem;
+  font-weight: 650;
+  color: var(--text);
+}
+.md code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 4px;
+}

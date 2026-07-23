@@ -25,11 +25,13 @@ export default function TripWorkspace({
   onReplaceGpx,
   onAddCheckpoint,
   onUpdateCheckpoint,
-  onDeleteCheckpoint
+  onDeleteCheckpoint,
+  onSetDayNote
 }) {
   const replaceRef = useRef(null);
   const [addKm, setAddKm] = useState("");
   const [splitDays, setSplitDays] = useState("");
+  const [cpOpen, setCpOpen] = useState(true);
   const [hoverRouteM, setHoverRouteM] = useState(null);
   const [mapMode, setMapMode] = useState(() => {
     try {
@@ -304,7 +306,17 @@ export default function TripWorkspace({
 
           <section className="trip-section">
             <div className="trip-section-head">
-              <h3>Checkpoints</h3>
+              <h3>
+                <button
+                  type="button"
+                  className="section-toggle"
+                  aria-expanded={cpOpen}
+                  onClick={() => setCpOpen((v) => !v)}
+                >
+                  <span className={`caret ${cpOpen ? "open" : ""}`}>▸</span> Checkpoints
+                  <span className="section-count">{trip.checkpoints.length}</span>
+                </button>
+              </h3>
               <div className="add-km">
                 <span>Add at</span>
                 <input
@@ -323,6 +335,8 @@ export default function TripWorkspace({
                 </button>
               </div>
             </div>
+            {cpOpen && (
+              <>
             <div className="suggest-bar">
               <span className="suggest-label">Suggest:</span>
               <span className="suggest-group">
@@ -364,11 +378,13 @@ export default function TripWorkspace({
               onUpdate={onUpdateCheckpoint}
               onDelete={onDeleteCheckpoint}
             />
+              </>
+            )}
           </section>
 
           <section className="trip-section">
             <h3>Itinerary</h3>
-            <ItineraryDays trip={trip} track={track} />
+            <ItineraryDays trip={trip} track={track} onSetDayNote={onSetDayNote} />
           </section>
         </>
       )}
