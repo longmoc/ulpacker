@@ -209,8 +209,12 @@ export default function ElevationProfile({
         {checkpoints.map((cp) => {
           const x = xOf(cp.anchor.routeDistanceM);
           const active = (hoverCpId || hoverCp?.id) === cp.id;
+          const outside =
+            dayRange &&
+            (cp.anchor.routeDistanceM < dayRange.startRouteM - 1 ||
+              cp.anchor.routeDistanceM > dayRange.endRouteM + 1);
           return (
-            <g key={cp.id} className={`profile-cp${active ? " active" : ""}`}>
+            <g key={cp.id} className={`profile-cp${active ? " active" : ""}${outside ? " dim" : ""}`}>
               <line x1={x} y1={PAD.top} x2={x} y2={PAD.top + plotH} className="cp-line" />
               <circle
                 cx={x}

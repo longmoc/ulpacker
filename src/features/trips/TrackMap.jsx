@@ -205,14 +205,21 @@ export default function TrackMap({
   // Enlarge/highlight the marker for the checkpoint hovered anywhere (map or
   // elevation profile).
   useEffect(() => {
+    const byId = new Map(checkpoints.map((cp) => [cp.id, cp]));
     for (const [cpId, marker] of cpMarkers.current) {
       const el = marker.getElement?.();
       if (!el) continue;
       el.classList.toggle("cp-marker-active", cpId === hoverCpId);
-      if (cpId === hoverCpId) marker.setZIndexOffset(1000);
-      else marker.setZIndexOffset(0);
+      // Fade checkpoints that fall outside the selected day.
+      const routeM = byId.get(cpId)?.anchor?.routeDistanceM;
+      const outside =
+        dayRange &&
+        Number.isFinite(routeM) &&
+        (routeM < dayRange.startRouteM - 1 || routeM > dayRange.endRouteM + 1);
+      el.classList.toggle("cp-marker-dim", Boolean(outside));
+      marker.setZIndexOffset(cpId === hoverCpId ? 1000 : 0);
     }
-  }, [hoverCpId, checkpoints]);
+  }, [hoverCpId, checkpoints, dayRange]);
 
   // Hover highlight linked to the elevation profile.
   useEffect(() => {

@@ -452,6 +452,7 @@ export default function TripWorkspace({
               onAddExtraDay={addExtraDay}
               onUpdateExtraDay={updateExtraDay}
               onDeleteExtraDay={deleteExtraDay}
+              onSetStartDay={(n) => onUpdateTrip({ startDayNumber: n })}
             />
           </section>
         </>

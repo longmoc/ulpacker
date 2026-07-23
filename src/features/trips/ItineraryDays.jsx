@@ -17,7 +17,8 @@ export default function ItineraryDays({
   onSelectDay,
   onAddExtraDay,
   onUpdateExtraDay,
-  onDeleteExtraDay
+  onDeleteExtraDay,
+  onSetStartDay
 }) {
   const [editing, setEditing] = useState(null); // note key
   const [draft, setDraft] = useState("");
@@ -34,14 +35,19 @@ export default function ItineraryDays({
   const notes = trip.dayNotes || {};
   const extras = trip.extraDays || [];
 
-  // Interleave off-route days with trail days, then number them in sequence.
+  // Interleave off-route days with trail days and number them in sequence.
+  // Trips with a prep/arrival day can start the count at Day 0.
+  const base = trip.startDayNumber === 0 ? 0 : 1;
   const ordered = [];
+  let num = base;
   for (const day of days) {
-    for (const x of extras.filter((e) => e.before === day.startBoundary)) ordered.push({ extra: x });
-    ordered.push({ day });
+    for (const x of extras.filter((e) => e.before === day.startBoundary)) ordered.push({ extra: x, num: num++ });
+    ordered.push({ day, num: num++ });
   }
   for (const x of extras.filter((e) => e.before === "finish" || !days.some((d) => d.startBoundary === e.before)))
-    ordered.push({ extra: x });
+    ordered.push({ extra: x, num: num++ });
+  // Displayed number per trail day, so the insert-position picker matches.
+  const dayNum = new Map(ordered.filter((r) => r.day).map((r) => [r.day.startBoundary, r.num]));
 
   const startEdit = (key, current) => {
     setDraft(current || "");
@@ -112,7 +118,6 @@ export default function ItineraryDays({
     );
   };
 
-  let n = 0;
   return (
     <div className="itinerary">
       {!hasOvernight && (
@@ -126,6 +131,14 @@ export default function ItineraryDays({
         <button type="button" className="link-btn" onClick={() => setAdding((v) => !v)}>
           + Add off-route day
         </button>
+        <label className="day0-toggle" title="Number the first card Day 0 (a prep / arrival day)">
+          <input
+            type="checkbox"
+            checked={base === 0}
+            onChange={(e) => onSetStartDay?.(e.target.checked ? 0 : 1)}
+          />
+          Start at Day 0
+        </label>
         {selectedDay != null && (
           <button type="button" className="link-btn" onClick={() => onSelectDay?.(null)}>
             Clear day highlight
@@ -145,7 +158,7 @@ export default function ItineraryDays({
           <select value={newDay.before} onChange={(e) => setNewDay((d) => ({ ...d, before: e.target.value }))}>
             {days.map((d) => (
               <option key={d.index} value={d.startBoundary}>
-                before Day {d.index}
+                before Day {dayNum.get(d.startBoundary)}
               </option>
             ))}
             <option value="finish">at the end</option>
@@ -166,7 +179,7 @@ export default function ItineraryDays({
 
       <div className="day-cards">
         {ordered.map((row) => {
-          n += 1;
+          const n = row.num;
           if (row.extra) {
             const x = row.extra;
             return (

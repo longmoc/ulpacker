@@ -274,6 +274,9 @@ export function normalizeTrips(rawTrips, validPackIds, tracks) {
         )
         .filter(Boolean);
 
+      // Itineraries that need a prep/arrival day number the first card "Day 0".
+      const startDayNumber = parseNumber(raw.startDayNumber, 1) === 0 ? 0 : 1;
+
       const packId = raw.packId && validPackIds.has(raw.packId) ? raw.packId : "";
       return {
         id: raw.id || id(),
@@ -286,6 +289,7 @@ export function normalizeTrips(rawTrips, validPackIds, tracks) {
         boundaries,
         dayNotes,
         extraDays,
+        startDayNumber,
         checkpoints
       };
     })

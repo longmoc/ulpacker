@@ -102,6 +102,10 @@ export default function TrackShape({ track, checkpoints, onAddAt, highlight, hov
         {checkpoints.map((cp) => {
           const [x, y] = project(cp.anchor.lat, cp.anchor.lng);
           const active = hoverCpId === cp.id;
+          const outside =
+            dayRange &&
+            (cp.anchor.routeDistanceM < dayRange.startRouteM - 1 ||
+              cp.anchor.routeDistanceM > dayRange.endRouteM + 1);
           return (
             <circle
               key={cp.id}
@@ -110,7 +114,7 @@ export default function TrackShape({ track, checkpoints, onAddAt, highlight, hov
               r={active ? rCp * 1.8 : rCp}
               className={`track-cp kind-${cp.kind || "poi"}${cp.kind === "overnight" ? " overnight" : ""}${
                 active ? " active" : ""
-              }`}
+              }${outside ? " dim" : ""}`}
             />
           );
         })}
