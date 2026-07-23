@@ -509,7 +509,6 @@ export default function TripWorkspace({
           </section>
 
           <section className="trip-section">
-            <h3>Itinerary</h3>
             <ItineraryDays
               trip={trip}
               track={track}
