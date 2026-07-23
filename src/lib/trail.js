@@ -29,6 +29,7 @@ export const CHECKPOINT_KINDS = {
   food: { label: "Food", emoji: "🍴" },
   water: { label: "Water", emoji: "💧" },
   resupply: { label: "Resupply", emoji: "🛒" },
+  transport: { label: "Transport", emoji: "🚆" },
   pass: { label: "Pass / summit", emoji: "⛰️" },
   viewpoint: { label: "Viewpoint", emoji: "📷" },
   hazard: { label: "Hazard", emoji: "⚠️" },
@@ -48,7 +49,8 @@ export function isOvernight(cp) {
 // matters: the most specific/hazardous signals win. Falls back to "poi".
 export function classifyCheckpoint(name) {
   const s = (name || "").toLowerCase();
-  if (/hazard|ladder|footbridge|exposed|cable|chain|danger|scree|\bford\b|crevasse|snowfield|rockfall/.test(s)) return "hazard";
+  if (/hazard|ladder|footbridge|exposed|chain|danger|scree|\bford\b|crevasse|snowfield|rockfall|via ?ferrata/.test(s)) return "hazard";
+  if (/transport|shuttle|\bbus\b|train|station|\bgare\b|cable ?car|t[eé]l[eé]ph[eé]rique|funicular|gondola|chairlift|\blift\b|ferry|taxi|parking/.test(s)) return "transport";
   if (/resupply|supermarket|grocery|\bshop\b|\bstore\b|market|provision|\bgas\b|\bfuel\b/.test(s)) return "resupply";
   if (/lunch|restaurant|\bfood\b|dining|caf[eé]|\bbar\b|snack|picnic|\beat\b|\bmeal\b|breakfast|dinner|buvette/.test(s)) return "food";
   if (/water|refill|fountain|spring|\bsource\b|potable|\beau\b/.test(s)) return "water";
@@ -721,6 +723,44 @@ export function suggestDaySplits(totalM, target, { checkpoints = [], boundaries 
   });
 }
 
+// Extract the portion of the track between two route distances, as drawable
+// segments. Used to highlight a single day's stretch on the map / shape.
+export function sliceSegments(segments, cumulatives, fromM, toM) {
+  const { cumulativeBySegment, segmentOffsets, segmentLengths } = cumulatives;
+  const out = [];
+  if (!(toM > fromM)) return out;
+  for (let s = 0; s < segments.length; s += 1) {
+    const segStart = segmentOffsets[s];
+    const segEnd = segStart + segmentLengths[s];
+    if (segEnd <= fromM || segStart >= toM) continue;
+    const pts = segments[s].points;
+    const cum = cumulativeBySegment[s];
+    const localFrom = Math.max(0, fromM - segStart);
+    const localTo = Math.min(segmentLengths[s], toM - segStart);
+
+    const at = (target) => {
+      for (let i = 1; i < pts.length; i += 1) {
+        if (cum[i] >= target) {
+          const span = cum[i] - cum[i - 1] || 1;
+          const t = (target - cum[i - 1]) / span;
+          const a = pts[i - 1];
+          const b = pts[i];
+          return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), a[2]];
+        }
+      }
+      return pts[pts.length - 1];
+    };
+
+    const piece = [at(localFrom)];
+    for (let i = 0; i < pts.length; i += 1) {
+      if (cum[i] > localFrom && cum[i] < localTo) piece.push(pts[i]);
+    }
+    piece.push(at(localTo));
+    if (piece.length >= 2) out.push({ points: piece });
+  }
+  return out;
+}
+
 // Detect topographic high/low points along the trail by 1-D prominence. Needs
 // elevation. Returns the most prominent first: [{ routeM, ele, kind }].
 export function detectExtrema(segments, cumulatives, { minProminenceM = 120, max = 12 } = {}) {
@@ -804,6 +844,8 @@ export function buildDays({ checkpoints = [], segments = [], cumulatives } = {})
     const range = statsForRange(samples, a.routeM, b.routeM);
     days.push({
       index: i,
+      startRouteM: a.routeM,
+      endRouteM: b.routeM,
       startBoundary: a.label,
       startName: a.name || (a.label === "start" ? "Start" : a.name),
       endBoundary: b.label,

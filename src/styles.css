@@ -4138,3 +4138,48 @@ button[type="submit"]:active {
 .cp-marker-pin { transition: transform 0.1s ease, box-shadow 0.1s ease; }
 .track-cp.active { stroke-width: 3; }
 .checkpoint-row:hover { border-color: var(--border-2); background: var(--surface); }
+
+/* Transport category colour */
+.kind-transport { --kc: #475569; }
+
+/* Map click confirmation popup */
+.map-confirm { display: flex; flex-direction: column; gap: 8px; font-size: 0.86rem; }
+.map-confirm-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.map-confirm-actions button { width: auto; padding: 4px 12px; font-size: 0.82rem; box-shadow: none; }
+.map-confirm-actions .primary { color: #fff; background: var(--accent); border-color: var(--accent); }
+.map-confirm-popup .leaflet-popup-content { margin: 10px 12px; }
+.map-confirm-popup .leaflet-popup-content-wrapper { border-radius: var(--radius); }
+
+/* Day title: larger, in the app's green */
+.day-head {
+  font-size: 1.02rem;
+  font-weight: 650;
+  color: var(--accent);
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Day selection highlights that day's stretch of trail */
+.day-card { cursor: pointer; transition: border-color 0.12s ease, box-shadow 0.12s ease; }
+.day-card:hover { border-color: var(--border-2); }
+.day-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-ring);
+}
+.day-card.off-route {
+  cursor: default;
+  border-style: dashed;
+  background: var(--surface-2);
+}
+.day-card.off-route .day-head { color: var(--text-2); }
+.off-route-badge { background: #eef; color: #4338ca; }
+
+.itinerary-tools { display: flex; gap: 16px; margin-bottom: 10px; }
+
+/* Dim everything outside the selected day */
+.profile-day-mask rect { fill: var(--surface-2); opacity: 0.72; }
+.track-line.dimmed { opacity: 0.22; }
+.track-line.day { stroke: var(--accent); opacity: 1; }

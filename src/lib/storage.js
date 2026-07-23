@@ -257,6 +257,23 @@ export function normalizeTrips(rawTrips, validPackIds, tracks) {
         noteCount += 1;
       }
 
+      // Extra itinerary days that are NOT on the track (travel/approach, rest,
+      // shuttle days). `before` is the boundary key of the real day they precede
+      // ("start" = before day 1, "finish" = appended at the end).
+      const extraDays = (Array.isArray(raw.extraDays) ? raw.extraDays : [])
+        .slice(0, 30)
+        .map((d) =>
+          d && typeof d === "object"
+            ? {
+                id: d.id || id(),
+                before: typeof d.before === "string" && d.before ? d.before.slice(0, 64) : "finish",
+                title: clampText(d.title) || "Off-route day",
+                note: typeof d.note === "string" ? d.note.slice(0, MAX_DAY_NOTE_LENGTH) : ""
+              }
+            : null
+        )
+        .filter(Boolean);
+
       const packId = raw.packId && validPackIds.has(raw.packId) ? raw.packId : "";
       return {
         id: raw.id || id(),
@@ -268,6 +285,7 @@ export function normalizeTrips(rawTrips, validPackIds, tracks) {
         stats,
         boundaries,
         dayNotes,
+        extraDays,
         checkpoints
       };
     })

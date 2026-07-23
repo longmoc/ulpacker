@@ -18,6 +18,7 @@ import {
   segmentBoundaryRouteMs,
   detectExtrema,
   classifyCheckpoint,
+  sliceSegments,
   MAX_TRACK_POINTS
 } from "../trail.js";
 
@@ -321,6 +322,46 @@ describe("classifyCheckpoint", () => {
   });
   it("prioritises hazard over other signals", () => {
     expect(classifyCheckpoint("Hazard — ladder near the water source")).toBe("hazard");
+  });
+
+  it("classifies transport stops", () => {
+    expect(classifyCheckpoint("Day 4 — Arp Nouvaz shuttle boundary")).toBe("transport");
+    expect(classifyCheckpoint("Train station — Chamonix")).toBe("transport");
+    expect(classifyCheckpoint("Cable car — Brévent")).toBe("transport");
+  });
+});
+
+describe("sliceSegments", () => {
+  const segments = [{ points: [[45, 6.0, 100], [45, 6.02, 200], [45, 6.04, 150], [45, 6.06, 250]] }];
+  const cums = buildCumulatives(segments);
+
+  it("extracts only the requested route range", () => {
+    const total = cums.totalM;
+    const out = sliceSegments(segments, cums, total * 0.25, total * 0.75);
+    expect(out).toHaveLength(1);
+    const sliced = buildCumulatives(out).totalM;
+    expect(sliced).toBeGreaterThan(total * 0.45);
+    expect(sliced).toBeLessThan(total * 0.55);
+  });
+
+  it("returns the whole track for the full range", () => {
+    const out = sliceSegments(segments, cums, 0, cums.totalM);
+    expect(Math.round(buildCumulatives(out).totalM)).toBe(Math.round(cums.totalM));
+  });
+
+  it("returns nothing for an empty or inverted range", () => {
+    expect(sliceSegments(segments, cums, 500, 500)).toEqual([]);
+    expect(sliceSegments(segments, cums, 900, 100)).toEqual([]);
+  });
+
+  it("skips segments outside the range", () => {
+    const two = [
+      { points: [[45, 6.0, 0], [45, 6.02, 0]] },
+      { points: [[45.5, 6.0, 0], [45.5, 6.02, 0]] }
+    ];
+    const c2 = buildCumulatives(two);
+    const out = sliceSegments(two, c2, 0, c2.segmentLengths[0]);
+    expect(out).toHaveLength(1);
   });
 });
 

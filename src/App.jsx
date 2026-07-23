@@ -3383,6 +3383,7 @@ export default function App() {
                   dayNotes: { ...(activeTrip.dayNotes || {}), [key]: text }
                 })
               }
+              onSetExtraDays={(list) => activeTrip && updateTrip(activeTrip.id, { extraDays: list })}
             />
           )}
         </section>

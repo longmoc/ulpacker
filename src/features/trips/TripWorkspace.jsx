@@ -26,7 +26,8 @@ export default function TripWorkspace({
   onAddCheckpoint,
   onUpdateCheckpoint,
   onDeleteCheckpoint,
-  onSetDayNote
+  onSetDayNote,
+  onSetExtraDays
 }) {
   const replaceRef = useRef(null);
   const [addKm, setAddKm] = useState("");
@@ -35,6 +36,7 @@ export default function TripWorkspace({
   const [cpFilter, setCpFilter] = useState(null); // kind filter, shared with map/profile
   const [hoverCpId, setHoverCpId] = useState(null);
   const [openTool, setOpenTool] = useState(null); // "km" | "split" | null
+  const [selectedDay, setSelectedDay] = useState(null);
   const [hoverRouteM, setHoverRouteM] = useState(null);
   const [mapMode, setMapMode] = useState(() => {
     try {
@@ -65,6 +67,15 @@ export default function TripWorkspace({
     const a = anchorAtRouteM(track.segments, cums, hoverRouteM);
     return { lat: a.lat, lng: a.lng };
   }, [hoverRouteM, track, cums]);
+
+  // Route range of the selected day (drives the dim/highlight on map + profile).
+  // Must stay above the early return below — hooks can't be conditional.
+  const dayRange = useMemo(() => {
+    if (selectedDay == null || !cums || !track || !trip) return null;
+    const { days } = buildDays({ checkpoints: trip.checkpoints, segments: track.segments, cumulatives: cums });
+    const d = days.find((x) => x.index === selectedDay);
+    return d ? { startRouteM: d.startRouteM, endRouteM: d.endRouteM } : null;
+  }, [selectedDay, trip, track, cums]);
 
   if (!trip) {
     return (
@@ -176,6 +187,13 @@ export default function TripWorkspace({
     ? trip.checkpoints.filter((cp) => (cp.kind || "poi") === cpFilter)
     : trip.checkpoints;
 
+  const extraDays = trip.extraDays || [];
+  const addExtraDay = ({ title, before }) =>
+    onSetExtraDays?.([...extraDays, { id: `xd_${id()}`, title, before, note: "" }]);
+  const updateExtraDay = (xid, patch) =>
+    onSetExtraDays?.(extraDays.map((d) => (d.id === xid ? { ...d, ...patch } : d)));
+  const deleteExtraDay = (xid) => onSetExtraDays?.(extraDays.filter((d) => d.id !== xid));
+
   return (
     <div className="trip-workspace">
       <div className="workspace-titles trip-titles">
@@ -276,6 +294,7 @@ export default function TripWorkspace({
               onHover={setHoverRouteM}
               hoverCpId={hoverCpId}
               onHoverCheckpoint={setHoverCpId}
+              dayRange={dayRange}
             />
             <div className="map-panel">
               <div className="map-toggle">
@@ -303,6 +322,7 @@ export default function TripWorkspace({
                   highlight={hoverPoint}
                   hoverCpId={hoverCpId}
                   onHoverCheckpoint={setHoverCpId}
+                  dayRange={dayRange}
                 />
               ) : (
                 <TrackShape
@@ -311,6 +331,7 @@ export default function TripWorkspace({
                   onAddAt={addAtLatLng}
                   highlight={hoverPoint}
                   hoverCpId={hoverCpId}
+                  dayRange={dayRange}
                 />
               )}
             </div>
@@ -422,7 +443,16 @@ export default function TripWorkspace({
 
           <section className="trip-section">
             <h3>Itinerary</h3>
-            <ItineraryDays trip={trip} track={track} onSetDayNote={onSetDayNote} />
+            <ItineraryDays
+              trip={trip}
+              track={track}
+              onSetDayNote={onSetDayNote}
+              selectedDay={selectedDay}
+              onSelectDay={setSelectedDay}
+              onAddExtraDay={addExtraDay}
+              onUpdateExtraDay={updateExtraDay}
+              onDeleteExtraDay={deleteExtraDay}
+            />
           </section>
         </>
       )}

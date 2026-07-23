@@ -14,7 +14,8 @@ export default function ElevationProfile({
   onAddAt,
   onHover,
   hoverCpId,
-  onHoverCheckpoint
+  onHoverCheckpoint,
+  dayRange
 }) {
   const svgRef = useRef(null);
   const [hover, setHover] = useState(null);
@@ -172,6 +173,24 @@ export default function ElevationProfile({
               <path key={`l${i}`} d={d} className="profile-line" />
             ))}
           </>
+        )}
+
+        {/* Selected-day band: dim everything outside the day's stretch */}
+        {dayRange && (
+          <g className="profile-day-mask">
+            <rect
+              x={PAD.left}
+              y={PAD.top}
+              width={Math.max(0, xOf(dayRange.startRouteM) - PAD.left)}
+              height={plotH}
+            />
+            <rect
+              x={xOf(dayRange.endRouteM)}
+              y={PAD.top}
+              width={Math.max(0, W - PAD.right - xOf(dayRange.endRouteM))}
+              height={plotH}
+            />
+          </g>
         )}
 
         {/* Segment break markers */}

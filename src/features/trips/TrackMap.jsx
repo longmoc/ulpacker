@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { CHECKPOINT_KINDS } from "../../lib/trail.js";
+import { CHECKPOINT_KINDS, buildCumulatives, sliceSegments } from "../../lib/trail.js";
 
 const ACCENT = "#1b5e3f";
 const GREEN = "#2e9e5b";
@@ -21,12 +21,21 @@ function esc(s) {
 // CircleMarkers only — no marker image assets — so it stays within the app's
 // locked-down CSP (the tile origin is allow-listed in vite.config.js). Falls
 // back to the SVG TrackShape via the parent when the user prefers it / offline.
-export default function TrackMap({ track, checkpoints, onAddAt, highlight, hoverCpId, onHoverCheckpoint }) {
+export default function TrackMap({
+  track,
+  checkpoints,
+  onAddAt,
+  highlight,
+  hoverCpId,
+  onHoverCheckpoint,
+  dayRange
+}) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const trackLayer = useRef(null);
   const cpLayer = useRef(null);
   const cpMarkers = useRef(new Map()); // checkpoint id -> Leaflet marker
+  const dayLayer = useRef(null);
   const hoverMarker = useRef(null);
   const onAddRef = useRef(onAddAt);
   onAddRef.current = onAddAt;
@@ -53,7 +62,34 @@ export default function TrackMap({ track, checkpoints, onAddAt, highlight, hover
       maxZoom: 17,
       attribution: "© OpenStreetMap contributors"
     }).addTo(map);
-    map.on("click", (e) => onAddRef.current?.(e.latlng.lat, e.latlng.lng));
+    // A stray map click shouldn't create a checkpoint — ask first.
+    map.on("click", (e) => {
+      if (!onAddRef.current) return;
+      const box = document.createElement("div");
+      box.className = "map-confirm";
+      const label = document.createElement("span");
+      label.textContent = "Add a checkpoint here?";
+      const actions = document.createElement("div");
+      actions.className = "map-confirm-actions";
+      const add = document.createElement("button");
+      add.type = "button";
+      add.className = "primary";
+      add.textContent = "Add";
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.textContent = "Cancel";
+      actions.append(add, cancel);
+      box.append(label, actions);
+      const popup = L.popup({ closeButton: false, className: "map-confirm-popup", offset: [0, -6] })
+        .setLatLng(e.latlng)
+        .setContent(box)
+        .openOn(map);
+      add.addEventListener("click", () => {
+        map.closePopup(popup);
+        onAddRef.current?.(e.latlng.lat, e.latlng.lng);
+      });
+      cancel.addEventListener("click", () => map.closePopup(popup));
+    });
     mapRef.current = map;
 
     const el = elRef.current;
@@ -137,6 +173,34 @@ export default function TrackMap({ track, checkpoints, onAddAt, highlight, hover
     group.addTo(map);
     cpLayer.current = group;
   }, [checkpoints]);
+
+  // Selecting a day dims the whole trail and overlays that day's stretch.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (dayLayer.current) {
+      dayLayer.current.remove();
+      dayLayer.current = null;
+    }
+    if (trackLayer.current) {
+      trackLayer.current.eachLayer((l) => {
+        // polylines only (circleMarkers have getLatLng, not getLatLngs)
+        if (l.setStyle && l.getLatLngs) l.setStyle({ opacity: dayRange ? 0.22 : 0.9 });
+      });
+    }
+    if (!dayRange) return;
+    const cums = buildCumulatives(track.segments);
+    const slices = sliceSegments(track.segments, cums, dayRange.startRouteM, dayRange.endRouteM);
+    if (!slices.length) return;
+    const group = L.featureGroup();
+    for (const seg of slices) {
+      L.polyline(seg.points.map((p) => [p[0], p[1]]), { color: ACCENT, weight: 6, opacity: 1 }).addTo(group);
+    }
+    group.addTo(map);
+    dayLayer.current = group;
+    const b = group.getBounds();
+    if (b.isValid()) map.fitBounds(b, { padding: [30, 30] });
+  }, [dayRange, track]);
 
   // Enlarge/highlight the marker for the checkpoint hovered anywhere (map or
   // elevation profile).

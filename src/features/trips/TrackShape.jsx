@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from "react";
-import { projectTrack, decimateForRender, detectAntimeridian } from "../../lib/trail.js";
+import { projectTrack, decimateForRender, detectAntimeridian, buildCumulatives, sliceSegments } from "../../lib/trail.js";
 
 // Large working space; the viewBox is then cropped tight to the track so it
 // fills the panel (contain) regardless of portrait/landscape orientation.
@@ -9,7 +9,7 @@ const SPACE = 1000;
 // checkpoint at the nearest point on the track. `highlight` (a {lat,lng}) draws
 // a moving marker linked to the elevation-profile hover. Hidden with a notice
 // when the track crosses the antimeridian (deferred to a later phase).
-export default function TrackShape({ track, checkpoints, onAddAt, highlight, hoverCpId }) {
+export default function TrackShape({ track, checkpoints, onAddAt, highlight, hoverCpId, dayRange }) {
   const svgRef = useRef(null);
   const antimeridian = useMemo(() => detectAntimeridian(track.segments), [track]);
 
@@ -82,10 +82,21 @@ export default function TrackShape({ track, checkpoints, onAddAt, highlight, hov
           <polyline
             key={i}
             points={pts.map(([x, y]) => `${x},${y}`).join(" ")}
-            className="track-line"
+            className={`track-line${dayRange ? " dimmed" : ""}`}
             style={{ strokeWidth: stroke }}
           />
         ))}
+        {dayRange &&
+          sliceSegments(track.segments, buildCumulatives(track.segments), dayRange.startRouteM, dayRange.endRouteM).map(
+            (seg, i) => (
+              <polyline
+                key={`d${i}`}
+                points={seg.points.map(([lat, lng]) => project(lat, lng).join(",")).join(" ")}
+                className="track-line day"
+                style={{ strokeWidth: stroke * 1.6 }}
+              />
+            )
+          )}
         {start && <circle cx={start[0]} cy={start[1]} r={rStartEnd} className="track-start" />}
         {end && <circle cx={end[0]} cy={end[1]} r={rStartEnd} className="track-end" />}
         {checkpoints.map((cp) => {
