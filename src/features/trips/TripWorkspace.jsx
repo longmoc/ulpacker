@@ -32,6 +32,9 @@ export default function TripWorkspace({
   const [addKm, setAddKm] = useState("");
   const [splitDays, setSplitDays] = useState("");
   const [cpOpen, setCpOpen] = useState(true);
+  const [cpFilter, setCpFilter] = useState(null); // kind filter, shared with map/profile
+  const [hoverCpId, setHoverCpId] = useState(null);
+  const [openTool, setOpenTool] = useState(null); // "km" | "split" | null
   const [hoverRouteM, setHoverRouteM] = useState(null);
   const [mapMode, setMapMode] = useState(() => {
     try {
@@ -168,6 +171,10 @@ export default function TripWorkspace({
   };
 
   const { stats } = trip;
+  // The category filter applies everywhere: list, elevation profile and map.
+  const visibleCheckpoints = cpFilter
+    ? trip.checkpoints.filter((cp) => (cp.kind || "poi") === cpFilter)
+    : trip.checkpoints;
 
   return (
     <div className="trip-workspace">
@@ -264,9 +271,11 @@ export default function TripWorkspace({
           <div className="trip-graphics">
             <ElevationProfile
               track={track}
-              checkpoints={trip.checkpoints}
+              checkpoints={visibleCheckpoints}
               onAddAt={addAtRoute}
               onHover={setHoverRouteM}
+              hoverCpId={hoverCpId}
+              onHoverCheckpoint={setHoverCpId}
             />
             <div className="map-panel">
               <div className="map-toggle">
@@ -289,16 +298,19 @@ export default function TripWorkspace({
                 <TrackMap
                   key={trip.id}
                   track={track}
-                  checkpoints={trip.checkpoints}
+                  checkpoints={visibleCheckpoints}
                   onAddAt={addAtLatLng}
                   highlight={hoverPoint}
+                  hoverCpId={hoverCpId}
+                  onHoverCheckpoint={setHoverCpId}
                 />
               ) : (
                 <TrackShape
                   track={track}
-                  checkpoints={trip.checkpoints}
+                  checkpoints={visibleCheckpoints}
                   onAddAt={addAtLatLng}
                   highlight={hoverPoint}
+                  hoverCpId={hoverCpId}
                 />
               )}
             </div>
@@ -317,46 +329,27 @@ export default function TripWorkspace({
                   <span className="section-count">{trip.checkpoints.length}</span>
                 </button>
               </h3>
-              <div className="add-km">
-                <span>Add at</span>
-                <input
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max={totalKm.toFixed(1)}
-                  value={addKm}
-                  placeholder="km"
-                  onChange={(e) => setAddKm(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && submitAddKm()}
-                />
-                <span>km</span>
-                <button type="button" onClick={submitAddKm} disabled={addKm === ""}>
-                  Add
-                </button>
-              </div>
             </div>
             {cpOpen && (
               <>
-            <div className="suggest-bar">
-              <span className="suggest-label">Suggest:</span>
-              <span className="suggest-group">
-                Split into
-                <input
-                  type="number"
-                  min="2"
-                  max="30"
-                  value={splitDays}
-                  placeholder="N"
-                  onChange={(e) => setSplitDays(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && submitSplitDays()}
-                />
-                days
-                <button type="button" onClick={submitSplitDays} disabled={splitDays === ""}>
-                  Add camps
-                </button>
-              </span>
+            <div className="tool-links">
               <button
                 type="button"
+                className={`link-btn ${openTool === "km" ? "active" : ""}`}
+                onClick={() => setOpenTool(openTool === "km" ? null : "km")}
+              >
+                Add checkpoint
+              </button>
+              <button
+                type="button"
+                className={`link-btn ${openTool === "split" ? "active" : ""}`}
+                onClick={() => setOpenTool(openTool === "split" ? null : "split")}
+              >
+                Split into days
+              </button>
+              <button
+                type="button"
+                className="link-btn"
                 onClick={suggestHighPoints}
                 disabled={!hasEle}
                 title={hasEle ? "" : "This track has no elevation data"}
@@ -366,6 +359,7 @@ export default function TripWorkspace({
               {canAddSegments && (
                 <button
                   type="button"
+                  className="link-btn"
                   onClick={addSegmentStops}
                   title="Add a checkpoint at each segment boundary"
                 >
@@ -373,10 +367,54 @@ export default function TripWorkspace({
                 </button>
               )}
             </div>
+
+            {openTool === "km" && (
+              <div className="tool-panel">
+                <span>Add at</span>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  max={totalKm.toFixed(1)}
+                  value={addKm}
+                  placeholder="km"
+                  autoFocus
+                  onChange={(e) => setAddKm(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submitAddKm()}
+                />
+                <span>km of {totalKm.toFixed(1)}</span>
+                <button type="button" className="primary" onClick={submitAddKm} disabled={addKm === ""}>
+                  Add
+                </button>
+              </div>
+            )}
+
+            {openTool === "split" && (
+              <div className="tool-panel">
+                <span>Split into</span>
+                <input
+                  type="number"
+                  min="2"
+                  max="30"
+                  value={splitDays}
+                  placeholder="N"
+                  autoFocus
+                  onChange={(e) => setSplitDays(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submitSplitDays()}
+                />
+                <span>days</span>
+                <button type="button" className="primary" onClick={submitSplitDays} disabled={splitDays === ""}>
+                  Add camps
+                </button>
+              </div>
+            )}
             <CheckpointList
               checkpoints={trip.checkpoints}
               onUpdate={onUpdateCheckpoint}
               onDelete={onDeleteCheckpoint}
+              filter={cpFilter}
+              onFilterChange={setCpFilter}
+              onHoverCheckpoint={setHoverCpId}
             />
               </>
             )}

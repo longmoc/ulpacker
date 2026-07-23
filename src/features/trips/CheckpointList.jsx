@@ -9,9 +9,9 @@ const PREVIEW = 8;
 // note, off-route / ambiguous flags, delete. A long list stays manageable via
 // per-category filter chips plus "show all" (rather than an overflow-scroll
 // container, which would clip the category dropdown).
-export default function CheckpointList({ checkpoints, onUpdate, onDelete }) {
-  const [filter, setFilter] = useState(null);
+export default function CheckpointList({ checkpoints, onUpdate, onDelete, filter, onFilterChange, onHoverCheckpoint }) {
   const [expanded, setExpanded] = useState(false);
+  const setFilter = (k) => onFilterChange?.(k);
 
   if (checkpoints.length === 0) {
     return <p className="empty-hint">No checkpoints yet. Click the map or elevation profile to add one.</p>;
@@ -53,7 +53,12 @@ export default function CheckpointList({ checkpoints, onUpdate, onDelete }) {
         {shown.map((cp) => {
           const offRoute = cp.anchor.offsetM > OFF_ROUTE_M;
           return (
-            <li key={cp.id} className="checkpoint-row">
+            <li
+              key={cp.id}
+              className="checkpoint-row"
+              onMouseEnter={() => onHoverCheckpoint?.(cp.id)}
+              onMouseLeave={() => onHoverCheckpoint?.(null)}
+            >
               <KindPicker value={cp.kind} onChange={(k) => onUpdate(cp.id, { kind: k })} />
               <input
                 className="cp-name"

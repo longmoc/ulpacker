@@ -9,7 +9,7 @@ const SPACE = 1000;
 // checkpoint at the nearest point on the track. `highlight` (a {lat,lng}) draws
 // a moving marker linked to the elevation-profile hover. Hidden with a notice
 // when the track crosses the antimeridian (deferred to a later phase).
-export default function TrackShape({ track, checkpoints, onAddAt, highlight }) {
+export default function TrackShape({ track, checkpoints, onAddAt, highlight, hoverCpId }) {
   const svgRef = useRef(null);
   const antimeridian = useMemo(() => detectAntimeridian(track.segments), [track]);
 
@@ -90,13 +90,16 @@ export default function TrackShape({ track, checkpoints, onAddAt, highlight }) {
         {end && <circle cx={end[0]} cy={end[1]} r={rStartEnd} className="track-end" />}
         {checkpoints.map((cp) => {
           const [x, y] = project(cp.anchor.lat, cp.anchor.lng);
+          const active = hoverCpId === cp.id;
           return (
             <circle
               key={cp.id}
               cx={x}
               cy={y}
-              r={rCp}
-              className={`track-cp kind-${cp.kind || "poi"}${cp.kind === "overnight" ? " overnight" : ""}`}
+              r={active ? rCp * 1.8 : rCp}
+              className={`track-cp kind-${cp.kind || "poi"}${cp.kind === "overnight" ? " overnight" : ""}${
+                active ? " active" : ""
+              }`}
             />
           );
         })}

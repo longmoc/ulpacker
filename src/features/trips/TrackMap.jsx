@@ -21,14 +21,17 @@ function esc(s) {
 // CircleMarkers only — no marker image assets — so it stays within the app's
 // locked-down CSP (the tile origin is allow-listed in vite.config.js). Falls
 // back to the SVG TrackShape via the parent when the user prefers it / offline.
-export default function TrackMap({ track, checkpoints, onAddAt, highlight }) {
+export default function TrackMap({ track, checkpoints, onAddAt, highlight, hoverCpId, onHoverCheckpoint }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const trackLayer = useRef(null);
   const cpLayer = useRef(null);
+  const cpMarkers = useRef(new Map()); // checkpoint id -> Leaflet marker
   const hoverMarker = useRef(null);
   const onAddRef = useRef(onAddAt);
   onAddRef.current = onAddAt;
+  const onHoverCpRef = useRef(onHoverCheckpoint);
+  onHoverCpRef.current = onHoverCheckpoint;
   const [scrollHint, setScrollHint] = useState(false);
   const hintTimer = useRef(null);
 
@@ -41,8 +44,9 @@ export default function TrackMap({ track, checkpoints, onAddAt, highlight }) {
       // below, which zooms only with Ctrl/⌘ — and with trackpad pinch, which
       // browsers deliver as a ctrlKey wheel event).
       scrollWheelZoom: false,
-      // Finer granularity than Leaflet's default whole-level steps.
-      zoomSnap: 0.25,
+      // zoomSnap 0 = fully fractional zoom. Anything > 0 quantises the small
+      // deltas a trackpad pinch produces, so they'd round away to nothing.
+      zoomSnap: 0,
       zoomDelta: 0.5
     });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -56,8 +60,10 @@ export default function TrackMap({ track, checkpoints, onAddAt, highlight }) {
     const onWheel = (e) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        // ~4x gentler than one zoom level per notch.
-        const next = map.getZoom() - e.deltaY / 240;
+        // A trackpad pinch emits many small deltas; a mouse wheel emits few big
+        // ones. Scale each so both feel gentle rather than jumping a whole level.
+        const fine = Math.abs(e.deltaY) < 25;
+        const next = map.getZoom() - e.deltaY / (fine ? 40 : 240);
         map.setZoom(Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), next)), { animate: false });
         setScrollHint(false);
         return;
@@ -104,6 +110,7 @@ export default function TrackMap({ track, checkpoints, onAddAt, highlight }) {
     const map = mapRef.current;
     if (!map) return;
     if (cpLayer.current) cpLayer.current.remove();
+    cpMarkers.current.clear();
     const group = L.featureGroup();
     for (const cp of checkpoints) {
       const kind = CHECKPOINT_KINDS[cp.kind] ? cp.kind : "poi";
@@ -117,16 +124,31 @@ export default function TrackMap({ track, checkpoints, onAddAt, highlight }) {
       });
       const title = esc(cp.name || CHECKPOINT_KINDS[kind].label);
       const note = cp.note ? `<span class="cp-tip-note">${esc(cp.note)}</span>` : "";
-      L.marker([cp.anchor.lat, cp.anchor.lng], { icon })
+      const marker = L.marker([cp.anchor.lat, cp.anchor.lng], { icon })
         .bindTooltip(`<span class="cp-tip-name">${emoji} ${title}</span>${note}`, {
           direction: "top",
           className: "cp-tip"
         })
         .addTo(group);
+      marker.on("mouseover", () => onHoverCpRef.current?.(cp.id));
+      marker.on("mouseout", () => onHoverCpRef.current?.(null));
+      cpMarkers.current.set(cp.id, marker);
     }
     group.addTo(map);
     cpLayer.current = group;
   }, [checkpoints]);
+
+  // Enlarge/highlight the marker for the checkpoint hovered anywhere (map or
+  // elevation profile).
+  useEffect(() => {
+    for (const [cpId, marker] of cpMarkers.current) {
+      const el = marker.getElement?.();
+      if (!el) continue;
+      el.classList.toggle("cp-marker-active", cpId === hoverCpId);
+      if (cpId === hoverCpId) marker.setZIndexOffset(1000);
+      else marker.setZIndexOffset(0);
+    }
+  }, [hoverCpId, checkpoints]);
 
   // Hover highlight linked to the elevation profile.
   useEffect(() => {

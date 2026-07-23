@@ -8,14 +8,26 @@ const PAD = { top: 16, right: 12, bottom: 24, left: 44 };
 // Elevation vs route-distance. Segment gaps are drawn as a vertical break
 // marker (a gap has 0 horizontal width, so a dashed line would be invisible).
 // Click adds a checkpoint at the nearest route distance.
-export default function ElevationProfile({ track, checkpoints, onAddAt, onHover }) {
+export default function ElevationProfile({
+  track,
+  checkpoints,
+  onAddAt,
+  onHover,
+  hoverCpId,
+  onHoverCheckpoint
+}) {
   const svgRef = useRef(null);
   const [hover, setHover] = useState(null);
   const [hoverCp, setHoverCp] = useState(null);
 
+  const setNearCp = (cp) => {
+    setHoverCp(cp);
+    onHoverCheckpoint?.(cp ? cp.id : null);
+  };
+
   const clearHover = () => {
     setHover(null);
-    setHoverCp(null);
+    setNearCp(null);
     onHover?.(null);
   };
 
@@ -104,7 +116,7 @@ export default function ElevationProfile({ track, checkpoints, onAddAt, onHover 
       const d = Math.abs(cx - x);
       if (d <= 12 && (!near || d < near.d)) near = { cp, d, cx };
     }
-    setHoverCp(near ? near.cp : null);
+    if ((near?.cp?.id || null) !== (hoverCp?.id || null)) setNearCp(near ? near.cp : null);
   };
 
   const hoverEle = (() => {
@@ -120,6 +132,7 @@ export default function ElevationProfile({ track, checkpoints, onAddAt, onHover 
 
   return (
     <div className="elevation-profile">
+      <div className="profile-canvas">
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
@@ -176,7 +189,7 @@ export default function ElevationProfile({ track, checkpoints, onAddAt, onHover 
         {/* Checkpoint markers */}
         {checkpoints.map((cp) => {
           const x = xOf(cp.anchor.routeDistanceM);
-          const active = hoverCp?.id === cp.id;
+          const active = (hoverCpId || hoverCp?.id) === cp.id;
           return (
             <g key={cp.id} className={`profile-cp${active ? " active" : ""}`}>
               <line x1={x} y1={PAD.top} x2={x} y2={PAD.top + plotH} className="cp-line" />
@@ -219,6 +232,7 @@ export default function ElevationProfile({ track, checkpoints, onAddAt, onHover 
           </span>
         </div>
       )}
+      </div>
       <div className="profile-caption">
         {!hasEle
           ? "No elevation data in this GPX — add checkpoints on the map or by distance below."

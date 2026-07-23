@@ -4097,3 +4097,44 @@ button[type="submit"]:active {
   border-radius: 4px;
   padding: 1px 4px;
 }
+
+/* Profile canvas: positioning context for the checkpoint tooltip */
+.profile-canvas { position: relative; }
+
+/* Tool links (green, underlined; the input panel opens on click) */
+.tool-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+.tool-links .link-btn { font-size: 0.85rem; }
+.tool-links .link-btn.active { font-weight: 650; }
+.tool-links .link-btn:disabled { color: var(--text-3); text-decoration: none; cursor: default; }
+
+.tool-panel {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+.tool-panel input { width: 84px; padding: 5px 8px; }
+.tool-panel button { width: auto; padding: 5px 14px; }
+.tool-panel .primary { color: #fff; background: var(--accent); border-color: var(--accent); }
+
+/* Hovered checkpoint: enlarge + highlight its map marker */
+.cp-marker-active .cp-marker-pin {
+  transform: scale(1.45);
+  border-width: 3px;
+  box-shadow: 0 0 0 4px rgba(27, 94, 63, 0.25), 0 2px 6px rgba(16, 17, 26, 0.45);
+}
+.cp-marker-pin { transition: transform 0.1s ease, box-shadow 0.1s ease; }
+.track-cp.active { stroke-width: 3; }
+.checkpoint-row:hover { border-color: var(--border-2); background: var(--surface); }
