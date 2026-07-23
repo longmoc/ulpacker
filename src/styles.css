@@ -4155,7 +4155,7 @@ button[type="submit"]:active {
 }
 
 /* Day selection highlights that day's stretch of trail */
-.day-card { cursor: pointer; transition: border-color 0.12s ease, box-shadow 0.12s ease; }
+.day-card { position: relative; cursor: pointer; transition: border-color 0.12s ease, box-shadow 0.12s ease; }
 .day-card:hover { border-color: var(--border-2); }
 .day-card.active {
   border-color: var(--accent);
@@ -4300,18 +4300,18 @@ button[type="submit"]:active {
 }
 
 /* --- Day card header + icon actions --- */
-.day-top {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-.day-top .day-head { flex: 1; min-width: 0; }
+/* The title keeps the flow; the actions float in the corner so the stats line
+   sits directly under the title instead of being pushed down by them. */
+.day-top { padding-right: 118px; }
 .day-card-actions {
+  position: absolute;
+  top: 10px;
+  right: 12px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 2px;
-  flex: 0 0 auto;
+  z-index: 2;
 }
 .day-action-icons {
   display: flex;
