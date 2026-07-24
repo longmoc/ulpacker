@@ -17,8 +17,7 @@ export default function ItineraryDays({
   onAddExtraDay,
   onUpdateExtraDay,
   onDeleteExtraDay,
-  onSetStartDay,
-  onSetEndpoint
+  onSetStartDay
 }) {
   const startName = trip.startName || "";
   const finishName = trip.finishName || "";
@@ -124,25 +123,6 @@ export default function ItineraryDays({
             Start at Day 0
           </label>
         </div>
-      </div>
-
-      <div className="itinerary-endpoints">
-        <label>
-          <span className="dot start" /> Start
-          <input
-            value={startName}
-            placeholder="Trailhead name…"
-            onChange={(e) => onSetEndpoint?.("startName", e.target.value)}
-          />
-        </label>
-        <label>
-          <span className="dot end" /> Finish
-          <input
-            value={finishName}
-            placeholder="Trailhead name…"
-            onChange={(e) => onSetEndpoint?.("finishName", e.target.value)}
-          />
-        </label>
       </div>
 
       {!hasOvernight && (

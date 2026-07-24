@@ -125,11 +125,6 @@ export default function TrackShape({ track, checkpoints, onAddAt, highlight, hov
           </g>
         )}
       </svg>
-      <div className="track-legend">
-        <span className="dot start" /> Start
-        <span className="dot end" /> Finish
-        {onAddAt && <span className="track-hint">· click the track to add a checkpoint</span>}
-      </div>
     </div>
   );
 }

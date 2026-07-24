@@ -16,6 +16,7 @@ import TrackShape from "./TrackShape.jsx";
 import TrackMap from "./TrackMap.jsx";
 import CheckpointList from "./CheckpointList.jsx";
 import ItineraryDays from "./ItineraryDays.jsx";
+import EndpointLabel from "./EndpointLabel.jsx";
 import {
   PencilIcon,
   TrashIcon,
@@ -98,12 +99,16 @@ export default function TripWorkspace({
     if (!cums || !track || !trip) return [];
     const { days } = buildDays({ checkpoints: trip.checkpoints, segments: track.segments, cumulatives: cums });
     if (days.length < 2) return [];
-    return days.map((d, i) => ({
-      index: d.index,
-      startRouteM: d.startRouteM,
-      endRouteM: d.endRouteM,
-      color: dayColor(i)
-    }));
+    // Display number matches the itinerary (Day-0 offset + interleaved off-route days).
+    const extras = trip.extraDays || [];
+    const base = trip.startDayNumber === 0 ? 0 : 1;
+    let num = base;
+    return days.map((d, i) => {
+      num += extras.filter((e) => e.before === d.startBoundary).length;
+      const band = { index: d.index, num, startRouteM: d.startRouteM, endRouteM: d.endRouteM, color: dayColor(i) };
+      num += 1;
+      return band;
+    });
   }, [trip, track, cums]);
 
   if (!trip) {
@@ -428,6 +433,38 @@ export default function TripWorkspace({
                   dayBands={dayBands}
                 />
               )}
+
+              <div className="map-legend">
+                <div className="map-legend-ends">
+                  <EndpointLabel
+                    dotClass="start"
+                    value={trip.startName}
+                    fallback="Start"
+                    onSave={(v) => onUpdateTrip({ startName: v })}
+                  />
+                  <EndpointLabel
+                    dotClass="end"
+                    value={trip.finishName}
+                    fallback="Finish"
+                    onSave={(v) => onUpdateTrip({ finishName: v })}
+                  />
+                </div>
+                {dayBands.length > 1 && (
+                  <div className="map-legend-days">
+                    {dayBands.map((b) => (
+                      <button
+                        key={b.index}
+                        type="button"
+                        className={`day-legend-chip ${selectedDay === b.index ? "active" : ""}`}
+                        onClick={() => setSelectedDay(selectedDay === b.index ? null : b.index)}
+                      >
+                        <span className="day-legend-swatch" style={{ background: b.color }} />
+                        Day {b.num}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -566,7 +603,6 @@ export default function TripWorkspace({
               onUpdateExtraDay={updateExtraDay}
               onDeleteExtraDay={deleteExtraDay}
               onSetStartDay={(n) => onUpdateTrip({ startDayNumber: n })}
-              onSetEndpoint={(field, value) => onUpdateTrip({ [field]: value })}
             />
           </section>
         </>

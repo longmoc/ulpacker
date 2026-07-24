@@ -278,11 +278,6 @@ export default function TrackMap({
       {scrollHint && (
         <div className="map-scroll-hint">Use {ZOOM_KEY_LABEL} + scroll (or pinch) to zoom the map</div>
       )}
-      <div className="track-legend">
-        <span className="dot start" /> Start
-        <span className="dot end" /> Finish
-        {onAddAt && <span className="track-hint">· click the map to add a checkpoint</span>}
-      </div>
     </div>
   );
 }

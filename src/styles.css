@@ -4390,22 +4390,76 @@ button[type="submit"]:active {
 /* Day cards carry their trail colour on the left edge */
 .day-card { border-left-width: 4px; }
 
-/* Editable trailhead (Start / Finish) names in the itinerary */
-.itinerary-endpoints {
+
+/* --- Map legend row: editable Start/Finish (left) + day colours (right) --- */
+.map-legend {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 18px;
-  margin-bottom: 10px;
+  gap: 10px 18px;
+  padding-top: 8px;
+  font-size: 0.8rem;
+  color: var(--text-3);
 }
-.itinerary-endpoints label {
+.map-legend-ends {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+}
+.endpoint-label {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 0.82rem;
-  color: var(--text-2);
 }
-.itinerary-endpoints input {
-  width: 190px;
-  padding: 5px 8px;
-  font-size: 0.85rem;
+.endpoint-name {
+  width: auto;
+  border: none;
+  background: none;
+  box-shadow: none;
+  padding: 1px 4px;
+  border-radius: 5px;
+  font: inherit;
+  color: var(--text-2);
+  border-bottom: 1px dashed var(--border-2);
+}
+.endpoint-name:hover { color: var(--text); background: var(--surface-2); }
+.endpoint-input {
+  width: 150px;
+  padding: 3px 6px;
+  font-size: 0.82rem;
+}
+
+.map-legend-days {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+.day-legend-chip {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  font-size: 0.76rem;
+  border-radius: 999px;
+  box-shadow: none;
+  color: var(--text-2);
+  border-color: var(--border);
+  font-variant-numeric: tabular-nums;
+}
+.day-legend-chip:hover { border-color: var(--border-2); background: var(--surface-2); }
+.day-legend-chip.active {
+  border-color: var(--text-3);
+  background: var(--surface-2);
+  color: var(--text);
+  font-weight: 600;
+}
+.day-legend-swatch {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  flex: 0 0 auto;
 }
