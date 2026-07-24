@@ -29,7 +29,10 @@ import {
   ClockIcon,
   ChevronIcon,
   MaximizeIcon,
-  MinimizeIcon
+  MinimizeIcon,
+  FileIcon,
+  DownloadIcon,
+  UploadIcon
 } from "../../components/icons.jsx";
 
 const km = (m) => (m / 1000).toFixed(1);
@@ -41,6 +44,8 @@ export default function TripWorkspace({
   onUpdateTrip,
   onDeleteTrip,
   onReplaceGpx,
+  onExportTrip,
+  onImportTrip,
   onAddCheckpoint,
   onUpdateCheckpoint,
   onDeleteCheckpoint,
@@ -49,6 +54,7 @@ export default function TripWorkspace({
   onPickCover
 }) {
   const replaceRef = useRef(null);
+  const tripImportRef = useRef(null);
   const coverRef = useRef(null);
   const [addKm, setAddKm] = useState("");
   const [splitDays, setSplitDays] = useState("");
@@ -141,6 +147,12 @@ export default function TripWorkspace({
   const handleReplaceInput = (e) => {
     const file = e.target.files?.[0];
     if (file) onReplaceGpx(file);
+    e.target.value = "";
+  };
+
+  const handleTripImport = (e) => {
+    const file = e.target.files?.[0];
+    if (file) onImportTrip?.(file);
     e.target.value = "";
   };
 
@@ -295,16 +307,40 @@ export default function TripWorkspace({
               ))}
             </select>
           </label>
-          <button type="button" className="menu-trigger" onClick={() => replaceRef.current?.click()}>
-            <ImageIcon />
-            Replace GPX
-          </button>
+          <div className="menu">
+            <button type="button" className="menu-trigger">
+              <FileIcon />
+              Trip data
+            </button>
+            <div className="menu-list">
+              <button type="button" onClick={() => replaceRef.current?.click()}>
+                <ImageIcon />
+                Replace GPX
+              </button>
+              <div className="menu-divider" />
+              <button type="button" onClick={() => tripImportRef.current?.click()}>
+                <UploadIcon />
+                Import trip…
+              </button>
+              <button type="button" onClick={() => onExportTrip?.()}>
+                <DownloadIcon />
+                Export trip
+              </button>
+            </div>
+          </div>
           <input
             ref={replaceRef}
             type="file"
             accept=".gpx,application/gpx+xml,application/xml,text/xml"
             hidden
             onChange={handleReplaceInput}
+          />
+          <input
+            ref={tripImportRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={handleTripImport}
           />
           <button
             type="button"

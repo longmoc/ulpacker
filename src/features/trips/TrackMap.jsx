@@ -57,6 +57,7 @@ export default function TrackMap({
   const cpMarkers = useRef(new Map()); // checkpoint id -> Leaflet marker
   const dayLayer = useRef(null);
   const hoverMarker = useRef(null);
+  const homeBounds = useRef(null); // full-track bounds for the "reset view" control
   const onAddRef = useRef(onAddAt);
   onAddRef.current = onAddAt;
   const onHoverCpRef = useRef(onHoverCheckpoint);
@@ -110,6 +111,29 @@ export default function TrackMap({
       });
       cancel.addEventListener("click", () => map.closePopup(popup));
     });
+    // "Reset view" control: re-fit the map to the whole trail after panning /
+    // zooming around. Sits directly under the zoom in/out buttons (same bar).
+    const ResetView = L.Control.extend({
+      options: { position: "topleft" },
+      onAdd() {
+        const container = L.DomUtil.create("div", "leaflet-bar leaflet-control map-reset");
+        const link = L.DomUtil.create("a", "", container);
+        link.href = "#";
+        link.title = "Reset view to full trail";
+        link.setAttribute("role", "button");
+        link.setAttribute("aria-label", "Reset view to full trail");
+        link.innerHTML =
+          '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3"/><path d="M16 4h3a1 1 0 0 1 1 1v3"/><path d="M20 16v3a1 1 0 0 1-1 1h-3"/><path d="M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="2.4"/></svg>';
+        L.DomEvent.on(link, "click", (e) => {
+          L.DomEvent.stop(e);
+          const b = homeBounds.current;
+          if (b && b.isValid()) map.fitBounds(b, { padding: [24, 24] });
+        });
+        L.DomEvent.disableClickPropagation(container);
+        return container;
+      }
+    });
+    map.addControl(new ResetView());
     mapRef.current = map;
 
     const el = elRef.current;
@@ -200,7 +224,10 @@ export default function TrackMap({
     group.addTo(map);
     trackLayer.current = group;
     const bounds = group.getBounds();
-    if (bounds.isValid()) map.fitBounds(bounds, { padding: [24, 24] });
+    if (bounds.isValid()) {
+      homeBounds.current = bounds;
+      map.fitBounds(bounds, { padding: [24, 24] });
+    }
   }, [track, dayBands, startName, finishName, loop]);
 
   // Checkpoint markers.

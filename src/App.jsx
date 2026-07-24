@@ -12,7 +12,9 @@ import {
   buildPortableBundle,
   applyPortableBundle,
   gcTracks,
-  defaultData
+  defaultData,
+  normalizeTrips,
+  sanitizeTracks
 } from "./lib/storage.js";
 import {
   buildTrackStats,
@@ -882,6 +884,75 @@ export default function App() {
     persistTracks(gced);
     setTracks(gced);
     setTrips(nextTrips);
+  }
+
+  // Export one trip as a self-contained JSON bundle: the trip doc (checkpoints,
+  // itinerary, day notes, off-route days, endpoint names…) plus its full track
+  // asset, so an import reconstructs the map + itinerary exactly.
+  function exportTrip(tripId) {
+    const trip = trips.find((t) => t.id === tripId);
+    if (!trip) return;
+    const track = tracks[trip.trackRef?.id] || null;
+    const bundle = {
+      format: "ulpacker-trip",
+      schemaVersion: SCHEMA_VERSION,
+      exportedAt: new Date().toISOString(),
+      trip,
+      track
+    };
+    const blob = new Blob([JSON.stringify(bundle)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const safe = (trip.name || "trip").trim().replace(/[^\w-]+/g, "_").slice(0, 40) || "trip";
+    link.download = `${safe}.ulpacker-trip.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Import a trip bundle as a NEW trip (fresh ids so it never clobbers an
+  // existing trip/track). Runs through the same normalize gate as Drive/profile
+  // ingress, then persists the track first (transactional) before adding the doc.
+  async function importTripFile(file) {
+    if (!file) return;
+    if (trips.length >= MAX_TRIPS) {
+      window.alert(`You can have at most ${MAX_TRIPS} trips.`);
+      return;
+    }
+    let raw;
+    try {
+      raw = JSON.parse(await file.text());
+    } catch {
+      window.alert("Could not read the trip file.");
+      return;
+    }
+    const rawTrip = raw && typeof raw === "object" ? raw.trip : null;
+    if (!rawTrip || typeof rawTrip !== "object") {
+      window.alert("This file is not an ULPacker trip export.");
+      return;
+    }
+    const newTrackId = `trk_${id()}`;
+    const sanitized = raw.track ? sanitizeTracks({ [newTrackId]: raw.track }) : {};
+    const hasTrack = Boolean(sanitized[newTrackId]);
+    const tripForNorm = {
+      ...rawTrip,
+      id: `trip_${id()}`,
+      trackRef: { ...(rawTrip.trackRef || {}), id: hasTrack ? newTrackId : "" }
+    };
+    const validPackIds = new Set(packs.map((p) => p.id));
+    const [normTrip] = normalizeTrips([tripForNorm], validPackIds, sanitized);
+    if (!normTrip) {
+      window.alert("This trip could not be imported.");
+      return;
+    }
+    if (hasTrack) {
+      const nextTracks = { ...tracks, [newTrackId]: sanitized[newTrackId] };
+      if (!persistTracks(nextTracks)) return;
+      setTracks(nextTracks);
+    }
+    setTrips((prev) => [...prev, normTrip]);
+    setActiveTripId(normTrip.id);
+    setView("trips");
   }
 
   function deleteTrip(tripId) {
@@ -3259,6 +3330,8 @@ export default function App() {
               onUpdateTrip={(patch) => activeTrip && updateTrip(activeTrip.id, patch)}
               onDeleteTrip={() => activeTrip && deleteTrip(activeTrip.id)}
               onReplaceGpx={(file) => activeTrip && openGpxImport(file, "replace", activeTrip.id)}
+              onExportTrip={() => activeTrip && exportTrip(activeTrip.id)}
+              onImportTrip={importTripFile}
               onAddCheckpoint={(cp) =>
                 activeTrip && setTripCheckpoints(activeTrip.id, (list) => sortCheckpoints([...list, cp]))
               }

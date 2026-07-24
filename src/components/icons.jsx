@@ -130,6 +130,35 @@ export function TargetIcon({ size = 15 }) {
   );
 }
 
+export function FileIcon({ size = 15 }) {
+  return (
+    <svg {...base} width={size} height={size}>
+      <path d="M15 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z" />
+      <path d="M15 3v5h5" />
+    </svg>
+  );
+}
+
+export function DownloadIcon({ size = 15 }) {
+  return (
+    <svg {...base} width={size} height={size}>
+      <path d="M12 3v10" />
+      <path d="m8 9 4 4 4-4" />
+      <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+    </svg>
+  );
+}
+
+export function UploadIcon({ size = 15 }) {
+  return (
+    <svg {...base} width={size} height={size}>
+      <path d="M12 13V3" />
+      <path d="m8 7 4-4 4 4" />
+      <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+    </svg>
+  );
+}
+
 export function MaximizeIcon({ size = 15 }) {
   return (
     <svg {...base} width={size} height={size}>

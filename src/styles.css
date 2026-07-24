@@ -3834,6 +3834,15 @@ button[type="submit"]:active {
   font: inherit;
 }
 
+/* "Reset view to full trail" control, stacked under the zoom buttons */
+.map-reset a {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+}
+.map-reset a:hover { color: var(--text-1); }
+
 .map-toggle {
   position: absolute;
   top: 10px;
