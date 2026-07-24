@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { id } from "../../lib/util.js";
 import {
   anchorAtRouteM,
@@ -26,7 +26,10 @@ import {
   TrendUpIcon,
   TrendDownIcon,
   PeakIcon,
-  ClockIcon
+  ClockIcon,
+  ChevronIcon,
+  MaximizeIcon,
+  MinimizeIcon
 } from "../../components/icons.jsx";
 
 const km = (m) => (m / 1000).toFixed(1);
@@ -56,6 +59,7 @@ export default function TripWorkspace({
   const [selectedDay, setSelectedDay] = useState(null);
   const [anchorIds, setAnchorIds] = useState([]); // up to 2 ticked checkpoint ids
   const [hoverRouteM, setHoverRouteM] = useState(null);
+  const [mapFull, setMapFull] = useState(false);
   const [mapMode, setMapMode] = useState(() => {
     try {
       return localStorage.getItem("ulpacker.tripMapMode") === "shape" ? "shape" : "map";
@@ -71,6 +75,19 @@ export default function TripWorkspace({
       // ignore
     }
   };
+
+  // Full-screen map: lock page scroll and allow Escape to exit.
+  useEffect(() => {
+    if (!mapFull) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => e.key === "Escape" && setMapFull(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [mapFull]);
 
   const cums = useMemo(() => (track ? buildCumulatives(track.segments) : null), [track]);
 
@@ -411,7 +428,7 @@ export default function TripWorkspace({
               dayRange={activeRange}
               dayBands={dayBands}
             />
-            <div className="map-panel">
+            <div className={`map-panel ${mapFull ? "fullscreen" : ""}`}>
               <div className="map-toggle">
                 <button
                   type="button"
@@ -426,6 +443,16 @@ export default function TripWorkspace({
                   onClick={() => chooseMode("shape")}
                 >
                   Shape
+                </button>
+                <button
+                  type="button"
+                  className="map-full-btn"
+                  title={mapFull ? "Exit full screen (Esc)" : "Full screen"}
+                  aria-label={mapFull ? "Exit full screen" : "Full screen"}
+                  aria-pressed={mapFull}
+                  onClick={() => setMapFull((v) => !v)}
+                >
+                  {mapFull ? <MinimizeIcon size={15} /> : <MaximizeIcon size={15} />}
                 </button>
               </div>
               {mapMode === "map" ? (
@@ -514,7 +541,10 @@ export default function TripWorkspace({
                   aria-expanded={cpOpen}
                   onClick={() => setCpOpen((v) => !v)}
                 >
-                  <span className={`caret ${cpOpen ? "open" : ""}`}>▸</span> Checkpoints
+                  <span className={`caret ${cpOpen ? "open" : ""}`}>
+                    <ChevronIcon size={13} />
+                  </span>{" "}
+                  Checkpoints
                   <span className="section-count">{trip.checkpoints.length}</span>
                 </button>
               </h3>

@@ -133,9 +133,14 @@ export default function TrackMap({
 
     // The container starts at its final size, but guard against a 0-size init.
     setTimeout(() => map.invalidateSize(), 0);
+    // Keep Leaflet in sync when the canvas resizes (e.g. entering/leaving the
+    // full-screen map overlay).
+    const ro = new ResizeObserver(() => map.invalidateSize());
+    ro.observe(el);
     return () => {
       el.removeEventListener("wheel", onWheel);
       clearTimeout(hintTimer.current);
+      ro.disconnect();
       map.remove();
       mapRef.current = null;
     };

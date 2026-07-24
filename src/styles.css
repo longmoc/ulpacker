@@ -3863,6 +3863,44 @@ button[type="submit"]:active {
   color: #fff;
 }
 
+.map-toggle .map-full-btn {
+  border-left: 1px solid var(--border-2);
+  padding: 5px 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-2);
+}
+.map-toggle .map-full-btn:hover { color: var(--text-1); background: var(--surface-2); }
+
+/* Full-screen map overlay */
+.map-panel.fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  margin: 0;
+  padding: 12px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.map-panel.fullscreen .track-map,
+.map-panel.fullscreen .track-shape {
+  flex: 1;
+  min-height: 0;
+}
+.map-panel.fullscreen .track-map-canvas {
+  height: 100%;
+}
+.map-panel.fullscreen .track-shape svg {
+  height: 100%;
+  width: 100%;
+}
+.map-panel.fullscreen .map-legend {
+  flex: 0 0 auto;
+}
+
 @media (max-width: 768px) {
   .track-map-canvas {
     height: 408px;
@@ -4015,11 +4053,14 @@ button[type="submit"]:active {
   gap: 6px;
 }
 .section-toggle .caret {
-  display: inline-block;
-  transition: transform 0.12s ease;
+  display: inline-flex;
+  align-items: center;
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
   color: var(--text-3);
 }
-.section-toggle .caret.open { transform: rotate(90deg); }
+.section-toggle:hover .caret { color: var(--text-2); }
+.section-toggle .caret.open { transform: rotate(0deg); }
 .section-count {
   color: var(--text-3);
   font-weight: 500;
