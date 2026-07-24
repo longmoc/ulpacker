@@ -54,6 +54,7 @@ export default function TripWorkspace({
   const [hoverCpId, setHoverCpId] = useState(null);
   const [openTool, setOpenTool] = useState(null); // "km" | "split" | null
   const [selectedDay, setSelectedDay] = useState(null);
+  const [anchorIds, setAnchorIds] = useState([]); // up to 2 ticked checkpoint ids
   const [hoverRouteM, setHoverRouteM] = useState(null);
   const [mapMode, setMapMode] = useState(() => {
     try {
@@ -227,6 +228,20 @@ export default function TripWorkspace({
     ? trip.checkpoints.filter((cp) => (cp.kind || "poi") === cpFilter)
     : trip.checkpoints;
 
+  // Ticked reference checkpoints (max 2), sorted by route distance. Two of them
+  // define a range that the map/profile isolate — like a day selection.
+  const toggleAnchor = (id) =>
+    setAnchorIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id].slice(-2)));
+  const anchorPoints = anchorIds
+    .map((id) => trip.checkpoints.find((c) => c.id === id))
+    .filter(Boolean)
+    .map((c) => ({ id: c.id, routeM: c.anchor.routeDistanceM }))
+    .sort((x, y) => x.routeM - y.routeM);
+  const anchorRange =
+    anchorPoints.length === 2 ? { startRouteM: anchorPoints[0].routeM, endRouteM: anchorPoints[1].routeM } : null;
+  // The anchor range takes over the map/profile isolation from a day selection.
+  const activeRange = anchorRange || dayRange;
+
   const extraDays = trip.extraDays || [];
   const addExtraDay = ({ title, before }) =>
     onSetExtraDays?.([...extraDays, { id: `xd_${id()}`, title, before, note: "" }]);
@@ -389,7 +404,7 @@ export default function TripWorkspace({
               onHover={setHoverRouteM}
               hoverCpId={hoverCpId}
               onHoverCheckpoint={setHoverCpId}
-              dayRange={dayRange}
+              dayRange={activeRange}
               dayBands={dayBands}
             />
             <div className="map-panel">
@@ -418,7 +433,7 @@ export default function TripWorkspace({
                   highlight={hoverPoint}
                   hoverCpId={hoverCpId}
                   onHoverCheckpoint={setHoverCpId}
-                  dayRange={dayRange}
+                  dayRange={activeRange}
                   dayBands={dayBands}
                   startName={trip.startName}
                   finishName={trip.finishName}
@@ -431,7 +446,7 @@ export default function TripWorkspace({
                   onAddAt={addAtLatLng}
                   highlight={hoverPoint}
                   hoverCpId={hoverCpId}
-                  dayRange={dayRange}
+                  dayRange={activeRange}
                   dayBands={dayBands}
                 />
               )}
@@ -605,6 +620,8 @@ export default function TripWorkspace({
               onUpdate={onUpdateCheckpoint}
               onDelete={onDeleteCheckpoint}
               onHoverCheckpoint={setHoverCpId}
+              anchorPoints={anchorPoints}
+              onToggleAnchor={toggleAnchor}
             />
               </>
             )}
