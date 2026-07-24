@@ -3262,10 +3262,36 @@ button[type="submit"]:active {
 
 .elevation-profile,
 .track-shape {
+  position: relative;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 10px;
+}
+
+/* Shape checkpoint markers — same white pin + kind ring + emoji as the map */
+.track-cp-marker { cursor: pointer; }
+.track-cp-bg {
+  fill: #fff;
+  stroke: var(--kc, #5b6472);
+}
+.track-cp-emoji {
+  pointer-events: none;
+  user-select: none;
+}
+.track-cp-marker.dim { opacity: 0.32; }
+
+/* Floating "Add a checkpoint here?" popover on the profile + shape */
+.add-confirm-pop {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 12px));
+  z-index: 30;
+  background: var(--surface);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  padding: 9px 11px;
+  white-space: nowrap;
 }
 
 .elevation-profile svg {

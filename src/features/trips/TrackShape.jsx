@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   projectTrack,
   decimateForRender,
@@ -7,6 +7,7 @@ import {
   sliceSegments,
   CHECKPOINT_KINDS
 } from "../../lib/trail.js";
+import AddPointConfirm from "./AddPointConfirm.jsx";
 
 // Large working space; the viewBox is then cropped tight to the track so it
 // fills the panel (contain) regardless of portrait/landscape orientation.
@@ -77,8 +78,26 @@ export default function TrackShape({
   loop
 }) {
   const svgRef = useRef(null);
+  const wrapRef = useRef(null);
+  const [tip, setTip] = useState(null); // { cp, left, top } styled hover tooltip
+  const [pending, setPending] = useState(null); // { lat, lng, left, top } add-confirm
   const antimeridian = useMemo(() => detectAntimeridian(track.segments), [track]);
   const cums = useMemo(() => buildCumulatives(track.segments), [track]);
+
+  // Screen-pixel position (relative to the wrapper) of a user-space point, so an
+  // HTML tooltip/popover can sit over it through the viewBox crop + letterbox.
+  const toWrapperPx = (ux, uy) => {
+    const svg = svgRef.current;
+    const wrap = wrapRef.current;
+    if (!svg || !wrap) return { left: 0, top: 0 };
+    const ctm = svg.getScreenCTM();
+    const pt = svg.createSVGPoint();
+    pt.x = ux;
+    pt.y = uy;
+    const sp = pt.matrixTransform(ctm);
+    const wr = wrap.getBoundingClientRect();
+    return { left: sp.x - wr.left, top: sp.y - wr.top };
+  };
 
   const model = useMemo(() => {
     if (antimeridian) return null;
@@ -116,9 +135,11 @@ export default function TrackShape({
   const end = lastSeg?.[lastSeg.length - 1];
   const stroke = unit * 0.006;
   const rEnd = unit * 0.022;
-  const rCp = unit * 0.013;
+  const rPin = unit * 0.02;
   const banded = dayBands && dayBands.length > 1;
 
+  // Clicking the shape opens a confirm popover (like the map), instead of adding
+  // a checkpoint immediately.
   const handleClick = (e) => {
     if (!onAddAt) return;
     // getScreenCTM maps screen px → user coords correctly through the viewBox
@@ -130,13 +151,23 @@ export default function TrackShape({
     pt.y = e.clientY;
     const u = pt.matrixTransform(ctm.inverse());
     const [lat, lng] = unproject(u.x, u.y);
-    onAddAt(lat, lng);
+    const wr = wrapRef.current.getBoundingClientRect();
+    setPending({ lat, lng, left: e.clientX - wr.left, top: e.clientY - wr.top });
+  };
+
+  const showTip = (cp, ux, uy) => {
+    setTip({ cp, ...toWrapperPx(ux, uy) });
+    onHoverCheckpoint?.(cp.id);
+  };
+  const hideTip = () => {
+    setTip(null);
+    onHoverCheckpoint?.(null);
   };
 
   const hi = highlight ? project(highlight.lat, highlight.lng) : null;
 
   return (
-    <div className="track-shape">
+    <div className="track-shape" ref={wrapRef}>
       <svg
         ref={svgRef}
         viewBox={viewBox}
@@ -184,21 +215,28 @@ export default function TrackShape({
             (cp.anchor.routeDistanceM < dayRange.startRouteM - 1 ||
               cp.anchor.routeDistanceM > dayRange.endRouteM + 1);
           const kind = CHECKPOINT_KINDS[cp.kind] ? cp.kind : "poi";
-          const label = cp.name || CHECKPOINT_KINDS[kind].label;
+          const emoji = CHECKPOINT_KINDS[kind].emoji;
+          const rr = active ? rPin * 1.28 : rPin;
           return (
-            <circle
+            <g
               key={cp.id}
-              cx={x}
-              cy={y}
-              r={active ? rCp * 1.8 : rCp}
-              className={`track-cp kind-${kind}${cp.kind === "overnight" ? " overnight" : ""}${
-                active ? " active" : ""
-              }${outside ? " dim" : ""}`}
-              onMouseEnter={() => onHoverCheckpoint?.(cp.id)}
-              onMouseLeave={() => onHoverCheckpoint?.(null)}
+              className={`track-cp-marker kind-${kind}${active ? " active" : ""}${outside ? " dim" : ""}`}
+              onMouseEnter={() => showTip(cp, x, y)}
+              onMouseLeave={hideTip}
+              onClick={(e) => e.stopPropagation()}
             >
-              <title>{cp.note ? `${label} — ${cp.note}` : label}</title>
-            </circle>
+              <circle cx={x} cy={y} r={rr} className="track-cp-bg" style={{ strokeWidth: rr * 0.16 }} />
+              <text
+                x={x}
+                y={y}
+                className="track-cp-emoji"
+                fontSize={rr * 1.15}
+                textAnchor="middle"
+                dominantBaseline="central"
+              >
+                {emoji}
+              </text>
+            </g>
           );
         })}
         {/* Endpoints last so they sit above the track + checkpoints. */}
@@ -217,6 +255,33 @@ export default function TrackShape({
           </g>
         )}
       </svg>
+      {tip && (
+        <div
+          className={`cp-tip profile-cp-tip kind-${tip.cp.kind || "poi"}`}
+          style={{ left: tip.left, top: tip.top }}
+        >
+          <span className="cp-tip-name">
+            {(CHECKPOINT_KINDS[tip.cp.kind] || CHECKPOINT_KINDS.poi).emoji}{" "}
+            {tip.cp.name || (CHECKPOINT_KINDS[tip.cp.kind] || CHECKPOINT_KINDS.poi).label}
+          </span>
+          {tip.cp.note && <span className="cp-tip-note">{tip.cp.note}</span>}
+          <span className="cp-tip-meta">
+            {(tip.cp.anchor.routeDistanceM / 1000).toFixed(2)} km
+            {tip.cp.anchor.ele != null && ` · ${tip.cp.anchor.ele} m`}
+          </span>
+        </div>
+      )}
+      {pending && (
+        <AddPointConfirm
+          left={pending.left}
+          top={pending.top}
+          onAdd={() => {
+            onAddAt(pending.lat, pending.lng);
+            setPending(null);
+          }}
+          onCancel={() => setPending(null)}
+        />
+      )}
     </div>
   );
 }

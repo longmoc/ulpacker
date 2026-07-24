@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import { buildCumulatives, buildElevationSeries, CHECKPOINT_KINDS } from "../../lib/trail.js";
+import AddPointConfirm from "./AddPointConfirm.jsx";
 
 const W = 1000;
 const H = 220;
@@ -19,8 +20,10 @@ export default function ElevationProfile({
   dayBands
 }) {
   const svgRef = useRef(null);
+  const canvasRef = useRef(null);
   const [hover, setHover] = useState(null);
   const [hoverCp, setHoverCp] = useState(null);
+  const [pending, setPending] = useState(null); // { routeM, left, top } confirm popover
 
   const setNearCp = (cp) => {
     setHoverCp(cp);
@@ -122,6 +125,14 @@ export default function ElevationProfile({
     if ((near?.cp?.id || null) !== (hoverCp?.id || null)) setNearCp(near ? near.cp : null);
   };
 
+  // Clicking the plot no longer adds immediately — it opens a confirm popover
+  // at the click, matching the map's "Add a checkpoint here?" flow.
+  const handleClick = (e) => {
+    if (!hasEle || !hover) return;
+    const rect = canvasRef.current.getBoundingClientRect();
+    setPending({ routeM: hover.routeM, left: e.clientX - rect.left, top: e.clientY - rect.top });
+  };
+
   const hoverEle = (() => {
     if (!hover || !hasEle) return null;
     // nearest sample elevation
@@ -135,7 +146,7 @@ export default function ElevationProfile({
 
   return (
     <div className="elevation-profile">
-      <div className="profile-canvas">
+      <div className="profile-canvas" ref={canvasRef}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}
@@ -145,7 +156,7 @@ export default function ElevationProfile({
         className={hasEle ? "clickable" : ""}
         onMouseMove={hasEle ? handleMove : undefined}
         onMouseLeave={clearHover}
-        onClick={() => hasEle && hover && onAddAt(hover.routeM)}
+        onClick={handleClick}
       >
         {!hasEle && (
           <text x={W / 2} y={H / 2} textAnchor="middle" className="profile-empty">
@@ -265,6 +276,17 @@ export default function ElevationProfile({
             {hoverCp.anchor.ele != null && ` · ${hoverCp.anchor.ele} m`}
           </span>
         </div>
+      )}
+      {pending && (
+        <AddPointConfirm
+          left={pending.left}
+          top={pending.top}
+          onAdd={() => {
+            onAddAt(pending.routeM);
+            setPending(null);
+          }}
+          onCancel={() => setPending(null)}
+        />
       )}
       </div>
       <div className="profile-caption">
