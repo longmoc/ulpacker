@@ -3492,39 +3492,39 @@ button[type="submit"]:active {
   gap: 6px;
 }
 
+/* Rows mirror the pack list: a tidy grid with hairline dividers and borderless
+   inputs that only underline on hover/focus (rather than boxed cards). */
+.checkpoint-list {
+  display: grid;
+  gap: 0;
+}
 .checkpoint-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 32px minmax(70px, 0.85fr) 58px 46px minmax(90px, 1.35fr) auto;
+  gap: 6px;
   align-items: center;
-  gap: 8px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 6px 8px;
+  border: 0;
+  border-top: 1px solid var(--divider);
+  border-radius: 0;
+  background: transparent;
+  padding: 5px 2px;
 }
+.checkpoint-row:hover { background: var(--surface-2); }
 
-.moon-btn {
-  width: auto;
-  padding: 4px 6px;
-  filter: grayscale(1) opacity(0.4);
+.checkpoint-row input {
+  padding: 3px 4px;
+  font-size: 0.86rem;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  border-radius: 0;
   box-shadow: none;
+  min-width: 0;
 }
+.checkpoint-row input:hover { border-bottom-color: var(--border-2); }
+.checkpoint-row input:focus { outline: none; box-shadow: none; border-bottom-color: var(--accent); }
 
-.moon-btn.active {
-  filter: none;
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-
-.cp-name {
-  flex: 1 1 40%;
-  min-width: 90px;
-}
-
-.cp-note {
-  flex: 1 1 40%;
-  min-width: 90px;
-  color: var(--text-2);
-}
+.cp-note { color: var(--text-2); }
 
 .cp-dist,
 .cp-ele {
@@ -3532,6 +3532,14 @@ button[type="submit"]:active {
   font-size: 0.82rem;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.cp-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
 }
 
 .cp-flag {
@@ -3550,10 +3558,18 @@ button[type="submit"]:active {
 
 .cp-delete {
   width: auto;
-  padding: 2px 8px;
+  padding: 0 6px;
+  font-size: 1.05rem;
+  line-height: 1;
   color: var(--text-3);
+  border: 0;
+  background: transparent;
   box-shadow: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
 }
+.checkpoint-row:hover .cp-delete,
+.cp-delete:focus-visible { opacity: 1; }
 
 .cp-delete:hover {
   color: #b42318;
@@ -3865,8 +3881,8 @@ button[type="submit"]:active {
 /* Compact category picker (emoji-only collapsed, labels in the dropdown) */
 .kind-picker { position: relative; flex: 0 0 auto; }
 .kind-picker-btn {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -4129,7 +4145,7 @@ button[type="submit"]:active {
 }
 .cp-marker-pin { transition: transform 0.1s ease, box-shadow 0.1s ease; }
 .track-cp.active { stroke-width: 3; }
-.checkpoint-row:hover { border-color: var(--border-2); background: var(--surface); }
+
 
 /* Transport category colour */
 .kind-transport { --kc: #475569; }

@@ -5,6 +5,49 @@ import { PencilIcon, TrashIcon, PinIcon, TrendUpIcon, TrendDownIcon, ChevronIcon
 
 const km = (m) => (m / 1000).toFixed(1);
 
+// Module-scope so React keeps the same component type across renders — a nested
+// definition would remount the <textarea> on every keystroke and reset the caret.
+function NoteBlock({ isEditing, draft, setDraft, onSave, onCancel, note, onAdd }) {
+  if (isEditing) {
+    return (
+      <div className="day-note">
+        <textarea
+          className="day-note-input"
+          value={draft}
+          autoFocus
+          rows={6}
+          placeholder={"Description for this day…\n\nSupports **bold**, *italic*, `code`, - bullet lists and 1. numbered lists."}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+        <div className="day-note-actions">
+          <button type="button" className="primary" onClick={onSave}>
+            Save
+          </button>
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+  if (!note) {
+    return (
+      <div className="day-note">
+        <button type="button" className="link-btn day-note-add" onClick={onAdd}>
+          + Add description
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="day-note">
+      <div className="day-note-body">
+        <Markdown text={note} />
+      </div>
+    </div>
+  );
+}
+
 // Derived day-by-day itinerary. Trail days come from overnight checkpoints;
 // off-route days (travel/rest/shuttle) are stored on the trip and interleaved,
 // carry no distance, and never touch the trail on the map.
@@ -59,47 +102,6 @@ export default function ItineraryDays({
     setDetail((p) => ({ ...p, [key]: true }));
   };
   const toggleDetail = (key) => setDetail((p) => ({ ...p, [key]: !p[key] }));
-
-  const NoteBlock = ({ noteKey, note, onSave }) => {
-    if (editing === noteKey) {
-      return (
-        <div className="day-note">
-          <textarea
-            className="day-note-input"
-            value={draft}
-            autoFocus
-            rows={6}
-            placeholder={"Description for this day…\n\nSupports **bold**, *italic*, `code`, - bullet lists and 1. numbered lists."}
-            onChange={(e) => setDraft(e.target.value)}
-          />
-          <div className="day-note-actions">
-            <button type="button" className="primary" onClick={onSave}>
-              Save
-            </button>
-            <button type="button" onClick={() => setEditing(null)}>
-              Cancel
-            </button>
-          </div>
-        </div>
-      );
-    }
-    if (!note) {
-      return (
-        <div className="day-note">
-          <button type="button" className="link-btn day-note-add" onClick={() => startEdit(noteKey, "")}>
-            + Add description
-          </button>
-        </div>
-      );
-    }
-    return (
-      <div className="day-note">
-        <div className="day-note-body">
-          <Markdown text={note} />
-        </div>
-      </div>
-    );
-  };
 
   return (
     <div className="itinerary">
@@ -223,8 +225,12 @@ export default function ItineraryDays({
                 <div className="day-stats muted">Not on the track — no distance or elevation counted.</div>
                 {detail[key] && (
                   <NoteBlock
-                    noteKey={key}
+                    isEditing={editing === key}
+                    draft={draft}
+                    setDraft={setDraft}
                     note={x.note || ""}
+                    onAdd={() => startEdit(key, "")}
+                    onCancel={() => setEditing(null)}
                     onSave={() => {
                       onUpdateExtraDay?.(x.id, { note: draft });
                       setEditing(null);
@@ -307,8 +313,12 @@ export default function ItineraryDays({
               {detail[key] && (
                 <div onClick={(e) => e.stopPropagation()}>
                   <NoteBlock
-                    noteKey={key}
+                    isEditing={editing === key}
+                    draft={draft}
+                    setDraft={setDraft}
                     note={notes[key] || ""}
+                    onAdd={() => startEdit(key, "")}
+                    onCancel={() => setEditing(null)}
                     onSave={() => {
                       onSetDayNote?.(key, draft);
                       setEditing(null);

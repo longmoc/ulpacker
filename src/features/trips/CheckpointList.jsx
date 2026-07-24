@@ -46,11 +46,13 @@ export default function CheckpointList({ checkpoints, onUpdate, onDelete, onHove
                 placeholder="Note"
                 onChange={(e) => onUpdate(cp.id, { note: e.target.value })}
               />
-              {offRoute && <span className="cp-flag off-route" title={`${cp.anchor.offsetM} m off route`}>off-route</span>}
-              {cp.anchor.ambiguous && <span className="cp-flag ambiguous" title="Ambiguous position on a loop">?</span>}
-              <button type="button" className="cp-delete" title="Delete checkpoint" onClick={() => onDelete(cp.id)}>
-                ×
-              </button>
+              <span className="cp-actions">
+                {offRoute && <span className="cp-flag off-route" title={`${cp.anchor.offsetM} m off route`}>off-route</span>}
+                {cp.anchor.ambiguous && <span className="cp-flag ambiguous" title="Ambiguous position on a loop">?</span>}
+                <button type="button" className="cp-delete" title="Delete checkpoint" onClick={() => onDelete(cp.id)}>
+                  ×
+                </button>
+              </span>
             </li>
           );
         })}
