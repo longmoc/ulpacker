@@ -513,8 +513,12 @@ export default function TripWorkspace({
                   onAddAt={addAtLatLng}
                   highlight={hoverPoint}
                   hoverCpId={hoverCpId}
+                  onHoverCheckpoint={setHoverCpId}
                   dayRange={activeRange}
                   dayBands={dayBands}
+                  startName={trip.startName}
+                  finishName={trip.finishName}
+                  loop={trip.loop}
                 />
               )}
 
