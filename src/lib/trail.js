@@ -43,6 +43,23 @@ export function dayColor(i) {
   return DAY_COLORS[((i % DAY_COLORS.length) + DAY_COLORS.length) % DAY_COLORS.length];
 }
 
+// Pick black or white text for a solid background by WCAG contrast (computed,
+// not eyeballed) — so a "Day N" badge stays readable on any hue.
+function relLuminance(hex) {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const lin = c.map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+}
+const DARK_INK = "#1c1c22";
+const DARK_INK_LUM = relLuminance(DARK_INK);
+export function readableOn(hex) {
+  if (typeof hex !== "string" || !/^#[0-9a-fA-F]{6}$/.test(hex)) return "#ffffff";
+  const bg = relLuminance(hex);
+  const ratio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+  // Compare against the ACTUAL inks used (white vs #1c1c22), not pure black.
+  return ratio(1, bg) >= ratio(DARK_INK_LUM, bg) ? "#ffffff" : DARK_INK;
+}
+
 // Checkpoint categories. "overnight" is special — it drives the day itinerary.
 // The rest are informational markers shown on the map/profile.
 export const CHECKPOINT_KINDS = {

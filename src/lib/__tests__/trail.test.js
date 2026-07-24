@@ -19,6 +19,8 @@ import {
   detectExtrema,
   classifyCheckpoint,
   sliceSegments,
+  readableOn,
+  DAY_COLORS,
   MAX_TRACK_POINTS
 } from "../trail.js";
 
@@ -328,6 +330,37 @@ describe("classifyCheckpoint", () => {
     expect(classifyCheckpoint("Day 4 — Arp Nouvaz shuttle boundary")).toBe("transport");
     expect(classifyCheckpoint("Train station — Chamonix")).toBe("transport");
     expect(classifyCheckpoint("Cable car — Brévent")).toBe("transport");
+  });
+});
+
+describe("readableOn", () => {
+  const contrast = (a, b) => {
+    const lum = (h) => {
+      const c = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255)
+        .map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    };
+    const [L1, L2] = [lum(a), lum(b)].sort((x, y) => y - x);
+    return (L1 + 0.05) / (L2 + 0.05);
+  };
+  it("black on white and white on black", () => {
+    expect(readableOn("#ffffff")).toBe("#1c1c22");
+    expect(readableOn("#000000")).toBe("#ffffff");
+  });
+  it("picks black text on the light hues", () => {
+    expect(readableOn("#eda100")).toBe("#1c1c22"); // yellow
+    expect(readableOn("#1baf7a")).toBe("#1c1c22"); // aqua
+  });
+  it("always returns the higher-contrast of black/white, clearing 3:1 for a bold badge", () => {
+    for (const hex of DAY_COLORS) {
+      const chosen = readableOn(hex);
+      const other = chosen === "#ffffff" ? "#1c1c22" : "#ffffff";
+      expect(contrast(chosen, hex)).toBeGreaterThanOrEqual(contrast(other, hex));
+      expect(contrast(chosen, hex)).toBeGreaterThanOrEqual(3);
+    }
+  });
+  it("falls back to white for a bad value", () => {
+    expect(readableOn("nope")).toBe("#ffffff");
   });
 });
 

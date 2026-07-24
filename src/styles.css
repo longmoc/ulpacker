@@ -4157,9 +4157,14 @@ button[type="submit"]:active {
 /* Day selection highlights that day's stretch of trail */
 .day-card { position: relative; cursor: pointer; transition: border-color 0.12s ease, box-shadow 0.12s ease; }
 .day-card:hover { border-color: var(--border-2); }
+/* Selected day: tint in its own colour + a clear ring; the rest dim back so
+   the choice reads at a glance (mirrors the map/profile highlight). */
+.day-cards.has-selection .day-card { opacity: 0.5; transition: opacity 0.12s ease; }
+.day-cards.has-selection .day-card.active { opacity: 1; }
 .day-card.active {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-ring);
+  border-color: var(--day, var(--accent));
+  box-shadow: 0 0 0 2px var(--day, var(--accent));
+  background: color-mix(in srgb, var(--day, var(--accent)) 9%, var(--surface));
 }
 .day-card.off-route {
   cursor: default;
@@ -4463,3 +4468,33 @@ button[type="submit"]:active {
   border-radius: 2px;
   flex: 0 0 auto;
 }
+
+/* Day-number badge in the day's colour */
+.day-head { align-items: center; }
+.day-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.day-route { font-weight: 650; color: var(--accent); }
+.off-route .day-route { color: var(--text-2); }
+
+/* Editable off-route day title */
+.day-title-input {
+  flex: 1;
+  min-width: 120px;
+  font: inherit;
+  font-weight: 650;
+  color: var(--text);
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 6px;
+}
+.day-title-input:hover { border-color: var(--border); }
+.day-title-input:focus { border-color: var(--accent); background: var(--surface); }

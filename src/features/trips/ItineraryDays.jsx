@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { buildDays, buildCumulatives, dayColor, OFF_ROUTE_COLOR } from "../../lib/trail.js";
+import { buildDays, buildCumulatives, dayColor, OFF_ROUTE_COLOR, readableOn } from "../../lib/trail.js";
 import Markdown from "./Markdown.jsx";
 import { PencilIcon, TrashIcon, PinIcon, TrendUpIcon, TrendDownIcon, ChevronIcon } from "../../components/icons.jsx";
 
@@ -163,7 +163,7 @@ export default function ItineraryDays({
         </div>
       )}
 
-      <div className="day-cards">
+      <div className={`day-cards ${selectedDay != null ? "has-selection" : ""}`}>
         {ordered.map((row) => {
           const n = row.num;
           if (row.extra) {
@@ -173,11 +173,19 @@ export default function ItineraryDays({
               <div
                 key={x.id}
                 className="day-card off-route"
-                style={{ borderColor: OFF_ROUTE_COLOR, borderLeftColor: OFF_ROUTE_COLOR }}
+                style={{ "--day": OFF_ROUTE_COLOR, borderColor: OFF_ROUTE_COLOR, borderLeftColor: OFF_ROUTE_COLOR }}
               >
                 <div className="day-top">
                   <div className="day-head">
-                    Day {n} · {x.title}
+                    <span className="day-badge" style={{ background: OFF_ROUTE_COLOR, color: readableOn(OFF_ROUTE_COLOR) }}>
+                      Day {n}
+                    </span>
+                    <input
+                      className="day-title-input"
+                      value={x.title}
+                      placeholder="Off-route day"
+                      onChange={(e) => onUpdateExtraDay?.(x.id, { title: e.target.value })}
+                    />
                     <span className="cp-flag off-route-badge">off-route</span>
                   </div>
                   <div className="day-card-actions">
@@ -230,16 +238,22 @@ export default function ItineraryDays({
           const day = row.day;
           const key = day.startBoundary;
           const active = selectedDay === day.index;
+          const badge = row.color || "#1b5e3f";
           return (
             <div
               key={`d${day.index}`}
               className={`day-card ${active ? "active" : ""}`}
-              style={row.color ? { borderColor: row.color, borderLeftColor: row.color } : undefined}
+              style={{ "--day": badge, borderColor: badge, borderLeftColor: badge }}
               onClick={() => onSelectDay?.(active ? null : day.index)}
             >
               <div className="day-top">
                 <div className="day-head">
-                  Day {n} · {dayStart(day)} → {dayEnd(day)}
+                  <span className="day-badge" style={{ background: badge, color: readableOn(badge) }}>
+                    Day {n}
+                  </span>
+                  <span className="day-route">
+                    {dayStart(day)} → {dayEnd(day)}
+                  </span>
                 </div>
                 <div className="day-card-actions" onClick={(e) => e.stopPropagation()}>
                   <div className="day-action-icons">
