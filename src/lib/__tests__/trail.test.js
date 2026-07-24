@@ -216,6 +216,29 @@ describe("snapToTrack + pointAtAnchor", () => {
     expect(anchor.sourceLat).toBe(45.05);
   });
 
+  it("does NOT flag a point on a straight track as ambiguous", () => {
+    // ~2 km straight run; the adjacent edge is always close but not a loop.
+    const pts = [];
+    for (let i = 0; i <= 40; i += 1) pts.push([45, 6 + i * 0.0005, 100]);
+    const straight = [{ points: pts }];
+    const anchor = snapToTrack(straight, 45.0003, 6 + 20 * 0.0005);
+    expect(anchor.ambiguous).toBe(false);
+  });
+
+  it("flags a point where the route loops back near itself", () => {
+    // Two long parallel legs ~11 m apart (a hairpin): a point between them is
+    // genuinely ambiguous — both legs are far apart ALONG the route.
+    const out = [];
+    const back = [];
+    for (let i = 0; i <= 60; i += 1) {
+      out.push([45.0, 6 + i * 0.0005, 100]); // leg going east
+      back.push([45.0001, 6.03 - i * 0.0005, 100]); // leg coming back ~11 m north
+    }
+    const loop = [{ points: [...out, ...back] }];
+    const anchor = snapToTrack(loop, 45.00005, 6.015); // between the two legs
+    expect(anchor.ambiguous).toBe(true);
+  });
+
   it("resolves an anchor unambiguously at a segment boundary", () => {
     const two = [
       { points: [[45, 6, 100], [45, 6.01, 100]] },

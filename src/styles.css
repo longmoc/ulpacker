@@ -3500,8 +3500,8 @@ button[type="submit"]:active {
 }
 .checkpoint-row {
   display: grid;
-  grid-template-columns: 32px minmax(70px, 0.85fr) 58px 46px minmax(90px, 1.35fr) auto;
-  gap: 6px;
+  grid-template-columns: 32px minmax(90px, 1.1fr) max-content max-content minmax(90px, 1fr) auto;
+  gap: 6px 14px;
   align-items: center;
   border: 0;
   border-top: 1px solid var(--divider);
@@ -3526,14 +3526,18 @@ button[type="submit"]:active {
 
 .cp-note { color: var(--text-2); }
 
-.cp-dist,
-.cp-ele {
-  color: var(--text-3);
+.cp-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-2);
   font-size: 0.82rem;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  text-align: right;
 }
+.cp-metric svg { color: var(--text-3); opacity: 0.7; flex: 0 0 auto; }
+.cp-metric em { font-style: normal; color: var(--text-3); font-size: 0.72rem; }
+.cp-ele { justify-self: start; }
 
 .cp-actions {
   display: inline-flex;

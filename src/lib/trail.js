@@ -440,55 +440,70 @@ function projectOntoEdge(a, b, lat, lng, refLat) {
 // Snap a source [lat,lng] onto the nearest track EDGE (not nearest vertex).
 // Returns a full anchor (see plan §2.4). `prefer` (routeDistanceM) biases the
 // tie-break toward a previous position on loops/self-intersections.
+// A second projection only counts as a genuine loop ambiguity if it lies this
+// far along the route from the chosen one — well beyond the adjacent edges of
+// the same stretch of trail (which are always a few metres apart).
+const LOOP_AMBIGUITY_M = 500;
+
 export function snapToTrack(segments, lat, lng, options = {}) {
   const { cumulativeBySegment, segmentOffsets } = options.cumulatives || buildCumulatives(segments);
   const prefer = options.preferRouteM;
-  let best = null;
-  let secondBestDist = Infinity;
 
-  for (let s = 0; s < segments.length; s += 1) {
-    const pts = segments[s].points;
-    const cum = cumulativeBySegment[s];
-    for (let i = 1; i < pts.length; i += 1) {
-      const proj = projectOntoEdge(pts[i - 1], pts[i], lat, lng, lat);
-      const alongSegmentM = cum[i - 1] + proj.t * (cum[i] - cum[i - 1]);
-      const routeDistanceM = segmentOffsets[s] + alongSegmentM;
-      const candidate = {
-        segmentIndex: s,
-        alongSegmentM,
-        routeDistanceM,
-        lat: round(proj.lat, COORD_DECIMALS),
-        lng: round(proj.lng, COORD_DECIMALS),
-        ele: Number.isFinite(proj.ele) ? Math.round(proj.ele) : null,
-        offsetM: Math.round(proj.dist),
-        _dist: proj.dist
-      };
-      if (!best) {
-        best = candidate;
-        continue;
-      }
-      // Tie-break on loops: comparable distance → prefer the one closer to the
-      // previous routeDistanceM.
-      const close = Math.min(candidate._dist, best._dist);
-      const far = Math.max(candidate._dist, best._dist);
-      const comparable = far <= 2 * (close + 1);
-      if (candidate._dist < best._dist) {
-        if (comparable && prefer != null &&
-            Math.abs(best.routeDistanceM - prefer) < Math.abs(candidate.routeDistanceM - prefer)) {
-          // Keep best (it is nearer the previous position); note ambiguity.
-          secondBestDist = candidate._dist;
-        } else {
-          secondBestDist = best._dist;
-          best = candidate;
-        }
-      } else if (candidate._dist < secondBestDist) {
-        secondBestDist = candidate._dist;
+  const eachEdge = (fn) => {
+    for (let s = 0; s < segments.length; s += 1) {
+      const pts = segments[s].points;
+      const cum = cumulativeBySegment[s];
+      for (let i = 1; i < pts.length; i += 1) {
+        const proj = projectOntoEdge(pts[i - 1], pts[i], lat, lng, lat);
+        const alongSegmentM = cum[i - 1] + proj.t * (cum[i] - cum[i - 1]);
+        fn(proj, s, alongSegmentM, segmentOffsets[s] + alongSegmentM);
       }
     }
-  }
+  };
 
+  // Pass 1: the nearest edge (with a loop tie-break toward the previous position).
+  let best = null;
+  eachEdge((proj, s, alongSegmentM, routeDistanceM) => {
+    const candidate = {
+      segmentIndex: s,
+      alongSegmentM,
+      routeDistanceM,
+      lat: round(proj.lat, COORD_DECIMALS),
+      lng: round(proj.lng, COORD_DECIMALS),
+      ele: Number.isFinite(proj.ele) ? Math.round(proj.ele) : null,
+      offsetM: Math.round(proj.dist),
+      _dist: proj.dist
+    };
+    if (!best) {
+      best = candidate;
+      return;
+    }
+    if (candidate._dist < best._dist) {
+      const comparable =
+        Math.max(candidate._dist, best._dist) <= 2 * (Math.min(candidate._dist, best._dist) + 1);
+      if (
+        comparable &&
+        prefer != null &&
+        Math.abs(best.routeDistanceM - prefer) < Math.abs(candidate.routeDistanceM - prefer)
+      ) {
+        // Keep best — it's nearer the previous position on the loop.
+      } else {
+        best = candidate;
+      }
+    }
+  });
   if (!best) return null;
-  const ambiguous = secondBestDist !== Infinity && secondBestDist <= 2 * (best._dist + 1);
+
+  // Pass 2: ambiguous only when ANOTHER part of the route, far along the track,
+  // is also nearly as close — a real loop self-approach, not the adjacent edge.
+  let farMin = Infinity;
+  eachEdge((proj, s, alongSegmentM, routeDistanceM) => {
+    if (Math.abs(routeDistanceM - best.routeDistanceM) > LOOP_AMBIGUITY_M && proj.dist < farMin) {
+      farMin = proj.dist;
+    }
+  });
+  const ambiguous = farMin !== Infinity && farMin <= 2 * (best._dist + 1);
+
   const { _dist, ...anchor } = best;
   return {
     ...anchor,

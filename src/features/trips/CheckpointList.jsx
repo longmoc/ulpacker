@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { OFF_ROUTE_M } from "../../lib/trail.js";
 import KindPicker from "./KindPicker.jsx";
+import { PinIcon, PeakIcon } from "../../components/icons.jsx";
 
 const km = (m) => (m / 1000).toFixed(2);
 const PREVIEW = 8;
@@ -38,8 +39,16 @@ export default function CheckpointList({ checkpoints, onUpdate, onDelete, onHove
                 placeholder="Checkpoint"
                 onChange={(e) => onUpdate(cp.id, { name: e.target.value })}
               />
-              <span className="cp-dist">{km(cp.anchor.routeDistanceM)} km</span>
-              <span className="cp-ele">{cp.anchor.ele != null ? `${cp.anchor.ele} m` : "—"}</span>
+              <span className="cp-metric cp-dist" title="Distance along the route">
+                <PinIcon size={12} />
+                {km(cp.anchor.routeDistanceM)}
+                <em>km</em>
+              </span>
+              <span className="cp-metric cp-ele" title="Elevation">
+                <PeakIcon size={12} />
+                {cp.anchor.ele != null ? cp.anchor.ele : "—"}
+                {cp.anchor.ele != null && <em>m</em>}
+              </span>
               <input
                 className="cp-note"
                 value={cp.note}
