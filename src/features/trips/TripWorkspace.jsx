@@ -17,6 +17,7 @@ import TrackMap from "./TrackMap.jsx";
 import CheckpointList from "./CheckpointList.jsx";
 import ItineraryDays from "./ItineraryDays.jsx";
 import EndpointLabel from "./EndpointLabel.jsx";
+import { WhistleIcon, FlagIcon, LinkIcon } from "../../components/icons.jsx";
 import {
   PencilIcon,
   TrashIcon,
@@ -421,6 +422,7 @@ export default function TripWorkspace({
                   dayBands={dayBands}
                   startName={trip.startName}
                   finishName={trip.finishName}
+                  loop={trip.loop}
                 />
               ) : (
                 <TrackShape
@@ -437,15 +439,31 @@ export default function TripWorkspace({
               <div className="map-legend">
                 <div className="map-legend-ends">
                   <EndpointLabel
-                    dotClass="start"
+                    className="start"
+                    icon={<WhistleIcon />}
                     value={trip.startName}
                     fallback="Start"
-                    onSave={(v) => onUpdateTrip({ startName: v })}
+                    onSave={(v) =>
+                      onUpdateTrip(trip.loop ? { startName: v, finishName: v } : { startName: v })
+                    }
                   />
+                  <button
+                    type="button"
+                    className={`loop-toggle ${trip.loop ? "active" : ""}`}
+                    title={trip.loop ? "Loop route: start = finish" : "Link start & finish (loop route)"}
+                    aria-pressed={Boolean(trip.loop)}
+                    onClick={() =>
+                      onUpdateTrip(trip.loop ? { loop: false } : { loop: true, finishName: trip.startName || "" })
+                    }
+                  >
+                    <LinkIcon />
+                  </button>
                   <EndpointLabel
-                    dotClass="end"
-                    value={trip.finishName}
+                    className="finish"
+                    icon={<FlagIcon />}
+                    value={trip.loop ? trip.startName : trip.finishName}
                     fallback="Finish"
+                    disabled={trip.loop}
                     onSave={(v) => onUpdateTrip({ finishName: v })}
                   />
                 </div>

@@ -4498,3 +4498,53 @@ button[type="submit"]:active {
 }
 .day-title-input:hover { border-color: var(--border); }
 .day-title-input:focus { border-color: var(--accent); background: var(--surface); }
+
+/* Endpoint legend: icon + editable name, with a loop link toggle between */
+.map-legend-ends { gap: 8px; }
+.endpoint-label svg { flex: 0 0 auto; }
+.endpoint-label.start svg { color: #2e9e5b; }
+.endpoint-label.finish svg { color: #b42318; }
+.endpoint-name.disabled {
+  color: var(--text-3);
+  padding: 1px 4px;
+  border-bottom: 1px dashed transparent;
+}
+.loop-toggle {
+  width: auto;
+  padding: 4px 6px;
+  line-height: 0;
+  color: var(--text-3);
+  background: transparent;
+  border: 1px solid var(--border);
+  box-shadow: none;
+  border-radius: 6px;
+}
+.loop-toggle:hover { color: var(--text); border-color: var(--border-2); background: var(--surface-2); }
+.loop-toggle.active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Start / finish pins on the map (replace the plain dots) */
+.endpoint-marker { background: none; border: none; }
+.endpoint-pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(16, 17, 26, 0.5);
+}
+.endpoint-pin svg { width: 17px; height: 17px; }
+.endpoint-pin.start { background: #2e9e5b; }
+.endpoint-pin.finish { background: #b42318; }
+.endpoint-pin.combo {
+  width: 46px;
+  border-radius: 15px;
+  background: linear-gradient(90deg, #2e9e5b 0 50%, #b42318 50% 100%);
+}
+.endpoint-pin.combo svg { width: 15px; height: 15px; }

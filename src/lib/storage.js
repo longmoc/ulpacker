@@ -287,6 +287,8 @@ export function normalizeTrips(rawTrips, validPackIds, tracks) {
         // trips → "" → the UI falls back to "Start"/"Finish".
         startName: clampText(raw.startName),
         finishName: clampText(raw.finishName),
+        // Loop route: start and finish are the same place (one combined marker).
+        loop: Boolean(raw.loop),
         packId,
         createdAt: raw.createdAt || new Date().toISOString(),
         trackRef,

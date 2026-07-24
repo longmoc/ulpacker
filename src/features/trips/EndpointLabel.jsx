@@ -1,8 +1,9 @@
 import React, { useState } from "react";
 
-// Start / Finish legend entry: shows the trailhead name (or a fallback) next to
-// the coloured dot, and turns into an input on click so it can be renamed.
-export default function EndpointLabel({ dotClass, value, fallback, onSave }) {
+// Start / Finish legend entry: an icon + the trailhead name. Click the name to
+// rename it inline. `disabled` (used when a loop binds finish to start) shows
+// the name as static text.
+export default function EndpointLabel({ className = "", icon, value, fallback, onSave, disabled }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value || "");
 
@@ -12,9 +13,9 @@ export default function EndpointLabel({ dotClass, value, fallback, onSave }) {
   };
 
   return (
-    <span className="endpoint-label">
-      <span className={`dot ${dotClass}`} />
-      {editing ? (
+    <span className={`endpoint-label ${className}`}>
+      {icon}
+      {editing && !disabled ? (
         <input
           className="endpoint-input"
           autoFocus
@@ -30,6 +31,8 @@ export default function EndpointLabel({ dotClass, value, fallback, onSave }) {
             }
           }}
         />
+      ) : disabled ? (
+        <span className="endpoint-name disabled">{value || fallback}</span>
       ) : (
         <button
           type="button"

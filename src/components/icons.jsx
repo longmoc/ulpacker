@@ -92,6 +92,34 @@ export function ChevronIcon({ size = 14, open = false }) {
   );
 }
 
+export function WhistleIcon({ size = 15 }) {
+  return (
+    <svg {...base} width={size} height={size}>
+      <circle cx="8.5" cy="14" r="5.5" />
+      <path d="M13.5 10.5H20a1 1 0 0 1 1 1v1.5a1 1 0 0 1-1 1h-1.5" />
+      <path d="M8.5 8.5V5.5" />
+    </svg>
+  );
+}
+
+export function FlagIcon({ size = 15 }) {
+  return (
+    <svg {...base} width={size} height={size}>
+      <path d="M5 21V4" />
+      <path d="M5 4h11l-2.2 4L16 12H5" />
+    </svg>
+  );
+}
+
+export function LinkIcon({ size = 15 }) {
+  return (
+    <svg {...base} width={size} height={size}>
+      <path d="M9.5 13.5a4 4 0 0 0 5.5 0l2.5-2.5a4 4 0 0 0-5.5-5.5l-1.2 1.2" />
+      <path d="M14.5 10.5a4 4 0 0 0-5.5 0L6.5 13a4 4 0 0 0 5.5 5.5l1.2-1.2" />
+    </svg>
+  );
+}
+
 export function ClockIcon({ size = 16 }) {
   return (
     <svg {...base} width={size} height={size}>

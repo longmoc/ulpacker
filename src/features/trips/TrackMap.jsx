@@ -7,6 +7,22 @@ const ACCENT = "#1b5e3f";
 const GREEN = "#2e9e5b";
 const RED = "#b42318";
 
+// White line-icons for the start/finish pins (matching the legend icons).
+const WHISTLE_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.5" cy="14" r="5.5"/><path d="M13.5 10.5H20a1 1 0 0 1 1 1v1.5a1 1 0 0 1-1 1h-1.5"/><path d="M8.5 8.5V5.5"/></svg>';
+const FLAG_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 21V4"/><path d="M5 4h11l-2.2 4L16 12H5"/></svg>';
+
+function endpointIcon(kind, html) {
+  return L.divIcon({
+    className: `endpoint-marker ${kind}`,
+    html,
+    iconSize: kind === "combo" ? [46, 30] : [30, 30],
+    iconAnchor: kind === "combo" ? [23, 15] : [15, 15],
+    tooltipAnchor: [0, -16]
+  });
+}
+
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || "");
 const ZOOM_KEY_LABEL = isMac ? "⌘" : "Ctrl";
 
@@ -31,7 +47,8 @@ export default function TrackMap({
   dayRange,
   dayBands,
   startName,
-  finishName
+  finishName,
+  loop
 }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
@@ -44,10 +61,6 @@ export default function TrackMap({
   onAddRef.current = onAddAt;
   const onHoverCpRef = useRef(onHoverCheckpoint);
   onHoverCpRef.current = onHoverCheckpoint;
-  const startNameRef = useRef(startName);
-  startNameRef.current = startName;
-  const finishNameRef = useRef(finishName);
-  finishNameRef.current = finishName;
   const [scrollHint, setScrollHint] = useState(false);
   const hintTimer = useRef(null);
 
@@ -153,19 +166,37 @@ export default function TrackMap({
     const first = track.segments[0]?.points[0];
     const lastSeg = track.segments[track.segments.length - 1]?.points;
     const last = lastSeg?.[lastSeg.length - 1];
-    if (first)
-      L.circleMarker([first[0], first[1]], { radius: 6, color: "#fff", weight: 2, fillColor: GREEN, fillOpacity: 1 })
-        .bindTooltip(`🚩 ${esc(startNameRef.current || "Start")}`, { direction: "top", className: "cp-tip" })
+    const sName = esc(startName || "Start");
+    const fName = esc(finishName || "Finish");
+    if (loop && first) {
+      // Loop: start and finish are the same place → one combined pin.
+      L.marker([first[0], first[1]], {
+        icon: endpointIcon("combo", `<span class="endpoint-pin combo">${WHISTLE_SVG}${FLAG_SVG}</span>`),
+        zIndexOffset: 600
+      })
+        .bindTooltip(`${startName ? sName : "Start / Finish"} · loop`, { direction: "top", className: "cp-tip" })
         .addTo(group);
-    if (last)
-      L.circleMarker([last[0], last[1]], { radius: 6, color: "#fff", weight: 2, fillColor: RED, fillOpacity: 1 })
-        .bindTooltip(`🏁 ${esc(finishNameRef.current || "Finish")}`, { direction: "top", className: "cp-tip" })
-        .addTo(group);
+    } else {
+      if (first)
+        L.marker([first[0], first[1]], {
+          icon: endpointIcon("start", `<span class="endpoint-pin start">${WHISTLE_SVG}</span>`),
+          zIndexOffset: 600
+        })
+          .bindTooltip(sName, { direction: "top", className: "cp-tip" })
+          .addTo(group);
+      if (last)
+        L.marker([last[0], last[1]], {
+          icon: endpointIcon("finish", `<span class="endpoint-pin finish">${FLAG_SVG}</span>`),
+          zIndexOffset: 600
+        })
+          .bindTooltip(fName, { direction: "top", className: "cp-tip" })
+          .addTo(group);
+    }
     group.addTo(map);
     trackLayer.current = group;
     const bounds = group.getBounds();
     if (bounds.isValid()) map.fitBounds(bounds, { padding: [24, 24] });
-  }, [track, dayBands, startName, finishName]);
+  }, [track, dayBands, startName, finishName, loop]);
 
   // Checkpoint markers.
   useEffect(() => {
