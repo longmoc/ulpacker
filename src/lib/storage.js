@@ -283,6 +283,10 @@ export function normalizeTrips(rawTrips, validPackIds, tracks) {
         name: clampText(raw.name) || "Untitled trip",
         description: clampText(raw.description),
         image: sanitizeCoverImage(raw.image),
+        // Optional trailhead names for the virtual Start/Finish. Absent on older
+        // trips → "" → the UI falls back to "Start"/"Finish".
+        startName: clampText(raw.startName),
+        finishName: clampText(raw.finishName),
         packId,
         createdAt: raw.createdAt || new Date().toISOString(),
         trackRef,

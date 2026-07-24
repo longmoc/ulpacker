@@ -29,7 +29,9 @@ export default function TrackMap({
   hoverCpId,
   onHoverCheckpoint,
   dayRange,
-  dayBands
+  dayBands,
+  startName,
+  finishName
 }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
@@ -42,6 +44,10 @@ export default function TrackMap({
   onAddRef.current = onAddAt;
   const onHoverCpRef = useRef(onHoverCheckpoint);
   onHoverCpRef.current = onHoverCheckpoint;
+  const startNameRef = useRef(startName);
+  startNameRef.current = startName;
+  const finishNameRef = useRef(finishName);
+  finishNameRef.current = finishName;
   const [scrollHint, setScrollHint] = useState(false);
   const hintTimer = useRef(null);
 
@@ -147,13 +153,19 @@ export default function TrackMap({
     const first = track.segments[0]?.points[0];
     const lastSeg = track.segments[track.segments.length - 1]?.points;
     const last = lastSeg?.[lastSeg.length - 1];
-    if (first) L.circleMarker([first[0], first[1]], { radius: 6, color: "#fff", weight: 2, fillColor: GREEN, fillOpacity: 1 }).addTo(group);
-    if (last) L.circleMarker([last[0], last[1]], { radius: 6, color: "#fff", weight: 2, fillColor: RED, fillOpacity: 1 }).addTo(group);
+    if (first)
+      L.circleMarker([first[0], first[1]], { radius: 6, color: "#fff", weight: 2, fillColor: GREEN, fillOpacity: 1 })
+        .bindTooltip(`🚩 ${esc(startNameRef.current || "Start")}`, { direction: "top", className: "cp-tip" })
+        .addTo(group);
+    if (last)
+      L.circleMarker([last[0], last[1]], { radius: 6, color: "#fff", weight: 2, fillColor: RED, fillOpacity: 1 })
+        .bindTooltip(`🏁 ${esc(finishNameRef.current || "Finish")}`, { direction: "top", className: "cp-tip" })
+        .addTo(group);
     group.addTo(map);
     trackLayer.current = group;
     const bounds = group.getBounds();
     if (bounds.isValid()) map.fitBounds(bounds, { padding: [24, 24] });
-  }, [track, dayBands]);
+  }, [track, dayBands, startName, finishName]);
 
   // Checkpoint markers.
   useEffect(() => {

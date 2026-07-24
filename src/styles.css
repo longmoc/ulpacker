@@ -4389,3 +4389,23 @@ button[type="submit"]:active {
 
 /* Day cards carry their trail colour on the left edge */
 .day-card { border-left-width: 4px; }
+
+/* Editable trailhead (Start / Finish) names in the itinerary */
+.itinerary-endpoints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-bottom: 10px;
+}
+.itinerary-endpoints label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-2);
+}
+.itinerary-endpoints input {
+  width: 190px;
+  padding: 5px 8px;
+  font-size: 0.85rem;
+}

@@ -414,6 +414,8 @@ export default function TripWorkspace({
                   onHoverCheckpoint={setHoverCpId}
                   dayRange={dayRange}
                   dayBands={dayBands}
+                  startName={trip.startName}
+                  finishName={trip.finishName}
                 />
               ) : (
                 <TrackShape
@@ -564,6 +566,7 @@ export default function TripWorkspace({
               onUpdateExtraDay={updateExtraDay}
               onDeleteExtraDay={deleteExtraDay}
               onSetStartDay={(n) => onUpdateTrip({ startDayNumber: n })}
+              onSetEndpoint={(field, value) => onUpdateTrip({ [field]: value })}
             />
           </section>
         </>
