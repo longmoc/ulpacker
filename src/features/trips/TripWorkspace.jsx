@@ -66,21 +66,36 @@ export default function TripWorkspace({
   const [anchorIds, setAnchorIds] = useState([]); // up to 2 ticked checkpoint ids
   const [hoverRouteM, setHoverRouteM] = useState(null);
   const [mapFull, setMapFull] = useState(false);
-  const [mapMode, setMapMode] = useState(() => {
+  const [basemap, setBasemap] = useState(() => {
     try {
-      return localStorage.getItem("ulpacker.tripMapMode") === "shape" ? "shape" : "map";
+      return localStorage.getItem("ulpacker.tripBasemap") === "topo" ? "topo" : "standard";
     } catch {
-      return "map";
+      return "standard";
     }
   });
-  const chooseMode = (m) => {
-    setMapMode(m);
+  const chooseBasemap = (m) => {
+    setBasemap(m);
     try {
-      localStorage.setItem("ulpacker.tripMapMode", m);
+      localStorage.setItem("ulpacker.tripBasemap", m);
     } catch {
       // ignore
     }
   };
+  // The real map needs tiles; when the browser is offline we fall back to the
+  // self-contained SVG shape (no network) so the route is still visible.
+  const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+
+  // Track connectivity so the map can fall back to the offline shape.
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
 
   // Full-screen map: lock page scroll and allow Escape to exit.
   useEffect(() => {
@@ -466,20 +481,27 @@ export default function TripWorkspace({
             />
             <div className={`map-panel ${mapFull ? "fullscreen" : ""}`}>
               <div className="map-toggle">
-                <button
-                  type="button"
-                  className={mapMode === "map" ? "active" : ""}
-                  onClick={() => chooseMode("map")}
-                >
-                  Map
-                </button>
-                <button
-                  type="button"
-                  className={mapMode === "shape" ? "active" : ""}
-                  onClick={() => chooseMode("shape")}
-                >
-                  Shape
-                </button>
+                {online ? (
+                  <>
+                    <button
+                      type="button"
+                      className={basemap === "standard" ? "active" : ""}
+                      onClick={() => chooseBasemap("standard")}
+                    >
+                      Standard
+                    </button>
+                    <button
+                      type="button"
+                      className={basemap === "topo" ? "active" : ""}
+                      title="Topographic basemap — contour lines + hillshade"
+                      onClick={() => chooseBasemap("topo")}
+                    >
+                      Topo
+                    </button>
+                  </>
+                ) : (
+                  <span className="map-offline-tag">Offline — route shape</span>
+                )}
                 <button
                   type="button"
                   className="map-full-btn"
@@ -491,7 +513,7 @@ export default function TripWorkspace({
                   {mapFull ? <MinimizeIcon size={15} /> : <MaximizeIcon size={15} />}
                 </button>
               </div>
-              {mapMode === "map" ? (
+              {online ? (
                 <TrackMap
                   key={trip.id}
                   track={track}
@@ -505,6 +527,7 @@ export default function TripWorkspace({
                   startName={trip.startName}
                   finishName={trip.finishName}
                   loop={trip.loop}
+                  basemap={basemap}
                 />
               ) : (
                 <TrackShape

@@ -7,6 +7,22 @@ const ACCENT = "#1b5e3f";
 const GREEN = "#2e9e5b";
 const RED = "#b42318";
 
+// Selectable basemaps. Topo (OpenTopoMap) adds contour lines + hillshade, which
+// the plain OSM street map lacks — far more useful for trip planning. Both tile
+// origins are allow-listed in vite.config.js (CSP is build-only).
+const BASEMAPS = {
+  standard: {
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    maxZoom: 17,
+    attribution: "© OpenStreetMap contributors"
+  },
+  topo: {
+    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+    maxZoom: 17,
+    attribution: "© OpenTopoMap (CC-BY-SA) · © OpenStreetMap contributors"
+  }
+};
+
 // White line-icons for the start/finish pins (matching the legend icons).
 const WHISTLE_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8.5" cy="14" r="5.5"/><path d="M13.5 10.5H20a1 1 0 0 1 1 1v1.5a1 1 0 0 1-1 1h-1.5"/><path d="M8.5 8.5V5.5"/></svg>';
@@ -48,10 +64,12 @@ export default function TrackMap({
   dayBands,
   startName,
   finishName,
-  loop
+  loop,
+  basemap = "standard"
 }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
+  const tileLayer = useRef(null);
   const trackLayer = useRef(null);
   const cpLayer = useRef(null);
   const cpMarkers = useRef(new Map()); // checkpoint id -> Leaflet marker
@@ -79,10 +97,8 @@ export default function TrackMap({
       zoomSnap: 0,
       zoomDelta: 0.5
     });
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 17,
-      attribution: "© OpenStreetMap contributors"
-    }).addTo(map);
+    const bm = BASEMAPS[basemap] || BASEMAPS.standard;
+    tileLayer.current = L.tileLayer(bm.url, { maxZoom: bm.maxZoom, attribution: bm.attribution }).addTo(map);
     // A stray map click shouldn't create a checkpoint — ask first.
     map.on("click", (e) => {
       if (!onAddRef.current) return;
@@ -169,6 +185,16 @@ export default function TrackMap({
       mapRef.current = null;
     };
   }, []);
+
+  // Swap the basemap tiles when the user changes it.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const bm = BASEMAPS[basemap] || BASEMAPS.standard;
+    if (tileLayer.current) tileLayer.current.remove();
+    tileLayer.current = L.tileLayer(bm.url, { maxZoom: bm.maxZoom, attribution: bm.attribution }).addTo(map);
+    tileLayer.current.bringToBack();
+  }, [basemap]);
 
   // Draw the track (one polyline per segment) and fit the view.
   useEffect(() => {

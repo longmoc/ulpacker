@@ -3898,6 +3898,14 @@ button[type="submit"]:active {
   color: #fff;
 }
 
+.map-offline-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  color: var(--text-3);
+}
+
 .map-toggle .map-full-btn {
   border-left: 1px solid var(--border-2);
   padding: 5px 9px;
