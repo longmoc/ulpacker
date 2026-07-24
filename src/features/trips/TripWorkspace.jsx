@@ -332,7 +332,7 @@ export default function TripWorkspace({
             <div className="menu-list">
               <button type="button" onClick={() => replaceRef.current?.click()}>
                 <ImageIcon />
-                Replace GPX
+                {track ? "Replace GPX" : "Import GPX"}
               </button>
               <div className="menu-divider" />
               <button type="button" onClick={() => tripImportRef.current?.click()}>
@@ -376,9 +376,13 @@ export default function TripWorkspace({
 
       {!track ? (
         <div className="track-missing">
-          <p>This trip's track data is missing. Re-import a GPX file to restore it.</p>
+          {trip.trackRef?.id ? (
+            <p>This trip's track data is missing. Import a GPX file to restore the route.</p>
+          ) : (
+            <p>This trip has no route yet. Import a GPX file to add the map, elevation profile and checkpoints.</p>
+          )}
           <button type="button" className="primary" onClick={() => replaceRef.current?.click()}>
-            Re-import GPX
+            Import GPX
           </button>
         </div>
       ) : (

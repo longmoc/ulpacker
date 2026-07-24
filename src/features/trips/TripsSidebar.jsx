@@ -1,12 +1,14 @@
-import React, { useRef } from "react";
+import React from "react";
 import { TrashIcon } from "../../components/icons.jsx";
 
 const km = (m) => (m / 1000).toFixed(1);
 
-// Left sidebar for the Trips view: import-to-create block + a card per trip.
+// Left sidebar for the Trips view: create-a-trip block + a card per trip.
 // Reuses the packs-sidebar structure (sticky on desktop, its own scroll region).
-export default function TripsSidebar({ trips, packs, activeTripId, onSelect, onDelete, onImportGpx }) {
-  const fileRef = useRef(null);
+// A trip starts empty; the GPX is imported from inside the workspace (which then
+// offers Replace GPX), keeping the two ingress paths — GPX and trip JSON —
+// consistent with the workspace's own menu.
+export default function TripsSidebar({ trips, packs, activeTripId, onSelect, onDelete, onCreateTrip }) {
   const packName = (packId) => packs.find((p) => p.id === packId)?.name || "";
 
   return (
@@ -17,27 +19,18 @@ export default function TripsSidebar({ trips, packs, activeTripId, onSelect, onD
       </div>
 
       <div className="new-pack-form trip-create">
-        <button type="button" onClick={() => fileRef.current?.click()}>
-          Import GPX
+        <button type="button" onClick={() => onCreateTrip()}>
+          Create trip
         </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".gpx,application/gpx+xml,application/xml,text/xml"
-          hidden
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) onImportGpx(file);
-            e.target.value = "";
-          }}
-        />
       </div>
 
       <div className="pack-cards">
         {trips.length === 0 && (
-          <p className="trip-empty-hint">No trips yet. Import a GPX file to plan a route.</p>
+          <p className="trip-empty-hint">No trips yet. Create a trip, then import a GPX to plan a route.</p>
         )}
-        {trips.map((trip) => (
+        {trips.map((trip) => {
+          const hasRoute = (trip.trackRef?.pointCount || 0) > 0 || trip.stats.distanceM > 0;
+          return (
           <div className="pack-card-wrap" key={trip.id}>
             <button
               type="button"
@@ -50,8 +43,14 @@ export default function TripsSidebar({ trips, packs, activeTripId, onSelect, onD
               <strong>{trip.name}</strong>
               <small>{trip.packId ? `🎒 ${packName(trip.packId)}` : "No pack linked"}</small>
               <span>
-                {km(trip.stats.distanceM)} km
-                {trip.stats.ascentM != null && ` · +${trip.stats.ascentM} m`}
+                {hasRoute ? (
+                  <>
+                    {km(trip.stats.distanceM)} km
+                    {trip.stats.ascentM != null && ` · +${trip.stats.ascentM} m`}
+                  </>
+                ) : (
+                  "No route yet"
+                )}
               </span>
             </button>
             <button
@@ -67,7 +66,8 @@ export default function TripsSidebar({ trips, packs, activeTripId, onSelect, onD
               <TrashIcon />
             </button>
           </div>
-        ))}
+          );
+        })}
       </div>
     </aside>
   );

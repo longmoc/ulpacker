@@ -26,6 +26,7 @@ import {
   joinContiguousSegments,
   segmentBoundaryRouteMs,
   classifyCheckpoint,
+  METRICS_VERSION,
   MAX_TRIPS,
   MAX_SEGMENTS,
   MAX_TRACK_STORAGE_BYTES,
@@ -837,6 +838,37 @@ export default function App() {
     };
   }
 
+  // Create an empty trip (no track yet). The GPX is imported afterwards from the
+  // workspace, which shows "Import GPX" until a route exists, then "Replace GPX".
+  function createEmptyTrip() {
+    if (trips.length >= MAX_TRIPS) {
+      window.alert(`You can have at most ${MAX_TRIPS} trips.`);
+      return;
+    }
+    const trip = {
+      id: `trip_${id()}`,
+      name: "Untitled trip",
+      description: "",
+      packId: "",
+      createdAt: new Date().toISOString(),
+      trackRef: { id: "", revision: 1, pointCount: 0, sizeBytes: 0, segmentCount: 0 },
+      stats: {
+        distanceM: 0,
+        ascentM: null,
+        descentM: null,
+        minEle: null,
+        maxEle: null,
+        elevationCoverage: 0,
+        metricsVersion: METRICS_VERSION
+      },
+      boundaries: [],
+      checkpoints: []
+    };
+    setTrips((prev) => [...prev, trip]);
+    setActiveTripId(trip.id);
+    setView("trips");
+  }
+
   // Import a chosen candidate as a new trip (transactional: tracks first).
   function createTripFromTrack({ name, track, checkpoints = [], boundaries = [] }) {
     if (trips.length >= MAX_TRIPS) {
@@ -1090,7 +1122,9 @@ export default function App() {
       }
     }
 
-    if (gi.mode === "replace" && gi.tripId) {
+    if (gi.tripId) {
+      // Into an existing trip — a real Replace, or the first GPX for a trip that
+      // was created empty. Either way we fill that trip (never make a new one).
       const existing = trips.find((t) => t.id === gi.tripId);
       const resnapped = (existing?.checkpoints || []).map((cp) => ({
         ...cp,
@@ -2291,7 +2325,7 @@ export default function App() {
             activeTripId={activeTripId}
             onSelect={setActiveTripId}
             onDelete={deleteTrip}
-            onImportGpx={(file) => openGpxImport(file, "create")}
+            onCreateTrip={createEmptyTrip}
           />
         )}
 
@@ -3358,7 +3392,9 @@ export default function App() {
               packs={packs}
               onUpdateTrip={(patch) => activeTrip && updateTrip(activeTrip.id, patch)}
               onDeleteTrip={() => activeTrip && deleteTrip(activeTrip.id)}
-              onReplaceGpx={(file) => activeTrip && openGpxImport(file, "replace", activeTrip.id)}
+              onReplaceGpx={(file) =>
+                activeTrip && openGpxImport(file, activeTrip.trackRef?.id ? "replace" : "create", activeTrip.id)
+              }
               onExportTrip={() => activeTrip && exportTrip(activeTrip.id)}
               onExportGpx={() => activeTrip && exportTripGpx(activeTrip.id)}
               onImportTrip={importTripFile}
