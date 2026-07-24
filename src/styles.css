@@ -3219,75 +3219,20 @@ button[type="submit"]:active {
   gap: 18px;
 }
 
-.trip-titles {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.trip-name-input {
-  font-size: 1.35rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  border: 1px solid transparent;
-  background: transparent;
-  padding: 4px 6px;
-  border-radius: var(--radius);
-}
-
-.trip-name-input:hover,
-.trip-desc-input:hover {
-  border-color: var(--border);
-}
-
-.trip-name-input:focus,
-.trip-desc-input:focus {
-  border-color: var(--accent);
-  background: var(--surface);
-}
-
-.trip-desc-input {
-  font-size: 0.92rem;
-  color: var(--text-2);
-  border: 1px solid transparent;
-  background: transparent;
-  padding: 4px 6px;
-  border-radius: var(--radius);
-}
-
-.trip-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.trip-actions button {
-  width: auto;
-}
-
+/* Trip header mirrors the pack header (.workspace-head / .workspace-actions /
+   .pack-name-input / .action-danger). Trip-only extra: the pack-link select. */
+.workspace-actions .menu-trigger:hover { background: var(--surface-2); color: var(--text); }
 .trip-pack-link {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   font-size: 0.85rem;
   color: var(--text-2);
+  white-space: nowrap;
 }
-
 .trip-pack-link select {
   width: auto;
   padding: 6px 8px;
-}
-
-.trip-actions .danger {
-  color: var(--danger, #b42318);
-  border-color: var(--border-2);
-}
-
-.trip-actions .danger:hover {
-  background: #fdecea;
-  border-color: #f3c3bd;
 }
 
 
@@ -3507,7 +3452,7 @@ button[type="submit"]:active {
   border-top: 1px solid var(--divider);
   border-radius: 0;
   background: transparent;
-  padding: 5px 4px 5px 10px;
+  padding: 5px 4px;
 }
 .checkpoint-row:hover { background: var(--surface-2); }
 
@@ -4618,3 +4563,39 @@ button[type="submit"]:active {
   background: linear-gradient(90deg, #2e9e5b 0 50%, #b42318 50% 100%);
 }
 .endpoint-pin.combo svg { width: 15px; height: 15px; }
+
+/* --- Mobile: reflow the checkpoint list so it doesn't overflow --- */
+@media (hover: none) {
+  .cp-tick-btn,
+  .cp-delete { opacity: 1; }
+}
+@media (max-width: 640px) {
+  .checkpoint-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px 10px;
+    padding: 7px 2px;
+  }
+  .checkpoint-row .cp-tick { order: 1; align-self: center; }
+  .checkpoint-row .kind-picker { order: 2; }
+  .checkpoint-row .cp-name { order: 3; flex: 1 1 40%; min-width: 90px; }
+  .checkpoint-row .cp-actions { order: 4; margin-left: auto; }
+  .checkpoint-row .cp-dist { order: 5; }
+  .checkpoint-row .cp-ele { order: 6; }
+  .checkpoint-row .cp-note { order: 7; flex: 1 1 100%; }
+  /* The 2-tick rail relies on stretched grid cells; skip it on the flex layout. */
+  .checkpoint-row .cp-tick.rail-top::before,
+  .checkpoint-row .cp-tick.rail-bottom::after { display: none; }
+
+  /* Filter chips wrap onto their own full-width row under the heading. */
+  .trip-section-head { flex-wrap: wrap; }
+  .trip-section-head .cp-filters {
+    margin-left: 0;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  /* Trip header actions wrap under the title. */
+  .workspace-actions { flex-wrap: wrap; }
+}

@@ -251,20 +251,22 @@ export default function TripWorkspace({
 
   return (
     <div className="trip-workspace">
-      <div className="workspace-titles trip-titles">
-        <input
-          className="trip-name-input"
-          value={trip.name}
-          onChange={(e) => onUpdateTrip({ name: e.target.value })}
-          placeholder="Trip name"
-        />
-        <input
-          className="trip-desc-input"
-          value={trip.description}
-          onChange={(e) => onUpdateTrip({ description: e.target.value })}
-          placeholder="Description"
-        />
-        <div className="trip-actions">
+      <div className="workspace-head">
+        <div className="workspace-titles">
+          <input
+            className="pack-name-input"
+            value={trip.name}
+            onChange={(e) => onUpdateTrip({ name: e.target.value })}
+            placeholder="Trip name"
+          />
+          <input
+            className="pack-desc-input"
+            value={trip.description}
+            onChange={(e) => onUpdateTrip({ description: e.target.value })}
+            placeholder="Trip description"
+          />
+        </div>
+        <div className="workspace-actions">
           <label className="trip-pack-link">
             Pack:
             <select value={trip.packId} onChange={(e) => onUpdateTrip({ packId: e.target.value })}>
@@ -276,7 +278,8 @@ export default function TripWorkspace({
               ))}
             </select>
           </label>
-          <button type="button" onClick={() => replaceRef.current?.click()}>
+          <button type="button" className="menu-trigger" onClick={() => replaceRef.current?.click()}>
+            <ImageIcon />
             Replace GPX
           </button>
           <input
@@ -288,9 +291,10 @@ export default function TripWorkspace({
           />
           <button
             type="button"
-            className="danger"
+            className="action-danger"
             onClick={() => window.confirm(`Delete trip "${trip.name}"?`) && onDeleteTrip()}
           >
+            <TrashIcon />
             Delete
           </button>
         </div>
