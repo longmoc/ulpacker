@@ -4014,6 +4014,17 @@ button[type="submit"]:active {
 .cp-dot, .track-cp { stroke: var(--kc, var(--accent)); }
 .cp-dot.overnight, .track-cp.overnight { fill: var(--kc); }
 
+/* Direction-of-travel arrows along the route */
+.route-arrow { background: none; border: none; }
+.route-arrow span {
+  display: block;
+  width: 15px;
+  height: 15px;
+  line-height: 0;
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 0 1px rgba(16, 17, 26, 0.35));
+}
+
 /* Leaflet emoji markers */
 .cp-marker { background: none; border: none; }
 .cp-marker-pin {

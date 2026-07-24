@@ -19,6 +19,7 @@ import {
 import {
   buildTrackStats,
   buildCumulatives,
+  buildGpx,
   parseGpx,
   snapToTrack,
   anchorAtRouteM,
@@ -906,6 +907,27 @@ export default function App() {
     link.href = url;
     const safe = (trip.name || "trip").trim().replace(/[^\w-]+/g, "_").slice(0, 40) || "trip";
     link.download = `${safe}.ulpacker-trip.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Export the trip as a GPX file for a device (Garmin etc.): the current track
+  // plus every checkpoint as a waypoint — reflects edits made since import.
+  function exportTripGpx(tripId) {
+    const trip = trips.find((t) => t.id === tripId);
+    if (!trip) return;
+    const track = tracks[trip.trackRef?.id];
+    if (!track) {
+      window.alert("This trip's track data is missing — re-import the GPX first.");
+      return;
+    }
+    const gpx = buildGpx({ name: trip.name || "Trip", segments: track.segments, checkpoints: trip.checkpoints });
+    const blob = new Blob([gpx], { type: "application/gpx+xml" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const safe = (trip.name || "trip").trim().replace(/[^\w-]+/g, "_").slice(0, 40) || "trip";
+    link.download = `${safe}.gpx`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -3331,6 +3353,7 @@ export default function App() {
               onDeleteTrip={() => activeTrip && deleteTrip(activeTrip.id)}
               onReplaceGpx={(file) => activeTrip && openGpxImport(file, "replace", activeTrip.id)}
               onExportTrip={() => activeTrip && exportTrip(activeTrip.id)}
+              onExportGpx={() => activeTrip && exportTripGpx(activeTrip.id)}
               onImportTrip={importTripFile}
               onAddCheckpoint={(cp) =>
                 activeTrip && setTripCheckpoints(activeTrip.id, (list) => sortCheckpoints([...list, cp]))

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { CHECKPOINT_KINDS, buildCumulatives, sliceSegments } from "../../lib/trail.js";
+import { CHECKPOINT_KINDS, buildCumulatives, sliceSegments, anchorAtRouteM } from "../../lib/trail.js";
 
 const ACCENT = "#1b5e3f";
 const GREEN = "#2e9e5b";
@@ -39,6 +39,15 @@ function endpointIcon(kind, html) {
   });
 }
 
+// Compass bearing (degrees clockwise from north) from A to B. Feeds the
+// direction arrows; north is up on the map, so this equals the CSS rotation.
+function bearingDeg(lat1, lon1, lat2, lon2) {
+  const r = Math.PI / 180;
+  const y = Math.sin((lon2 - lon1) * r) * Math.cos(lat2 * r);
+  const x = Math.cos(lat1 * r) * Math.sin(lat2 * r) - Math.sin(lat1 * r) * Math.cos(lat2 * r) * Math.cos((lon2 - lon1) * r);
+  return (Math.atan2(y, x) * 180) / Math.PI;
+}
+
 const isMac = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform || "");
 const ZOOM_KEY_LABEL = isMac ? "⌘" : "Ctrl";
 
@@ -71,6 +80,7 @@ export default function TrackMap({
   const mapRef = useRef(null);
   const tileLayer = useRef(null);
   const trackLayer = useRef(null);
+  const arrowLayer = useRef(null);
   const cpLayer = useRef(null);
   const cpMarkers = useRef(new Map()); // checkpoint id -> Leaflet marker
   const dayLayer = useRef(null);
@@ -288,6 +298,48 @@ export default function TrackMap({
     group.addTo(map);
     cpLayer.current = group;
   }, [checkpoints]);
+
+  // Direction-of-travel arrows spaced along the route. They're overlay markers
+  // (not tiles), so they look identical on the standard and topo basemaps. Each
+  // is coloured by its day band and dimmed when it falls outside a selected day.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (arrowLayer.current) {
+      arrowLayer.current.remove();
+      arrowLayer.current = null;
+    }
+    const cums = buildCumulatives(track.segments);
+    const totalM = cums.totalM;
+    if (!(totalM > 0)) return;
+    const count = Math.max(6, Math.min(40, Math.round(totalM / 4000))); // ~1 / 4 km, capped
+    const colorAt = (d) => {
+      if (dayBands && dayBands.length > 1) {
+        for (const b of dayBands) if (d >= b.startRouteM && d <= b.endRouteM) return b.color;
+      }
+      return ACCENT;
+    };
+    const group = L.featureGroup();
+    for (let i = 1; i <= count; i += 1) {
+      const d = (i / (count + 1)) * totalM;
+      const a = anchorAtRouteM(track.segments, cums, d);
+      const b = anchorAtRouteM(track.segments, cums, Math.min(totalM, d + 12));
+      const bearing = bearingDeg(a.lat, a.lng, b.lat, b.lng);
+      const inside = !dayRange || (d >= dayRange.startRouteM - 1 && d <= dayRange.endRouteM + 1);
+      const icon = L.divIcon({
+        className: "route-arrow",
+        html:
+          `<span style="transform:rotate(${bearing}deg);opacity:${inside ? 1 : 0.22}">` +
+          `<svg viewBox="0 0 24 24" width="15" height="15"><path d="M12 3 18.5 19 12 15 5.5 19Z" ` +
+          `fill="${colorAt(d)}" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg></span>`,
+        iconSize: [15, 15],
+        iconAnchor: [7.5, 7.5]
+      });
+      L.marker([a.lat, a.lng], { icon, interactive: false, keyboard: false, zIndexOffset: -200 }).addTo(group);
+    }
+    group.addTo(map);
+    arrowLayer.current = group;
+  }, [track, dayBands, dayRange]);
 
   // Selecting a day dims the whole trail and overlays that day's stretch.
   useEffect(() => {

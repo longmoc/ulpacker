@@ -20,6 +20,7 @@ import {
   classifyCheckpoint,
   sliceSegments,
   readableOn,
+  buildGpx,
   DAY_COLORS,
   MAX_TRACK_POINTS
 } from "../trail.js";
@@ -545,5 +546,42 @@ describe("buildDays", () => {
     const cums = buildCumulatives(two);
     const { days } = buildDays({ checkpoints: [], segments: two, cumulatives: cums });
     expect(days[0].segmentBreaks).toBe(1);
+  });
+});
+
+describe("buildGpx", () => {
+  const segments = [
+    { points: [[45, 6, 1000], [45.001, 6.001, 1010]] },
+    { points: [[45.01, 6.02, 1100], [45.011, 6.021, 1120]] }
+  ];
+  const checkpoints = [
+    { name: "Camp <1>", note: "wet & cold", kind: "overnight", anchor: { lat: 45.001, lng: 6.001, ele: 1010 } },
+    { name: "", kind: "water", anchor: { lat: 45.01, lng: 6.02, ele: 1100 } }
+  ];
+
+  it("emits a <trkseg> per segment and a <wpt> per checkpoint, XML-escaped", () => {
+    const gpx = buildGpx({ name: "My Trip", segments, checkpoints });
+    expect((gpx.match(/<trkseg>/g) || []).length).toBe(2);
+    expect((gpx.match(/<trkpt /g) || []).length).toBe(4);
+    expect((gpx.match(/<wpt /g) || []).length).toBe(2);
+    expect(gpx).toContain("<name>Camp &lt;1&gt;</name>");
+    expect(gpx).toContain("<desc>wet &amp; cold</desc>");
+    expect(gpx).toContain("<sym>Campground</sym>");
+    // Empty checkpoint name falls back to the kind label.
+    expect(gpx).toContain("<name>Water</name>");
+  });
+
+  it("round-trips back through parseGpx (track + waypoints survive)", () => {
+    const gpx = buildGpx({ name: "RT", segments, checkpoints });
+    const parsed = parseGpx(gpx);
+    const track = parsed.candidates.find((c) => c.kind === "track");
+    expect(track.segments).toHaveLength(2);
+    expect(track.segments[0].points[0][2]).toBe(1000);
+    expect(parsed.waypoints).toHaveLength(2);
+  });
+
+  it("skips checkpoints with a non-finite anchor", () => {
+    const gpx = buildGpx({ segments, checkpoints: [{ name: "bad", kind: "poi", anchor: { lat: NaN, lng: 6 } }] });
+    expect(gpx).not.toContain("<wpt ");
   });
 });

@@ -910,3 +910,67 @@ export function buildDays({ checkpoints = [], segments = [], cumulatives } = {})
   }
   return { days, warnings };
 }
+
+// GPX/Garmin waypoint symbols per checkpoint kind (best-effort; a device that
+// doesn't know a symbol just shows a default dot). Names follow Garmin's set.
+const GPX_SYM = {
+  overnight: "Campground",
+  refuge: "Lodging",
+  food: "Restaurant",
+  water: "Drinking Water",
+  resupply: "Shopping Center",
+  transport: "Bus",
+  pass: "Summit",
+  viewpoint: "Scenic Area",
+  hazard: "Danger Area",
+  poi: "Flag, Blue"
+};
+
+function xmlEsc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[c]
+  );
+}
+
+// Serialise a trip back to GPX 1.1 — the full track as one <trk> (a <trkseg>
+// per segment) plus every checkpoint as a <wpt>. This is what leaves the app to
+// a device: an edited trip (added/moved checkpoints) exports differently from
+// the file it was imported from. Garmin can follow the track and shows the
+// waypoints as POIs. Pure string building (no DOM), so it's unit-testable.
+export function buildGpx({ name = "Trip", segments = [], checkpoints = [] } = {}) {
+  const c5 = (n) => round(n, 5);
+  const out = [];
+  out.push('<?xml version="1.0" encoding="UTF-8"?>');
+  out.push(
+    '<gpx version="1.1" creator="ULPacker" xmlns="http://www.topografix.com/GPX/1/1" ' +
+      'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" ' +
+      'xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">'
+  );
+  out.push(`  <metadata><name>${xmlEsc(name)}</name></metadata>`);
+  // Waypoints first (GPX document order is wpt, then rte, then trk).
+  for (const cp of checkpoints || []) {
+    const a = cp?.anchor || {};
+    if (!Number.isFinite(a.lat) || !Number.isFinite(a.lng)) continue;
+    const kind = CHECKPOINT_KINDS[cp.kind] ? cp.kind : "poi";
+    const label = cp.name || CHECKPOINT_KINDS[kind].label;
+    let w = `  <wpt lat="${c5(a.lat)}" lon="${c5(a.lng)}">`;
+    if (Number.isFinite(a.ele)) w += `<ele>${Math.round(a.ele)}</ele>`;
+    w += `<name>${xmlEsc(label)}</name>`;
+    if (cp.note) w += `<desc>${xmlEsc(cp.note)}</desc>`;
+    w += `<sym>${xmlEsc(GPX_SYM[kind] || "Flag, Blue")}</sym><type>${xmlEsc(kind)}</type></wpt>`;
+    out.push(w);
+  }
+  out.push(`  <trk><name>${xmlEsc(name)}</name>`);
+  for (const seg of segments || []) {
+    out.push("    <trkseg>");
+    for (const p of seg.points || []) {
+      let pt = `      <trkpt lat="${c5(p[0])}" lon="${c5(p[1])}">`;
+      if (Number.isFinite(p[2])) pt += `<ele>${Math.round(p[2])}</ele>`;
+      out.push(pt + "</trkpt>");
+    }
+    out.push("    </trkseg>");
+  }
+  out.push("  </trk>");
+  out.push("</gpx>");
+  return out.join("\n");
+}

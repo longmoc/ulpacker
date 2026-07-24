@@ -32,7 +32,8 @@ import {
   MinimizeIcon,
   FileIcon,
   DownloadIcon,
-  UploadIcon
+  UploadIcon,
+  NavigationIcon
 } from "../../components/icons.jsx";
 
 const km = (m) => (m / 1000).toFixed(1);
@@ -45,6 +46,7 @@ export default function TripWorkspace({
   onDeleteTrip,
   onReplaceGpx,
   onExportTrip,
+  onExportGpx,
   onImportTrip,
   onAddCheckpoint,
   onUpdateCheckpoint,
@@ -339,7 +341,11 @@ export default function TripWorkspace({
               </button>
               <button type="button" onClick={() => onExportTrip?.()}>
                 <DownloadIcon />
-                Export trip
+                Export trip (backup)
+              </button>
+              <button type="button" onClick={() => onExportGpx?.()}>
+                <NavigationIcon />
+                Export GPX (for device)
               </button>
             </div>
           </div>

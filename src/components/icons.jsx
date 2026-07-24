@@ -159,6 +159,14 @@ export function UploadIcon({ size = 15 }) {
   );
 }
 
+export function NavigationIcon({ size = 15 }) {
+  return (
+    <svg {...base} width={size} height={size}>
+      <path d="M3 11 22 2l-9 19-2-8-8-2Z" />
+    </svg>
+  );
+}
+
 export function MaximizeIcon({ size = 15 }) {
   return (
     <svg {...base} width={size} height={size}>
