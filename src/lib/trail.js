@@ -937,7 +937,14 @@ function xmlEsc(s) {
 // a device: an edited trip (added/moved checkpoints) exports differently from
 // the file it was imported from. Garmin can follow the track and shows the
 // waypoints as POIs. Pure string building (no DOM), so it's unit-testable.
-export function buildGpx({ name = "Trip", segments = [], checkpoints = [] } = {}) {
+export function buildGpx({
+  name = "Trip",
+  segments = [],
+  checkpoints = [],
+  startName = "",
+  finishName = "",
+  loop = false
+} = {}) {
   const c5 = (n) => round(n, 5);
   const out = [];
   out.push('<?xml version="1.0" encoding="UTF-8"?>');
@@ -947,12 +954,17 @@ export function buildGpx({ name = "Trip", segments = [], checkpoints = [] } = {}
       'xsi:schemaLocation="http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd">'
   );
   out.push(`  <metadata><name>${xmlEsc(name)}</name></metadata>`);
+
+  const named = (cp) => {
+    const kind = CHECKPOINT_KINDS[cp.kind] ? cp.kind : "poi";
+    return { kind, label: cp.name || CHECKPOINT_KINDS[kind].label };
+  };
+
   // Waypoints first (GPX document order is wpt, then rte, then trk).
   for (const cp of checkpoints || []) {
     const a = cp?.anchor || {};
     if (!Number.isFinite(a.lat) || !Number.isFinite(a.lng)) continue;
-    const kind = CHECKPOINT_KINDS[cp.kind] ? cp.kind : "poi";
-    const label = cp.name || CHECKPOINT_KINDS[kind].label;
+    const { kind, label } = named(cp);
     let w = `  <wpt lat="${c5(a.lat)}" lon="${c5(a.lng)}">`;
     if (Number.isFinite(a.ele)) w += `<ele>${Math.round(a.ele)}</ele>`;
     w += `<name>${xmlEsc(label)}</name>`;
@@ -960,6 +972,36 @@ export function buildGpx({ name = "Trip", segments = [], checkpoints = [] } = {}
     w += `<sym>${xmlEsc(GPX_SYM[kind] || "Flag, Blue")}</sym><type>${xmlEsc(kind)}</type></wpt>`;
     out.push(w);
   }
+
+  // Route: an ordered, sparse list of route points (trailhead → each checkpoint
+  // → finish) that a device can turn-by-turn between. This is separate from and
+  // additive to the <trk> below — a device that only follows tracks ignores it.
+  const first = segments[0]?.points?.[0];
+  const lastPts = segments[segments.length - 1]?.points;
+  const last = lastPts?.[lastPts.length - 1];
+  const rtePts = [];
+  if (first) rtePts.push({ lat: first[0], lng: first[1], ele: first[2], name: startName || "Start", sym: "Flag, Green" });
+  for (const cp of checkpoints || []) {
+    const a = cp?.anchor || {};
+    if (!Number.isFinite(a.lat) || !Number.isFinite(a.lng)) continue;
+    const { kind, label } = named(cp);
+    rtePts.push({ lat: a.lat, lng: a.lng, ele: a.ele, name: label, sym: GPX_SYM[kind] || "Flag, Blue" });
+  }
+  if (last) {
+    const fName = (loop ? finishName || startName : finishName) || "Finish";
+    rtePts.push({ lat: last[0], lng: last[1], ele: last[2], name: fName, sym: "Flag, Red" });
+  }
+  if (rtePts.length >= 2) {
+    out.push(`  <rte><name>${xmlEsc(name)}</name>`);
+    for (const p of rtePts) {
+      let r = `    <rtept lat="${c5(p.lat)}" lon="${c5(p.lng)}">`;
+      if (Number.isFinite(p.ele)) r += `<ele>${Math.round(p.ele)}</ele>`;
+      r += `<name>${xmlEsc(p.name)}</name><sym>${xmlEsc(p.sym)}</sym></rtept>`;
+      out.push(r);
+    }
+    out.push("  </rte>");
+  }
+
   out.push(`  <trk><name>${xmlEsc(name)}</name>`);
   for (const seg of segments || []) {
     out.push("    <trkseg>");

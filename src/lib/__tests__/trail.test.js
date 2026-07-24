@@ -571,6 +571,26 @@ describe("buildGpx", () => {
     expect(gpx).toContain("<name>Water</name>");
   });
 
+  it("adds an ordered <rte> (trailhead → checkpoints → finish) alongside the track", () => {
+    const gpx = buildGpx({ name: "T", segments, checkpoints, startName: "TH", finishName: "End" });
+    expect((gpx.match(/<rte>/g) || []).length).toBe(1);
+    // start + 2 checkpoints + finish
+    expect((gpx.match(/<rtept /g) || []).length).toBe(4);
+    expect(gpx).toContain("<name>TH</name>");
+    expect(gpx).toContain("<name>End</name>");
+    // The track is still present and untouched.
+    expect((gpx.match(/<trkseg>/g) || []).length).toBe(2);
+    // rte comes before trk (GPX document order).
+    expect(gpx.indexOf("<rte>")).toBeLessThan(gpx.indexOf("<trk>"));
+  });
+
+  it("parseGpx sees both the track and the route candidate on re-import", () => {
+    const gpx = buildGpx({ name: "T", segments, checkpoints });
+    const kinds = parseGpx(gpx).candidates.map((c) => c.kind).sort();
+    expect(kinds).toContain("track");
+    expect(kinds).toContain("route");
+  });
+
   it("round-trips back through parseGpx (track + waypoints survive)", () => {
     const gpx = buildGpx({ name: "RT", segments, checkpoints });
     const parsed = parseGpx(gpx);

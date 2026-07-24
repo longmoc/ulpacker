@@ -921,7 +921,14 @@ export default function App() {
       window.alert("This trip's track data is missing — re-import the GPX first.");
       return;
     }
-    const gpx = buildGpx({ name: trip.name || "Trip", segments: track.segments, checkpoints: trip.checkpoints });
+    const gpx = buildGpx({
+      name: trip.name || "Trip",
+      segments: track.segments,
+      checkpoints: trip.checkpoints,
+      startName: trip.startName,
+      finishName: trip.finishName,
+      loop: trip.loop
+    });
     const blob = new Blob([gpx], { type: "application/gpx+xml" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
