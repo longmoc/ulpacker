@@ -3296,7 +3296,7 @@ button[type="submit"]:active {
 
 .elevation-profile svg {
   width: 100%;
-  height: auto;
+  height: 100%;
   display: block;
   /* The distance read-out hangs below the x axis; letting it spill keeps the
      gap under the chart to a hairline instead of reserving space for it. */
@@ -3306,14 +3306,70 @@ button[type="submit"]:active {
 /* Trim the dead space under the plot (the chart owns that height instead). */
 .elevation-profile { padding-bottom: 4px; }
 
-/* Overlaid add-mode switch — sits on top of the chart so the plot keeps its
-   full size. Off by default: on a phone a tap then reads km/elevation rather
-   than always creating a checkpoint. */
-.profile-add-toggle {
+/* The canvas drives the svg's coordinate system (measured in JS), so its shape
+   is set here: a fixed ratio inline, the whole screen in full screen. */
+.profile-canvas { aspect-ratio: 1000 / 264; }
+/* Padding is real pixels now, so a phone-width chart needs a taller box for the
+   plot itself to stay legible inline. */
+@media (max-width: 640px) {
+  .profile-canvas { aspect-ratio: 1000 / 420; }
+}
+
+/* Portrait full screen exaggerates the vertical scale hard; landscape is the
+   good view, so say so (and only there). */
+.profile-rotate-hint { display: none; }
+@media (max-width: 640px) and (orientation: portrait) {
+  .elevation-profile.fullscreen .profile-rotate-hint {
+    display: block;
+    position: absolute;
+    left: 50%;
+    bottom: 14px;
+    transform: translateX(-50%);
+    z-index: 6;
+    padding: 5px 11px;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--border-2);
+    color: var(--text-3);
+    font-size: 0.76rem;
+    pointer-events: none;
+  }
+}
+
+.elevation-profile.fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 4000;
+  margin: 0;
+  padding: 12px;
+  border-radius: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}
+.elevation-profile.fullscreen .profile-canvas {
+  flex: 1;
+  min-height: 0;
+  aspect-ratio: auto;
+}
+
+/* Overlaid controls — they sit on top of the chart so the plot keeps its full
+   size. Add-mode is off by default: on a phone a tap then reads km/elevation
+   rather than always creating a checkpoint. */
+.profile-tools {
   position: absolute;
   top: 8px;
   right: 8px;
   z-index: 5;
+  display: inline-flex;
+  gap: 6px;
+}
+.elevation-profile.fullscreen .profile-tools {
+  top: 18px;
+  right: 18px;
+}
+.profile-add-toggle {
   width: auto;
   padding: 5px;
   display: inline-flex;

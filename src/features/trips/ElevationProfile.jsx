@@ -1,14 +1,16 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { buildCumulatives, buildElevationSeries, CHECKPOINT_KINDS } from "../../lib/trail.js";
 import AddPointConfirm from "./AddPointConfirm.jsx";
-import { PinPlusIcon } from "../../components/icons.jsx";
+import { PinPlusIcon, MaximizeIcon, MinimizeIcon } from "../../components/icons.jsx";
 
-const W = 1000;
-// 20% taller than the original 220 — the caption line below the chart is gone,
-// so the plot itself gets that space plus the extra height. `bottom` is only a
-// hairline of breathing room: the distance read-out hangs past it on purpose
-// (the svg is allowed to overflow) rather than reserving dead space for it.
-const H = 264;
+// The viewBox tracks the element's real pixel size, so one user unit is one CSS
+// pixel: labels render at their true size (a fixed 1000-unit box squeezed a
+// phone's 390px width down to ~4px text) and nothing stretches when the box is
+// a different shape — which is what makes the full-screen mode useful.
+const FALLBACK = { w: 1000, h: 264 };
+// `bottom` is only a hairline of breathing room: the distance read-out hangs
+// past it on purpose (the svg is allowed to overflow) rather than reserving
+// dead space for it.
 const PAD = { top: 16, right: 12, bottom: 8, left: 44 };
 
 // Elevation vs route-distance. Segment gaps are drawn as a vertical break
@@ -32,6 +34,44 @@ export default function ElevationProfile({
   // Off by default so a tap (phones have no hover) reads out km/elevation
   // instead of always starting a new checkpoint.
   const [addMode, setAddMode] = useState(false);
+  const [full, setFull] = useState(false);
+  const [box, setBox] = useState(FALLBACK);
+
+  // Keep the drawing coordinates in step with the element's real size.
+  useLayoutEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        setBox((prev) =>
+          Math.abs(prev.w - r.width) < 0.5 && Math.abs(prev.h - r.height) < 0.5
+            ? prev
+            : { w: r.width, h: r.height }
+        );
+      }
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Full screen: lock page scroll, leave on Escape (mirrors the map).
+  useEffect(() => {
+    if (!full) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => e.key === "Escape" && setFull(false);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [full]);
+
+  const W = box.w;
+  const H = box.h;
 
   const setNearCp = (cp) => {
     setHoverCp(cp);
@@ -73,12 +113,15 @@ export default function ElevationProfile({
 
   // Build line + area paths. When day bands are known each path is clipped to a
   // day's route range so the profile is coloured the same way as the map.
-  const bands =
-    dayBands && dayBands.length > 1
-      ? dayBands
-      : [{ startRouteM: -1, endRouteM: Infinity, color: null }];
-  const strokes = []; // { line, area, color }
-  if (hasEle) {
+  // Memoised: a full-resolution track times the day bands is far too much work
+  // to redo on every hover frame.
+  const strokes = useMemo(() => {
+    const bands =
+      dayBands && dayBands.length > 1
+        ? dayBands
+        : [{ startRouteM: -1, endRouteM: Infinity, color: null }];
+    const out = []; // { line, area, color }
+    if (!hasEle) return out;
     for (const band of bands) {
       for (const seg of series) {
         let line = "";
@@ -87,7 +130,7 @@ export default function ElevationProfile({
         const flush = (endX) => {
           if (line) {
             if (runStart != null) area += ` L ${endX} ${PAD.top + plotH} L ${runStart} ${PAD.top + plotH} Z`;
-            strokes.push({ line, area, color: band.color });
+            out.push({ line, area, color: band.color });
           }
           line = "";
           area = "";
@@ -113,7 +156,9 @@ export default function ElevationProfile({
         flush(xOf(seg[seg.length - 1][0]));
       }
     }
-  }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [series, dayBands, hasEle, W, H, minEle, maxEle, totalM]);
 
   const moveToClientX = (clientX) => {
     const rect = svgRef.current.getBoundingClientRect();
@@ -172,7 +217,8 @@ export default function ElevationProfile({
   })();
 
   return (
-    <div className="elevation-profile">
+    <div className={`elevation-profile ${full ? "fullscreen" : ""}`}>
+      <div className="profile-tools">
       {hasEle && (
         <button
           type="button"
@@ -192,6 +238,21 @@ export default function ElevationProfile({
           <PinPlusIcon size={15} />
         </button>
       )}
+        <button
+          type="button"
+          className="profile-add-toggle"
+          title={full ? "Exit full screen (Esc)" : "Full screen"}
+          aria-label={full ? "Exit full screen" : "Full screen"}
+          aria-pressed={full}
+          onClick={() => {
+            setFull((v) => !v);
+            setPending(null);
+          }}
+        >
+          {full ? <MinimizeIcon size={15} /> : <MaximizeIcon size={15} />}
+        </button>
+      </div>
+      {full && <span className="profile-rotate-hint">Rotate your phone for a wider profile</span>}
       <div className="profile-canvas" ref={canvasRef}>
       <svg
         ref={svgRef}
@@ -341,10 +402,7 @@ export default function ElevationProfile({
           className={`cp-tip profile-cp-tip kind-${hoverCp.kind || "poi"}${
             cpTipY < H * 0.3 ? " flip" : ""
           }`}
-          style={{
-            left: `${(xOf(hoverCp.anchor.routeDistanceM) / W) * 100}%`,
-            top: `${(cpTipY / H) * 100}%`
-          }}
+          style={{ left: xOf(hoverCp.anchor.routeDistanceM), top: cpTipY }}
         >
           <span className="cp-tip-name">
             {(CHECKPOINT_KINDS[hoverCp.kind] || CHECKPOINT_KINDS.poi).emoji}{" "}
