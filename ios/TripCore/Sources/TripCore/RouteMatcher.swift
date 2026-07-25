@@ -29,19 +29,25 @@ public struct RouteMatcher: Sendable {
         /// How far along the route a rival candidate must sit before it counts
         /// as a genuine loop ambiguity rather than a neighbouring edge.
         public var ambiguitySeparationM: Double
+        /// Floor for the ambiguity margin, used when a fix reports implausibly
+        /// good accuracy. Two branches this close are indistinguishable in
+        /// practice whatever the device claims.
+        public var minimumAmbiguityMarginM: Double
 
         public init(
             searchRadiusM: Double = 300,
             maxSpeedMPS: Double = 4.0,
             nominalSpeedMPS: Double = 1.2,
             maxAccuracyM: Double = 50,
-            ambiguitySeparationM: Double = 500
+            ambiguitySeparationM: Double = 500,
+            minimumAmbiguityMarginM: Double = 10
         ) {
             self.searchRadiusM = searchRadiusM
             self.maxSpeedMPS = maxSpeedMPS
             self.nominalSpeedMPS = nominalSpeedMPS
             self.maxAccuracyM = maxAccuracyM
             self.ambiguitySeparationM = ambiguitySeparationM
+            self.minimumAmbiguityMarginM = minimumAmbiguityMarginM
         }
     }
 
@@ -159,7 +165,16 @@ public struct RouteMatcher: Sendable {
             abs(candidate.candidate.routeDistanceM - best.candidate.routeDistanceM)
                 > configuration.ambiguitySeparationM
         }
-        let ambiguous = rival.map { $0.score <= best.score * 1.5 } ?? false
+
+        // The margin is additive and scaled by the fix's own uncertainty, not a
+        // multiple of the best score. A multiplicative test gets this exactly
+        // backwards: the better the fix, the smaller the best score, and the
+        // harder ambiguity becomes to declare — at offset 0, standing precisely
+        // on one leg of a hairpin, no rival could ever qualify. That is the one
+        // case this check exists for. Two branches within a fix's error bar of
+        // each other are indistinguishable however good the fix is.
+        let margin = max(configuration.minimumAmbiguityMarginM, max(0, fix.hAcc))
+        let ambiguous = rival.map { $0.score <= best.score + margin } ?? false
 
         let progress = lastRouteM.map { best.candidate.routeDistanceM - $0 } ?? 0
 

@@ -158,6 +158,14 @@ public struct OffRouteMonitor: Sendable {
             // The band between exit and enter: deliberately no decision. This
             // is the hysteresis that stops an alert flapping on and off while
             // someone walks along the edge of the threshold.
+            //
+            // Note that `suspectSince` is *not* cleared here, only when the
+            // walker gets properly back on route below `exitM`. So someone who
+            // hovers around the threshold for several minutes and then clearly
+            // exceeds it will alert immediately rather than restarting the
+            // sustain timer. That is intended: prolonged marginal wandering is
+            // itself evidence of a wrong turn, and only a confident return to
+            // the line should wipe the slate.
             if state == .acquiring || state == .degraded || state == .noFix { state = .onRoute }
         }
 

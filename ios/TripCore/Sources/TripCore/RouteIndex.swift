@@ -2,14 +2,20 @@ import Foundation
 
 /// A route prepared for repeated position queries.
 ///
-/// Built once when a trip is opened, then hit on every GPS fix for hours. That
-/// asymmetry is the whole design: `trail.js` scans every edge twice per call,
-/// which is fine for a click in the planner but would be ~100k projections per
-/// fix here — CPU burning in a pocket, against the project's first priority.
+/// Built once when a trip is opened, then hit on every GPS fix for hours.
 ///
-/// So edges go into a uniform grid keyed by latitude/longitude cell. A query
-/// touches only the cells within its search radius, which on the Tour du Mont
-/// Blanc is a few dozen edges instead of 8560.
+/// The grid exists for **correctness, not speed**. It returns every edge within
+/// a radius, which is what lets `RouteMatcher` score rival branches against each
+/// other; a nearest-point scan can only ever hand back one answer, and on a
+/// switchback or an out-and-back the nearest one is regularly wrong.
+///
+/// Measured on the real Tour du Mont Blanc route (8560 edges), the grid is
+/// about five times faster than a full scan — 0.01 ms against 0.05 ms per
+/// query. Both are irrelevant at one fix every thirteen seconds. An earlier
+/// version of this comment justified the index on battery grounds; that was
+/// wrong, and the measurement is recorded in `MatcherQualityTests` so the claim
+/// stays honest. The index would start to matter on a route an order of
+/// magnitude longer, or if fixes ever arrived far more often.
 public struct RouteIndex: Sendable {
     /// One straight piece of the route, with where it starts along the whole
     /// route so a hit converts straight into a route distance.
@@ -42,6 +48,15 @@ public struct RouteIndex: Sendable {
     /// Route distance where each segment begins; a gap between segments is a
     /// real break in the line (a shuttle, a ferry), not a rendering artefact.
     public let segmentOffsets: [Double]
+
+    /// Edges too geographically wide to grid — see the guard in `init`.
+    /// Non-zero means the route contains something implausible and grid queries
+    /// there are incomplete; the exhaustive path still covers them.
+    public let unindexedEdgeCount: Int
+
+    /// Roughly a 10 × 10 cell box: far beyond any real trail edge, far below
+    /// the world-spanning case.
+    static let maxCellsPerEdge = 100
 
     private let grid: [GridKey: [Int]]
     private let cellSizeDegrees: Double
@@ -99,6 +114,7 @@ public struct RouteIndex: Sendable {
         self.cellSizeDegrees = cell
 
         var grid: [GridKey: [Int]] = [:]
+        var unindexed = 0
         for (index, edge) in edges.enumerated() {
             // An edge can straddle cells, so register it in every cell its
             // bounding box touches — missing one would hide it from a query
@@ -107,13 +123,33 @@ public struct RouteIndex: Sendable {
             let maxLat = max(edge.startLat, edge.endLat)
             let minLng = min(edge.startLng, edge.endLng)
             let maxLng = max(edge.startLng, edge.endLng)
-            for y in Int((minLat / cell).rounded(.down))...Int((maxLat / cell).rounded(.down)) {
-                for x in Int((minLng / cell).rounded(.down))...Int((maxLng / cell).rounded(.down)) {
+            let y0 = Int((minLat / cell).rounded(.down))
+            let y1 = Int((maxLat / cell).rounded(.down))
+            let x0 = Int((minLng / cell).rounded(.down))
+            let x1 = Int((maxLng / cell).rounded(.down))
+
+            // A sane trail edge spans one or two cells. A pathological one —
+            // a route crossing the antimeridian, or a single corrupt
+            // coordinate in an imported GPX — spans the width of the world:
+            // an edge from +179.99 to -179.99 would be registered in 80,146
+            // cells on its own, so a handful of them turns opening a trip into
+            // a hang. Such edges stay out of the grid and remain reachable
+            // through `nearestExhaustive`, which degrades the query rather than
+            // the app.
+            let cellsSpanned = (y1 - y0 + 1) * (x1 - x0 + 1)
+            guard cellsSpanned <= Self.maxCellsPerEdge else {
+                unindexed += 1
+                continue
+            }
+
+            for y in y0...y1 {
+                for x in x0...x1 {
                     grid[GridKey(x: x, y: y), default: []].append(index)
                 }
             }
         }
         self.grid = grid
+        self.unindexedEdgeCount = unindexed
     }
 
     // MARK: - Query
@@ -127,14 +163,28 @@ public struct RouteIndex: Sendable {
     /// a moment ago.
     public func candidates(lat: Double, lng: Double, radiusM: Double) -> [Projection] {
         guard !edges.isEmpty else { return [] }
-        let cellsToScan = max(1, Int((radiusM / 111_320.0 / cellSizeDegrees).rounded(.up)))
+
+        // Cells are square in *degrees*, not in metres: one cell spans 500 m of
+        // latitude but only 500·cos(lat) m of longitude. Converting the radius
+        // with the latitude scale in both axes therefore scans a box narrower
+        // than asked for, and the further from the equator the worse it gets —
+        // at 68° a "300 m" query would only reach 187 m east and west.
+        //
+        // The failure is quiet, which is what makes it dangerous: the query
+        // returns a partial candidate set rather than nothing, and the matcher
+        // picks the best of the wrong candidates.
+        let metresPerDegreeLat = 111_320.0
+        let metresPerDegreeLng = max(1.0, 111_320.0 * cos(lat * .pi / 180))
+        let cellsY = max(1, Int((radiusM / metresPerDegreeLat / cellSizeDegrees).rounded(.up)))
+        let cellsX = max(1, Int((radiusM / metresPerDegreeLng / cellSizeDegrees).rounded(.up)))
+
         let centreX = Int((lng / cellSizeDegrees).rounded(.down))
         let centreY = Int((lat / cellSizeDegrees).rounded(.down))
 
         var seen = Set<Int>()
         var found: [Projection] = []
-        for dy in -cellsToScan...cellsToScan {
-            for dx in -cellsToScan...cellsToScan {
+        for dy in -cellsY...cellsY {
+            for dx in -cellsX...cellsX {
                 guard let bucket = grid[GridKey(x: centreX + dx, y: centreY + dy)] else { continue }
                 for edgeIndex in bucket where !seen.contains(edgeIndex) {
                     seen.insert(edgeIndex)

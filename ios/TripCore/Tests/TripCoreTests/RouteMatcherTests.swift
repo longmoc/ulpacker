@@ -71,6 +71,60 @@ struct RouteMatcherTests {
         #expect(abs(fromGrid.routeDistanceM - exhaustive.routeDistanceM) < 1)
     }
 
+    @Test func gridStillFindsEdgesAtHighLatitude() {
+        // Grid cells are sized in latitude degrees, but the same degree span
+        // covers far fewer metres of longitude the further north you go. At 68°
+        // (Lofoten — exactly the "future trails" case the plan asks for) a cell
+        // is 187 m wide, so a radius converted to cells using the latitude
+        // scale alone scans a box narrower than the radius asked for.
+        //
+        // The danger is not that the query is slow: it is that it returns a
+        // *partial* candidate set without saying so, and the matcher then picks
+        // the best of the wrong candidates.
+        let points = (0..<20).map { TrackPoint(lat: 68.0 + Double($0) * 0.0005, lng: 15.0, ele: 10) }
+        let index = RouteIndex(segments: [TripPackage.Segment(points: points)])
+
+        // ~280 m due east of the line, inside the 300 m radius.
+        let lat = 68.005
+        let lng = 15.0 + 280.0 / (111_320.0 * cos(68.0 * .pi / 180))
+
+        let fromGrid = index.candidates(lat: lat, lng: lng, radiusM: 300)
+        let exhaustive = index.nearestExhaustive(lat: lat, lng: lng)
+
+        #expect(exhaustive != nil)
+        #expect(!fromGrid.isEmpty)
+        if let best = fromGrid.min(by: { $0.offsetM < $1.offsetM }), let exhaustive {
+            #expect(abs(best.routeDistanceM - exhaustive.routeDistanceM) < 1)
+        }
+    }
+
+    @Test func doesNotHangOnAWorldSpanningEdge() throws {
+        // An edge from +179.99 to -179.99 has a bounding box the width of the
+        // planet and would be registered in 80,146 grid cells on its own. The
+        // realistic cause is not a route round Fiji but one corrupt coordinate
+        // in an imported GPX — and the symptom is the app hanging on trip open,
+        // not a wrong position.
+        let points = [
+            TrackPoint(lat: 45.9, lng: 179.99, ele: 100),
+            TrackPoint(lat: 45.9, lng: -179.99, ele: 100),
+            TrackPoint(lat: 45.9, lng: -179.98, ele: 100)
+        ]
+
+        let started = Date()
+        let index = RouteIndex(segments: [TripPackage.Segment(points: points)])
+        let elapsed = Date().timeIntervalSince(started)
+
+        #expect(elapsed < 1.0, "index build took \(elapsed)s")
+        #expect(index.unindexedEdgeCount == 1)
+        // Left out of the grid but not lost: the exhaustive path still sees it.
+        #expect(index.nearestExhaustive(lat: 45.9, lng: -179.985) != nil)
+    }
+
+    @Test func normalRoutesHaveNothingLeftOutOfTheGrid() throws {
+        let index = RouteIndex(segments: try Self.tmb().plannedRoute.segments)
+        #expect(index.unindexedEdgeCount == 0)
+    }
+
     @Test func convertsRouteDistanceBackToAPosition() throws {
         let index = RouteIndex(segments: try Self.tmb().plannedRoute.segments)
         let halfway = try #require(index.position(atRouteDistance: index.totalM / 2))
@@ -152,6 +206,33 @@ struct RouteMatcherTests {
             #expect(match.routeDistanceM >= previous - 50)
             previous = match.routeDistanceM
         }
+    }
+
+    @Test func flagsAmbiguityOnAHairpinEvenWithAPerfectFix() {
+        // A hairpin: 1500 m out, 8 m across, 1500 m back. Standing on the
+        // outbound leg, the return leg is 8 m away but 1.5 km along the route —
+        // genuinely ambiguous at GPS accuracy, and precisely what the loop
+        // logic exists to catch.
+        //
+        // A multiplicative "rival within 1.5× the best" test gets this exactly
+        // backwards: the better the fix, the smaller the best score, and the
+        // harder ambiguity becomes to declare. At offset 0 no rival can ever
+        // qualify.
+        let eastDegrees = 1500.0 / (111_320.0 * cos(45.9 * .pi / 180))
+        let northDegrees = 8.0 / 111_320.0
+        let out = (0..<16).map {
+            TrackPoint(lat: 45.9, lng: 6.8 + Double($0) * eastDegrees / 15, ele: 1000)
+        }
+        let back = (0..<16).map {
+            TrackPoint(lat: 45.9 + northDegrees, lng: 6.8 + Double(15 - $0) * eastDegrees / 15, ele: 1000)
+        }
+        let index = RouteIndex(segments: [TripPackage.Segment(points: out + back)])
+        var matcher = RouteMatcher(index: index)
+
+        // Stand exactly on the outbound leg, halfway along.
+        let match = matcher.match(Self.fix(1, 45.9, 6.8 + eastDegrees / 2, at: 0))
+        #expect(match.offsetM < 2)
+        #expect(match.confidence == .ambiguous)
     }
 
     @Test func flagsATeleportInsteadOfTrustingIt() {
