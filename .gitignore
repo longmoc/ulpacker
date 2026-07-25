@@ -19,3 +19,7 @@ xcuserdata/
 DerivedData/
 *.xcuserstate
 *.xcscmblueprint
+
+# SwiftPM build output
+.build/
+.swiftpm/
