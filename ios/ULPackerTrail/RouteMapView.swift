@@ -22,7 +22,10 @@ struct RouteMapView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> MLNMapView {
         let mapView = MLNMapView(frame: .zero)
-        mapView.styleURL = URL(string: "https://demotiles.maplibre.org/style.json")
+        // A local pack wins whenever one is installed. The remote style is a
+        // development convenience only — on a trail there is no signal, and a
+        // map that quietly needs some is worse than no map at all.
+        mapView.styleURL = Self.styleURL(for: package)
         mapView.logoView.isHidden = false
         mapView.delegate = context.coordinator
         mapView.showsUserLocation = false // we draw our own, from recorded fixes
@@ -37,6 +40,24 @@ struct RouteMapView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator {
         Coordinator(parent: self)
+    }
+
+    /// Where map packs live. Kept out of the trip document deliberately: tiles
+    /// are large, replaceable, and must never travel through Drive sync.
+    static var packsRoot: URL {
+        URL.documentsDirectory.appendingPathComponent("packs", isDirectory: true)
+    }
+
+    /// The installed pack for this trip, if there is a usable one.
+    static func installedPack(for package: TripPackage) -> OfflinePack? {
+        OfflinePack.installed(in: packsRoot, tripId: package.tripId).first
+    }
+
+    private static func styleURL(for package: TripPackage) -> URL? {
+        if let pack = installedPack(for: package), let style = try? pack.makeStyle() {
+            return style
+        }
+        return URL(string: "https://demotiles.maplibre.org/style.json")
     }
 
     final class Coordinator: NSObject, MLNMapViewDelegate {
