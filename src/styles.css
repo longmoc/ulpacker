@@ -3298,6 +3298,37 @@ button[type="submit"]:active {
   width: 100%;
   height: auto;
   display: block;
+  /* The distance read-out hangs below the x axis; letting it spill keeps the
+     gap under the chart to a hairline instead of reserving space for it. */
+  overflow: visible;
+}
+
+/* Trim the dead space under the plot (the chart owns that height instead). */
+.elevation-profile { padding-bottom: 4px; }
+
+/* Overlaid add-mode switch — sits on top of the chart so the plot keeps its
+   full size. Off by default: on a phone a tap then reads km/elevation rather
+   than always creating a checkpoint. */
+.profile-add-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  width: auto;
+  padding: 5px;
+  display: inline-flex;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-3);
+}
+.profile-add-toggle:hover { color: var(--text-1); }
+.profile-add-toggle.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 
 .elevation-profile svg.clickable,
@@ -4174,6 +4205,9 @@ button[type="submit"]:active {
   pointer-events: none;
   max-width: 260px;
 }
+/* Near the top of the plot the tooltip flips below the dot instead of escaping
+   the panel. */
+.profile-cp-tip.flip { transform: translate(-50%, 12px); }
 .profile-cp-tip .cp-tip-meta {
   display: block;
   margin-top: 2px;

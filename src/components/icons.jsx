@@ -159,6 +159,15 @@ export function UploadIcon({ size = 15 }) {
   );
 }
 
+export function PinPlusIcon({ size = 15 }) {
+  return (
+    <svg {...base} width={size} height={size}>
+      <path d="M19.5 10c0 5-7.5 11.5-7.5 11.5S4.5 15 4.5 10a7.5 7.5 0 0 1 15 0Z" />
+      <path d="M12 7v6M9 10h6" />
+    </svg>
+  );
+}
+
 export function SlidersIcon({ size = 15 }) {
   return (
     <svg {...base} width={size} height={size}>

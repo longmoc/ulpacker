@@ -1,12 +1,15 @@
 import React, { useMemo, useRef, useState } from "react";
 import { buildCumulatives, buildElevationSeries, CHECKPOINT_KINDS } from "../../lib/trail.js";
 import AddPointConfirm from "./AddPointConfirm.jsx";
+import { PinPlusIcon } from "../../components/icons.jsx";
 
 const W = 1000;
 // 20% taller than the original 220 — the caption line below the chart is gone,
-// so the plot itself gets that space plus the extra height.
+// so the plot itself gets that space plus the extra height. `bottom` is only a
+// hairline of breathing room: the distance read-out hangs past it on purpose
+// (the svg is allowed to overflow) rather than reserving dead space for it.
 const H = 264;
-const PAD = { top: 16, right: 12, bottom: 26, left: 44 };
+const PAD = { top: 16, right: 12, bottom: 8, left: 44 };
 
 // Elevation vs route-distance. Segment gaps are drawn as a vertical break
 // marker (a gap has 0 horizontal width, so a dashed line would be invisible).
@@ -26,6 +29,9 @@ export default function ElevationProfile({
   const [hover, setHover] = useState(null);
   const [hoverCp, setHoverCp] = useState(null);
   const [pending, setPending] = useState(null); // { routeM, left, top } confirm popover
+  // Off by default so a tap (phones have no hover) reads out km/elevation
+  // instead of always starting a new checkpoint.
+  const [addMode, setAddMode] = useState(false);
 
   const setNearCp = (cp) => {
     setHoverCp(cp);
@@ -109,9 +115,9 @@ export default function ElevationProfile({
     }
   }
 
-  const handleMove = (e) => {
+  const moveToClientX = (clientX) => {
     const rect = svgRef.current.getBoundingClientRect();
-    const px = ((e.clientX - rect.left) / rect.width) * W;
+    const px = ((clientX - rect.left) / rect.width) * W;
     const frac = Math.max(0, Math.min(1, (px - PAD.left) / plotW));
     const routeM = frac * totalM;
     const x = PAD.left + frac * plotW;
@@ -127,16 +133,32 @@ export default function ElevationProfile({
     if ((near?.cp?.id || null) !== (hoverCp?.id || null)) setNearCp(near ? near.cp : null);
   };
 
-  // Clicking the plot no longer adds immediately — it opens a confirm popover
-  // at the click, matching the map's "Add a checkpoint here?" flow.
+  const handleMove = (e) => moveToClientX(e.clientX);
+  // Touch has no hover: dragging (or tapping) scrubs the read-out. Not
+  // preventDefault-ed, so the page still scrolls normally.
+  const handleTouch = (e) => {
+    const touch = e.touches?.[0];
+    if (touch) moveToClientX(touch.clientX);
+  };
+
+  // With add-mode on, clicking opens the same "Add a checkpoint here?" confirm
+  // as the map. With it off (the default) the plot is read-only.
   const handleClick = (e) => {
-    if (!hasEle || !hover) return;
+    if (!addMode || !hasEle || !hover) return;
     const rect = canvasRef.current.getBoundingClientRect();
     setPending({ routeM: hover.routeM, left: e.clientX - rect.left, top: e.clientY - rect.top });
   };
 
   // Keep the distance pill inside the plot even at the very ends.
   const readoutX = hover ? Math.min(Math.max(hover.x, PAD.left + 27), W - PAD.right - 27) : 0;
+
+  // Checkpoint tooltip anchor; near the top of the plot it flips below the dot
+  // so it can't escape the panel (see `.profile-cp-tip.flip`).
+  const cpTipY = hoverCp
+    ? hasEle && hoverCp.anchor.ele != null
+      ? yOf(hoverCp.anchor.ele)
+      : PAD.top + 6
+    : 0;
 
   const hoverEle = (() => {
     if (!hover || !hasEle) return null;
@@ -151,6 +173,25 @@ export default function ElevationProfile({
 
   return (
     <div className="elevation-profile">
+      {hasEle && (
+        <button
+          type="button"
+          className={`profile-add-toggle ${addMode ? "active" : ""}`}
+          title={
+            addMode
+              ? "Add-checkpoint mode on — click the profile to add one"
+              : "Turn on add-checkpoint mode (off: the profile only reads out km / elevation)"
+          }
+          aria-label="Add checkpoints from the profile"
+          aria-pressed={addMode}
+          onClick={() => {
+            setAddMode((v) => !v);
+            setPending(null);
+          }}
+        >
+          <PinPlusIcon size={15} />
+        </button>
+      )}
       <div className="profile-canvas" ref={canvasRef}>
       <svg
         ref={svgRef}
@@ -158,9 +199,11 @@ export default function ElevationProfile({
         role="img"
         aria-label="Elevation profile"
         preserveAspectRatio="none"
-        className={hasEle ? "clickable" : ""}
+        className={hasEle && addMode ? "clickable" : ""}
         onMouseMove={hasEle ? handleMove : undefined}
         onMouseLeave={clearHover}
+        onTouchStart={hasEle ? handleTouch : undefined}
+        onTouchMove={hasEle ? handleTouch : undefined}
         onClick={handleClick}
       >
         {!hasEle && (
@@ -295,10 +338,12 @@ export default function ElevationProfile({
       </svg>
       {hoverCp && (
         <div
-          className={`cp-tip profile-cp-tip kind-${hoverCp.kind || "poi"}`}
+          className={`cp-tip profile-cp-tip kind-${hoverCp.kind || "poi"}${
+            cpTipY < H * 0.3 ? " flip" : ""
+          }`}
           style={{
             left: `${(xOf(hoverCp.anchor.routeDistanceM) / W) * 100}%`,
-            top: `${((hasEle && hoverCp.anchor.ele != null ? yOf(hoverCp.anchor.ele) : PAD.top + 6) / H) * 100}%`
+            top: `${(cpTipY / H) * 100}%`
           }}
         >
           <span className="cp-tip-name">
