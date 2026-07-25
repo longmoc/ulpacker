@@ -151,9 +151,34 @@ public struct RouteMatcher: Sendable {
 
         // With nothing reachable, trust the fix: GPS is the only ground truth
         // available, and the result is flagged `.jumped` below.
-        let pool = reachable.isEmpty ? candidates : reachable
+        var pool = reachable.isEmpty ? candidates : reachable
+        var escaped = false
+
+        // The reachable filter needs an escape hatch, or it becomes a trap.
+        // Found by replaying a real recording: when the walker outruns
+        // `maxSpeedMPS` — a glitch, a cable car, a burst downhill, or fixes
+        // resuming after the app was starved — the nearest reachable candidate
+        // creeps forward at the speed limit while the true position pulls away.
+        // The matcher then reported `.tracking` with the offset climbing past
+        // 190 m, which is a false off-route alert raised at the exact moment
+        // the walker is precisely on the path.
+        //
+        // So: if abandoning the model puts us dramatically closer to what the
+        // receiver actually reports, believe the receiver. The margin is wide
+        // enough that ordinary noise never triggers it, which keeps the
+        // progress prior doing its job on switchbacks and parallel paths.
+        if !reachable.isEmpty,
+           let bestReachable = reachable.min(by: { $0.offsetM < $1.offsetM }),
+           let bestOverall = candidates.min(by: { $0.offsetM < $1.offsetM }),
+           bestReachable.offsetM > bestOverall.offsetM + escapeMargin(for: fix) {
+            pool = candidates
+            escaped = true
+        }
+
         let scored = pool
-            .map { (candidate: $0, score: score($0, elapsed: elapsed, amongReachable: !reachable.isEmpty)) }
+            .map {
+                (candidate: $0, score: score($0, elapsed: elapsed, amongReachable: !reachable.isEmpty && !escaped))
+            }
             .sorted { $0.score < $1.score }
 
         guard let best = scored.first else { return lostMatch(lat: fix.lat, lng: fix.lng) }
@@ -182,9 +207,10 @@ public struct RouteMatcher: Sendable {
         // equally implausible, so there is nothing better to choose — follow it,
         // but say so.
         let elapsedOrZero = max(elapsed, 0)
-        let jumped = lastRouteM != nil
-            && elapsedOrZero > 0
-            && abs(progress) > elapsedOrZero * configuration.maxSpeedMPS
+        let jumped = escaped
+            || (lastRouteM != nil
+                && elapsedOrZero > 0
+                && abs(progress) > elapsedOrZero * configuration.maxSpeedMPS)
 
         lastRouteM = best.candidate.routeDistanceM
         lastTime = fix.t
@@ -229,6 +255,13 @@ public struct RouteMatcher: Sendable {
         if delta < 0 { score += abs(delta) * 0.05 }
 
         return score
+    }
+
+    /// How much closer to the observation an unreachable candidate must be
+    /// before the model is abandoned. Scaled by the fix's own error so a vague
+    /// fix cannot argue its way out of the constraint on noise alone.
+    private func escapeMargin(for fix: ActivityPackage.Fix) -> Double {
+        max(50, 3 * max(0, fix.hAcc))
     }
 
     private func lostMatch(lat: Double, lng: Double) -> Match {

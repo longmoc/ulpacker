@@ -75,6 +75,14 @@ struct TripDetailView: View {
                 LabeledContent("Segments", value: "\(package.plannedRoute.stats.segmentCount)")
             }
 
+            Section {
+                NavigationLink {
+                    TrailView(package: package)
+                } label: {
+                    Label("Start trail", systemImage: "figure.hiking")
+                }
+            }
+
             Section("Itinerary") {
                 ForEach(package.itinerary, id: \.index) { day in
                     VStack(alignment: .leading, spacing: 2) {

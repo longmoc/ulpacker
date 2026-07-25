@@ -35,6 +35,28 @@ struct RouteMatcherTests {
         return RouteIndex(segments: [TripPackage.Segment(points: points)])
     }
 
+    /// Metres of longitude per degree at the test latitude.
+    static let metresPerDegreeLng = 111_320.0 * cos(45.9 * .pi / 180)
+
+    /// A straight line with points every ~19 m — the real route's density
+    /// (164 km over 8560 edges). Spacing matters more than it looks: with
+    /// coarse points, no edge projects into a narrow reachability window, so a
+    /// whole class of matcher bug simply cannot be reproduced.
+    static func denseStraightRoute(pointCount: Int = 70) -> RouteIndex {
+        let step = 19.0 / metresPerDegreeLng
+        let points = (0..<pointCount).map {
+            TrackPoint(lat: 45.9, lng: 6.8 + Double($0) * step, ele: 1000)
+        }
+        return RouteIndex(segments: [TripPackage.Segment(points: points)])
+    }
+
+    /// A fix sitting exactly `metres` along `denseStraightRoute`.
+    static func fixAlong(_ seq: Int, _ metres: Double, at seconds: Double, hAcc: Double = 8)
+        -> ActivityPackage.Fix
+    {
+        fix(seq, 45.9, 6.8 + metres / metresPerDegreeLng, at: seconds, hAcc: hAcc)
+    }
+
     // MARK: - Index
 
     @Test func indexesTheWholeRealRoute() throws {
@@ -268,6 +290,67 @@ struct RouteMatcherTests {
         let update = monitor.update(match: jumped, accuracyM: 8, at: start.addingTimeInterval(20))
         #expect(!update.didEnterOffRoute)
         #expect(update.state != .offRoute)
+    }
+
+    @Test func recoversImmediatelyAfterAGlitchRatherThanStayingStuck() {
+        // Found by replaying a real recording: after one implausible fix the
+        // matcher pinned itself to the glitched position and then rejected the
+        // *correct* fixes that followed, because from there they were all
+        // "unreachable". It reported .tracking the whole time while the offset
+        // climbed past 290 m — a false off-route alert waiting to happen, at
+        // exactly the moment the walker is precisely on the path.
+        // Needs realistic point spacing: with 78 m edges nothing projects into
+        // the narrow reachability window and the bug hides. On the real route
+        // the edges are ~19 m, which is why a replayed recording exposed it.
+        let index = Self.denseStraightRoute()
+        var matcher = RouteMatcher(index: index)
+
+        _ = matcher.match(Self.fixAlong(1, 0, at: 0))
+
+        // 116 m in five seconds — faster than anyone walks, so every reachable
+        // candidate creeps forward at the speed limit instead, ~97 m from what
+        // the receiver reports.
+        let glitch = matcher.match(Self.fixAlong(2, 116, at: 5))
+        #expect(glitch.offsetM < 20)
+        #expect(glitch.routeDistanceM > 100)
+        #expect(glitch.confidence == .jumped)
+
+        // And it must not lag afterwards: the old behaviour crawled forward for
+        // fix after fix while the offset climbed past 190 m.
+        let next = matcher.match(Self.fixAlong(3, 232, at: 10))
+        #expect(next.offsetM < 20)
+        #expect(next.routeDistanceM > 200)
+
+        // Once the pace is believable again, so is the confidence.
+        let settled = matcher.match(Self.fixAlong(4, 250, at: 15))
+        #expect(settled.confidence == .tracking)
+        #expect(settled.offsetM < 20)
+    }
+
+    @Test func doesNotEscapeTheModelForOrdinaryNoise() {
+        // The counterweight: the escape hatch must stay shut for a normal walk,
+        // or the progress prior stops protecting switchbacks and parallel paths.
+        let index = Self.denseStraightRoute()
+        var matcher = RouteMatcher(index: index)
+
+        _ = matcher.match(Self.fixAlong(1, 0, at: 0))
+        for step in 1...10 {
+            let match = matcher.match(Self.fixAlong(step + 1, Double(step) * 15, at: Double(step) * 13))
+            #expect(match.confidence == .tracking)
+        }
+    }
+
+    @Test func staysOnTheModelWhenTheObservationIsOnlySlightlyBetter() {
+        // The counterweight to the test above: the escape hatch must not fire
+        // for ordinary noise, or the progress prior stops protecting against
+        // switchbacks and parallel paths at all.
+        let index = Self.straightRoute()
+        var matcher = RouteMatcher(index: index)
+
+        _ = matcher.match(Self.fix(1, 45.9, 6.8, at: 0))
+        // 15 m along, a normal step, with the fix a few metres off the line.
+        let next = matcher.match(Self.fix(2, 45.90005, 6.8002, at: 13))
+        #expect(next.confidence == .tracking)
     }
 
     @Test func ignoresFixesTooPoorToTrust() {
