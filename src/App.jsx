@@ -32,6 +32,7 @@ import {
   MAX_TRACK_STORAGE_BYTES,
   MAX_GPX_BYTES
 } from "./lib/trail.js";
+import { buildTripPackage } from "./lib/tripPackage.js";
 import { useGoogleSync } from "./hooks/useGoogleSync.js";
 import Landing from "./components/Landing.jsx";
 import { TrashIcon, ImageIcon, PencilIcon } from "./components/icons.jsx";
@@ -967,6 +968,28 @@ export default function App() {
     link.href = url;
     const safe = (trip.name || "trip").trim().replace(/[^\w-]+/g, "_").slice(0, 40) || "trip";
     link.download = `${safe}.gpx`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // Export the trip as a TripPackage — the versioned contract the iOS companion
+  // reads. Unlike the backup above this is deliberately lossy: route,
+  // checkpoints, itinerary and thresholds only, no gear/pack/cover state.
+  function exportTripPackage(tripId) {
+    const trip = trips.find((t) => t.id === tripId);
+    if (!trip) return;
+    const track = tracks[trip.trackRef?.id];
+    const pkg = buildTripPackage(trip, track);
+    if (!pkg) {
+      window.alert("This trip has no route yet — import a GPX before exporting a trip package.");
+      return;
+    }
+    const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    const safe = (trip.name || "trip").trim().replace(/[^\w-]+/g, "_").slice(0, 40) || "trip";
+    link.download = `${safe}.trippackage.json`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -3397,6 +3420,7 @@ export default function App() {
               }
               onExportTrip={() => activeTrip && exportTrip(activeTrip.id)}
               onExportGpx={() => activeTrip && exportTripGpx(activeTrip.id)}
+              onExportTripPackage={() => activeTrip && exportTripPackage(activeTrip.id)}
               onImportTrip={importTripFile}
               onAddCheckpoint={(cp) =>
                 activeTrip && setTripCheckpoints(activeTrip.id, (list) => sortCheckpoints([...list, cp]))

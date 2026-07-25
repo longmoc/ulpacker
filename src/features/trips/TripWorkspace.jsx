@@ -34,6 +34,7 @@ import {
   DownloadIcon,
   UploadIcon,
   NavigationIcon,
+  TargetIcon,
   SlidersIcon,
   CloseIcon
 } from "../../components/icons.jsx";
@@ -49,6 +50,7 @@ export default function TripWorkspace({
   onReplaceGpx,
   onExportTrip,
   onExportGpx,
+  onExportTripPackage,
   onImportTrip,
   onAddCheckpoint,
   onUpdateCheckpoint,
@@ -437,6 +439,10 @@ export default function TripWorkspace({
               <button type="button" onClick={() => onExportGpx?.()}>
                 <NavigationIcon />
                 Export GPX (for device)
+              </button>
+              <button type="button" onClick={() => onExportTripPackage?.()}>
+                <TargetIcon />
+                Export trip package (for phone)
               </button>
             </div>
           </div>
