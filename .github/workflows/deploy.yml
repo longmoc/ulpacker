@@ -3,6 +3,11 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    # The iOS companion app lives in this repo but ships through Xcode, not
+    # Pages. Skip the web deploy for commits that only touch it. Commits that
+    # touch both (e.g. a TripPackage schema change) still deploy.
+    paths-ignore:
+      - 'ios/**'
   workflow_dispatch:
 
 permissions:

@@ -13,3 +13,9 @@ CLAUDE.md
 # Phone screenshots dropped into the repo
 IMG_*.PNG
 IMG_*.png
+
+# Xcode local state (iOS companion app)
+xcuserdata/
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
