@@ -38,11 +38,25 @@ final class TripLibrary {
         }
     }
 
+    /// Where imported trips live. Anything dropped in here through Files,
+    /// AirDrop or iTunes file sharing is picked up on next launch.
+    static var tripsDirectory: URL {
+        URL.documentsDirectory.appendingPathComponent("trips", isDirectory: true)
+    }
+
     private static func bundledPackages() throws -> [TripPackage] {
-        let urls = Bundle.main.urls(forResourcesWithExtension: "json", subdirectory: nil) ?? []
-        return try urls
+        let bundled = Bundle.main.urls(forResourcesWithExtension: "json", subdirectory: nil) ?? []
+        let imported = (try? FileManager.default.contentsOfDirectory(
+            at: tripsDirectory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        )) ?? []
+
+        return try (bundled + imported)
             .filter { $0.lastPathComponent.hasSuffix(".trippackage.json") }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            // Verification is not skipped for imported files — a package that
+            // arrived over AirDrop is exactly the one worth checking, and a
+            // failure here surfaces rather than becoming a route someone
+            // follows up a mountain.
             .map { try TripPackage.decode(from: Data(contentsOf: $0)) }
     }
 }

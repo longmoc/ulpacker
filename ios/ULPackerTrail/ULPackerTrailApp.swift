@@ -15,6 +15,10 @@ struct ULPackerTrailApp: App {
                case .loaded(let packages) = library.state,
                let first = packages.first {
                 NavigationStack { TrailMapScreen(package: first, autoStart: true) }
+            } else if ProcessInfo.processInfo.arguments.contains("-uiTestOpenDetail"),
+                      case .loaded(let packages) = library.state,
+                      let first = packages.first {
+                NavigationStack { TripDetailView(package: first) }
             } else {
                 TripListView(library: library)
             }

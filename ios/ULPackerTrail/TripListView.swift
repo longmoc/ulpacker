@@ -84,15 +84,8 @@ struct TripDetailView: View {
             }
 
             Section("Itinerary") {
-                ForEach(package.itinerary, id: \.index) { day in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Day \(day.index): \(day.startName) → \(day.endName)")
-                            .font(.subheadline.weight(.medium))
-                        Text(dayDetail(day))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 2)
+                ForEach(Array(Itinerary.combined(package).enumerated()), id: \.offset) { _, entry in
+                    ItineraryRow(entry: entry)
                 }
             }
 
@@ -117,10 +110,77 @@ struct TripDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func dayDetail(_ day: TripPackage.Day) -> String {
-        var parts = [String(format: "%.1f km", Double(day.distanceM) / 1000)]
-        if let ascent = day.ascentM { parts.append("↑\(ascent) m") }
-        if let descent = day.descentM { parts.append("↓\(descent) m") }
-        return parts.joined(separator: " · ")
+}
+
+/// One itinerary day, walking or not.
+///
+/// Off-route days are shown but visually set apart: they carry no geometry, so
+/// there is nothing to navigate and nothing to follow. On those the walker
+/// simply pauses the recording, which is why they need no controls here — only
+/// to be present, in the right place, with the right number.
+private struct ItineraryRow: View {
+    let entry: Itinerary.Entry
+    @State private var expanded = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text("\(entry.number)")
+                .font(.caption.weight(.bold).monospacedDigit())
+                .foregroundStyle(entry.isWalking ? Color.white : Color.secondary)
+                .frame(width: 26, height: 26)
+                .background(
+                    Circle().fill(entry.isWalking ? Color.indigo : Color.secondary.opacity(0.15))
+                )
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(entry.title)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(entry.isWalking ? .primary : .secondary)
+
+                if let summary {
+                    Text(summary).font(.caption).foregroundStyle(.secondary)
+                }
+
+                if let note {
+                    Text(note)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        // Planning notes run to several paragraphs. In a list
+                        // they are context, not the content — one day's note
+                        // should not push the rest of the trip off the screen.
+                        .lineLimit(expanded ? nil : 2)
+                        .onTapGesture { expanded.toggle() }
+                }
+            }
+        }
+        .padding(.vertical, 3)
+    }
+
+    private var summary: String? {
+        switch entry {
+        case .walking(let day, _):
+            var parts = [String(format: "%.1f km", Double(day.distanceM) / 1000)]
+            if let ascent = day.ascentM { parts.append("↑\(ascent) m") }
+            if let descent = day.descentM { parts.append("↓\(descent) m") }
+            return parts.joined(separator: " · ")
+        case .offRoute:
+            return "Off route — pause recording"
+        }
+    }
+
+    /// Notes are authored as Markdown in the planner, so rendering them raw
+    /// would show literal `**` in the middle of a sentence. Inline-only
+    /// interpretation keeps the line breaks the author wrote, which matters
+    /// for a note that is really a checklist.
+    private var note: AttributedString? {
+        let raw: String = switch entry {
+        case .walking(let day, _): day.note
+        case .offRoute(let day, _): day.note
+        }
+        guard !raw.isEmpty else { return nil }
+        return (try? AttributedString(
+            markdown: raw,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(raw)
     }
 }
