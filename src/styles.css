@@ -3944,6 +3944,88 @@ button[type="submit"]:active {
   flex: 0 0 auto;
 }
 
+/* Full-screen map controls: a floating panel instead of rows under the map, so
+   the map keeps the full viewport (critical on phones, where the day legend
+   alone wrapped to three rows). */
+.map-fs-toggle.active { background: var(--accent); color: #fff; }
+.map-fs-toggle { position: relative; }
+.map-fs-toggle.filtered::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1.5px var(--surface);
+}
+.map-fs-toggle.active.filtered::after { background: #fff; box-shadow: 0 0 0 1.5px var(--accent); }
+
+.map-fs-panel {
+  position: absolute;
+  top: 56px;
+  right: 12px;
+  z-index: 1200;
+  width: min(300px, calc(100vw - 24px));
+  max-height: min(66vh, 560px);
+  overflow-y: auto;
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-md);
+}
+
+.map-fs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.86rem;
+}
+.map-fs-head button {
+  width: auto;
+  padding: 3px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-3);
+  display: inline-flex;
+}
+.map-fs-head button:hover { color: var(--text-1); }
+
+.map-fs-group { display: flex; flex-direction: column; gap: 6px; }
+.map-fs-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.map-fs-panel .map-legend-ends,
+.map-fs-panel .map-legend-days,
+.map-fs-panel .cp-filters {
+  margin: 0;
+  padding: 0;
+}
+.map-fs-panel .cp-filters { flex-wrap: wrap; }
+
+@media (max-width: 640px) {
+  .map-fs-panel {
+    top: auto;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: 52vh;
+  }
+}
+
 @media (max-width: 768px) {
   .track-map-canvas {
     height: 408px;

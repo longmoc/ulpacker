@@ -33,7 +33,9 @@ import {
   FileIcon,
   DownloadIcon,
   UploadIcon,
-  NavigationIcon
+  NavigationIcon,
+  SlidersIcon,
+  CloseIcon
 } from "../../components/icons.jsx";
 
 const km = (m) => (m / 1000).toFixed(1);
@@ -68,6 +70,7 @@ export default function TripWorkspace({
   const [anchorIds, setAnchorIds] = useState([]); // up to 2 ticked checkpoint ids
   const [hoverRouteM, setHoverRouteM] = useState(null);
   const [mapFull, setMapFull] = useState(false);
+  const [fsPanel, setFsPanel] = useState(false); // floating controls in full screen
   const [basemap, setBasemap] = useState(() => {
     try {
       return localStorage.getItem("ulpacker.tripBasemap") === "topo" ? "topo" : "standard";
@@ -99,12 +102,23 @@ export default function TripWorkspace({
     };
   }, []);
 
-  // Full-screen map: lock page scroll and allow Escape to exit.
+  // Full-screen map: lock page scroll; Escape closes the controls panel first,
+  // then leaves full screen.
   useEffect(() => {
-    if (!mapFull) return;
+    if (!mapFull) {
+      setFsPanel(false);
+      return;
+    }
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const onKey = (e) => e.key === "Escape" && setMapFull(false);
+    const onKey = (e) => {
+      if (e.key !== "Escape") return;
+      setFsPanel((open) => {
+        if (open) return false;
+        setMapFull(false);
+        return false;
+      });
+    };
     window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = prev;
@@ -294,6 +308,83 @@ export default function TripWorkspace({
   const updateExtraDay = (xid, patch) =>
     onSetExtraDays?.(extraDays.map((d) => (d.id === xid ? { ...d, ...patch } : d)));
   const deleteExtraDay = (xid) => onSetExtraDays?.(extraDays.filter((d) => d.id !== xid));
+
+  // Map controls, defined once and placed differently per mode: in the legend
+  // bar under the map normally, inside the floating panel in full screen (where
+  // vertical space belongs to the map, especially on phones).
+  const endpointControls = (
+    <div className="map-legend-ends">
+      <EndpointLabel
+        className="start"
+        icon={<WhistleIcon />}
+        value={trip.startName}
+        fallback="Start"
+        onSave={(v) => onUpdateTrip(trip.loop ? { startName: v, finishName: v } : { startName: v })}
+      />
+      <button
+        type="button"
+        className={`loop-toggle ${trip.loop ? "active" : ""}`}
+        title={trip.loop ? "Loop route: start = finish" : "Link start & finish (loop route)"}
+        aria-pressed={Boolean(trip.loop)}
+        onClick={() => onUpdateTrip(trip.loop ? { loop: false } : { loop: true, finishName: trip.startName || "" })}
+      >
+        <LinkIcon />
+      </button>
+      <EndpointLabel
+        className="finish"
+        icon={<FlagIcon />}
+        value={trip.loop ? trip.startName : trip.finishName}
+        fallback="Finish"
+        disabled={trip.loop}
+        onSave={(v) => onUpdateTrip({ finishName: v })}
+      />
+    </div>
+  );
+
+  const dayControls =
+    dayBands.length > 1 ? (
+      <div className="map-legend-days">
+        {dayBands.map((b) => (
+          <button
+            key={b.index}
+            type="button"
+            className={`day-legend-chip ${selectedDay === b.index ? "active" : ""}`}
+            onClick={() => setSelectedDay(selectedDay === b.index ? null : b.index)}
+          >
+            <span className="day-legend-swatch" style={{ background: b.color }} />
+            Day {b.num}
+          </button>
+        ))}
+      </div>
+    ) : null;
+
+  // Same category filter as the checkpoint list — it already drives the map, it
+  // just had no control while full screen.
+  const kindControls = (
+    <div className="cp-filters">
+      <button
+        type="button"
+        className={`cp-chip ${cpFilter === null ? "active" : ""}`}
+        onClick={() => setCpFilter(null)}
+      >
+        All {trip.checkpoints.length}
+      </button>
+      {CHECKPOINT_KIND_KEYS.filter((k) => kindCounts[k]).map((k) => (
+        <button
+          key={k}
+          type="button"
+          title={CHECKPOINT_KINDS[k].label}
+          className={`cp-chip kind-${k} ${cpFilter === k ? "active" : ""}`}
+          onClick={() => setCpFilter(cpFilter === k ? null : k)}
+        >
+          {CHECKPOINT_KINDS[k].emoji} {kindCounts[k]}
+        </button>
+      ))}
+    </div>
+  );
+
+  // Something is narrowing the map — surfaced as a dot on the collapsed button.
+  const mapFiltered = cpFilter !== null || selectedDay !== null || anchorPoints.length === 2;
 
   return (
     <div className="trip-workspace">
@@ -512,6 +603,20 @@ export default function TripWorkspace({
                 ) : (
                   <span className="map-offline-tag">Offline — route shape</span>
                 )}
+                {mapFull && (
+                  <button
+                    type="button"
+                    className={`map-full-btn map-fs-toggle ${fsPanel ? "active" : ""} ${
+                      mapFiltered ? "filtered" : ""
+                    }`}
+                    title="Filters, days & route labels"
+                    aria-label="Map controls"
+                    aria-pressed={fsPanel}
+                    onClick={() => setFsPanel((v) => !v)}
+                  >
+                    <SlidersIcon size={15} />
+                  </button>
+                )}
                 <button
                   type="button"
                   className="map-full-btn"
@@ -555,53 +660,37 @@ export default function TripWorkspace({
                 />
               )}
 
-              <div className="map-legend">
-                <div className="map-legend-ends">
-                  <EndpointLabel
-                    className="start"
-                    icon={<WhistleIcon />}
-                    value={trip.startName}
-                    fallback="Start"
-                    onSave={(v) =>
-                      onUpdateTrip(trip.loop ? { startName: v, finishName: v } : { startName: v })
-                    }
-                  />
-                  <button
-                    type="button"
-                    className={`loop-toggle ${trip.loop ? "active" : ""}`}
-                    title={trip.loop ? "Loop route: start = finish" : "Link start & finish (loop route)"}
-                    aria-pressed={Boolean(trip.loop)}
-                    onClick={() =>
-                      onUpdateTrip(trip.loop ? { loop: false } : { loop: true, finishName: trip.startName || "" })
-                    }
-                  >
-                    <LinkIcon />
-                  </button>
-                  <EndpointLabel
-                    className="finish"
-                    icon={<FlagIcon />}
-                    value={trip.loop ? trip.startName : trip.finishName}
-                    fallback="Finish"
-                    disabled={trip.loop}
-                    onSave={(v) => onUpdateTrip({ finishName: v })}
-                  />
-                </div>
-                {dayBands.length > 1 && (
-                  <div className="map-legend-days">
-                    {dayBands.map((b) => (
-                      <button
-                        key={b.index}
-                        type="button"
-                        className={`day-legend-chip ${selectedDay === b.index ? "active" : ""}`}
-                        onClick={() => setSelectedDay(selectedDay === b.index ? null : b.index)}
-                      >
-                        <span className="day-legend-swatch" style={{ background: b.color }} />
-                        Day {b.num}
+              {mapFull ? (
+                fsPanel && (
+                  <div className="map-fs-panel">
+                    <div className="map-fs-head">
+                      <strong>Map controls</strong>
+                      <button type="button" title="Close" aria-label="Close controls" onClick={() => setFsPanel(false)}>
+                        <CloseIcon size={14} />
                       </button>
-                    ))}
+                    </div>
+                    <div className="map-fs-group">
+                      <span className="map-fs-label">Route</span>
+                      {endpointControls}
+                    </div>
+                    {dayControls && (
+                      <div className="map-fs-group">
+                        <span className="map-fs-label">Days</span>
+                        {dayControls}
+                      </div>
+                    )}
+                    <div className="map-fs-group">
+                      <span className="map-fs-label">Checkpoints</span>
+                      {kindControls}
+                    </div>
                   </div>
-                )}
-              </div>
+                )
+              ) : (
+                <div className="map-legend">
+                  {endpointControls}
+                  {dayControls}
+                </div>
+              )}
             </div>
           </div>
 

@@ -159,6 +159,27 @@ export function UploadIcon({ size = 15 }) {
   );
 }
 
+export function SlidersIcon({ size = 15 }) {
+  return (
+    <svg {...base} width={size} height={size}>
+      <path d="M4 6h10M18 6h2" />
+      <path d="M4 12h4M12 12h8" />
+      <path d="M4 18h12M20 18h0" />
+      <circle cx="16" cy="6" r="2" />
+      <circle cx="10" cy="12" r="2" />
+      <circle cx="18" cy="18" r="2" />
+    </svg>
+  );
+}
+
+export function CloseIcon({ size = 15 }) {
+  return (
+    <svg {...base} width={size} height={size}>
+      <path d="m6 6 12 12M18 6 6 18" />
+    </svg>
+  );
+}
+
 export function NavigationIcon({ size = 15 }) {
   return (
     <svg {...base} width={size} height={size}>
