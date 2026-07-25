@@ -43,6 +43,14 @@ public final class RecordingSession {
         public let routeDistanceM: Double
         public let remainingM: Double
         public let offsetM: Double
+        /// Position snapped onto the route, not the raw fix.
+        ///
+        /// This is what a map should show: drawing the raw observation puts the
+        /// walker beside the line whenever GPS is noisy, which reads as a bug
+        /// in the app rather than as noise in the receiver. `offsetM` already
+        /// carries how far the raw fix actually was.
+        public let lat: Double
+        public let lng: Double
         public let confidence: RouteMatcher.Confidence
         public let offRouteState: OffRouteMonitor.State
         /// Set on the transition into off-route — the one moment to notify.
@@ -211,6 +219,8 @@ public final class RecordingSession {
             routeDistanceM: match.routeDistanceM,
             remainingM: max(0, index.totalM - match.routeDistanceM),
             offsetM: match.offsetM,
+            lat: match.lat,
+            lng: match.lng,
             confidence: match.confidence,
             offRouteState: update.state,
             shouldAlertOffRoute: update.didEnterOffRoute,

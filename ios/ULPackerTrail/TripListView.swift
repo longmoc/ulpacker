@@ -77,7 +77,7 @@ struct TripDetailView: View {
 
             Section {
                 NavigationLink {
-                    TrailView(package: package)
+                    TrailMapScreen(package: package)
                 } label: {
                     Label("Start trail", systemImage: "figure.hiking")
                 }

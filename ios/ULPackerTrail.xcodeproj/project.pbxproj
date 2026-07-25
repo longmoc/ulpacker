@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		A1A1A1A1A1A1A1A1A1A10012 /* TripCore in Frameworks */ = {isa = PBXBuildFile; productRef = A1A1A1A1A1A1A1A1A1A10011 /* TripCore */; };
 		A1A1A1A1A1A1A1A1A1A10014 /* tmb-ccw.trippackage.json in Resources */ = {isa = PBXBuildFile; fileRef = A1A1A1A1A1A1A1A1A1A10013 /* tmb-ccw.trippackage.json */; };
+		A1A1A1A1A1A1A1A1A1A10017 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = A1A1A1A1A1A1A1A1A1A10016 /* MapLibre */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +31,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1A1A1A1A1A1A1A1A1A10012 /* TripCore in Frameworks */,
+				A1A1A1A1A1A1A1A1A1A10017 /* MapLibre in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -74,6 +76,7 @@
 			name = ULPackerTrail;
 			packageProductDependencies = (
 				A1A1A1A1A1A1A1A1A1A10011 /* TripCore */,
+				A1A1A1A1A1A1A1A1A1A10016 /* MapLibre */,
 			);
 			productName = ULPackerTrail;
 			productReference = A1A1A1A1A1A1A1A1A1A10005 /* ULPackerTrail.app */;
@@ -105,6 +108,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A1A1A1A1A1A1A1A1A1A10010 /* XCLocalSwiftPackageReference "TripCore" */,
+				A1A1A1A1A1A1A1A1A1A10015 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = A1A1A1A1A1A1A1A1A1A10003 /* Products */;
@@ -196,6 +200,10 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ULPackerTrail-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ULPacker records your track and warns you if you leave the route, including while your screen is off.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -217,6 +225,10 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ULPackerTrail-Info.plist";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ULPacker records your track and warns you if you leave the route, including while your screen is off.";
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -258,10 +270,26 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		A1A1A1A1A1A1A1A1A1A10015 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/maplibre/maplibre-gl-native-distribution";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.28.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		A1A1A1A1A1A1A1A1A1A10011 /* TripCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TripCore;
+		};
+		A1A1A1A1A1A1A1A1A1A10016 /* MapLibre */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1A1A1A1A1A1A1A1A1A10015 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
+			productName = MapLibre;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

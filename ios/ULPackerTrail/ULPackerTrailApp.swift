@@ -14,7 +14,7 @@ struct ULPackerTrailApp: App {
             if ProcessInfo.processInfo.arguments.contains("-uiTestAutoStartTrail"),
                case .loaded(let packages) = library.state,
                let first = packages.first {
-                NavigationStack { TrailView(package: first, autoStart: true) }
+                NavigationStack { TrailMapScreen(package: first, autoStart: true) }
             } else {
                 TripListView(library: library)
             }
