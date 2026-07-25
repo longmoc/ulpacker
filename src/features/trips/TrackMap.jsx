@@ -217,8 +217,8 @@ export default function TrackMap({
     const draw = (segs, color) => {
       for (const seg of segs) {
         const latlngs = seg.points.map((p) => [p[0], p[1]]);
-        L.polyline(latlngs, { color: "#fff", weight: 8, opacity: 0.9 }).addTo(group);
-        L.polyline(latlngs, { color, weight: 4, opacity: 1 }).addTo(group);
+        L.polyline(latlngs, { color: "#fff", weight: 9.5, opacity: 0.9 }).addTo(group);
+        L.polyline(latlngs, { color, weight: 5, opacity: 1 }).addTo(group);
       }
     };
     if (dayBands && dayBands.length > 1) {
@@ -330,10 +330,10 @@ export default function TrackMap({
         className: "route-arrow",
         html:
           `<span style="transform:rotate(${bearing}deg);opacity:${inside ? 1 : 0.22}">` +
-          `<svg viewBox="0 0 24 24" width="15" height="15"><path d="M12 3 18.5 19 12 15 5.5 19Z" ` +
+          `<svg viewBox="0 0 24 24" width="19" height="19"><path d="M12 3 18.5 19 12 15 5.5 19Z" ` +
           `fill="${colorAt(d)}" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg></span>`,
-        iconSize: [15, 15],
-        iconAnchor: [7.5, 7.5]
+        iconSize: [19, 19],
+        iconAnchor: [9.5, 9.5]
       });
       L.marker([a.lat, a.lng], { icon, interactive: false, keyboard: false, zIndexOffset: -200 }).addTo(group);
     }
@@ -361,7 +361,7 @@ export default function TrackMap({
     if (!slices.length) return;
     const group = L.featureGroup();
     for (const seg of slices) {
-      L.polyline(seg.points.map((p) => [p[0], p[1]]), { color: ACCENT, weight: 6, opacity: 1 }).addTo(group);
+      L.polyline(seg.points.map((p) => [p[0], p[1]]), { color: ACCENT, weight: 7, opacity: 1 }).addTo(group);
     }
     group.addTo(map);
     dayLayer.current = group;

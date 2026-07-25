@@ -3,8 +3,10 @@ import { buildCumulatives, buildElevationSeries, CHECKPOINT_KINDS } from "../../
 import AddPointConfirm from "./AddPointConfirm.jsx";
 
 const W = 1000;
-const H = 220;
-const PAD = { top: 16, right: 12, bottom: 24, left: 44 };
+// 20% taller than the original 220 — the caption line below the chart is gone,
+// so the plot itself gets that space plus the extra height.
+const H = 264;
+const PAD = { top: 16, right: 12, bottom: 26, left: 44 };
 
 // Elevation vs route-distance. Segment gaps are drawn as a vertical break
 // marker (a gap has 0 horizontal width, so a dashed line would be invisible).
@@ -133,6 +135,9 @@ export default function ElevationProfile({
     setPending({ routeM: hover.routeM, left: e.clientX - rect.left, top: e.clientY - rect.top });
   };
 
+  // Keep the distance pill inside the plot even at the very ends.
+  const readoutX = hover ? Math.min(Math.max(hover.x, PAD.left + 27), W - PAD.right - 27) : 0;
+
   const hoverEle = (() => {
     if (!hover || !hasEle) return null;
     // nearest sample elevation
@@ -173,10 +178,20 @@ export default function ElevationProfile({
               y2={PAD.top + plotH}
               className="axis"
             />
-            <text x={PAD.left - 6} y={PAD.top + 4} textAnchor="end" className="axis-label">
+            <text
+              x={PAD.left - 6}
+              y={PAD.top + 4}
+              textAnchor="end"
+              className={`axis-label${hover ? " muted" : ""}`}
+            >
               {Math.round(maxEle)}
             </text>
-            <text x={PAD.left - 6} y={PAD.top + plotH} textAnchor="end" className="axis-label">
+            <text
+              x={PAD.left - 6}
+              y={PAD.top + plotH}
+              textAnchor="end"
+              className={`axis-label${hover ? " muted" : ""}`}
+            >
               {Math.round(minEle)}
             </text>
             {strokes.map((st, i) => (
@@ -257,6 +272,26 @@ export default function ElevationProfile({
             className="profile-hover"
           />
         )}
+
+        {/* Hover read-outs live on the axes rather than in a caption line: the
+            elevation sits in the left axis gutter, level with the point; the
+            distance sits under the point on the x axis. */}
+        {hover && hasEle && hoverEle != null && (
+          <g className="profile-readout">
+            <rect x={3} y={yOf(hoverEle) - 8} width={PAD.left - 9} height={16} rx={4} />
+            <text x={PAD.left - 9} y={yOf(hoverEle)} textAnchor="end" dominantBaseline="central">
+              {Math.round(hoverEle)}
+            </text>
+          </g>
+        )}
+        {hover && (
+          <g className="profile-readout">
+            <rect x={readoutX - 27} y={PAD.top + plotH + 4} width={54} height={16} rx={4} />
+            <text x={readoutX} y={PAD.top + plotH + 12} textAnchor="middle" dominantBaseline="central">
+              {(hover.routeM / 1000).toFixed(2)} km
+            </text>
+          </g>
+        )}
       </svg>
       {hoverCp && (
         <div
@@ -288,13 +323,6 @@ export default function ElevationProfile({
           onCancel={() => setPending(null)}
         />
       )}
-      </div>
-      <div className="profile-caption">
-        {!hasEle
-          ? "No elevation data in this GPX — add checkpoints on the map or by distance below."
-          : hover
-            ? `${(hover.routeM / 1000).toFixed(2)} km${hoverEle != null ? ` · ${Math.round(hoverEle)} m` : ""} — click to add checkpoint`
-            : "Click the profile to add a checkpoint"}
       </div>
     </div>
   );
