@@ -3418,6 +3418,7 @@ export default function App() {
               onReplaceGpx={(file) =>
                 activeTrip && openGpxImport(file, activeTrip.trackRef?.id ? "replace" : "create", activeTrip.id)
               }
+              packWeights={computePackWeights}
               onExportTrip={() => activeTrip && exportTrip(activeTrip.id)}
               onExportGpx={() => activeTrip && exportTripGpx(activeTrip.id)}
               onExportTripPackage={() => activeTrip && exportTripPackage(activeTrip.id)}

@@ -159,6 +159,16 @@ export function UploadIcon({ size = 15 }) {
   );
 }
 
+export function BackpackIcon({ size = 15 }) {
+  return (
+    <svg {...base} width={size} height={size}>
+      <path d="M6 8a6 6 0 0 1 12 0v11a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2Z" />
+      <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+      <path d="M9 14h6" />
+    </svg>
+  );
+}
+
 export function PinPlusIcon({ size = 15 }) {
   return (
     <svg {...base} width={size} height={size}>

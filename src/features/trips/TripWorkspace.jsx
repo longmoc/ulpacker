@@ -36,7 +36,8 @@ import {
   NavigationIcon,
   TargetIcon,
   SlidersIcon,
-  CloseIcon
+  CloseIcon,
+  BackpackIcon
 } from "../../components/icons.jsx";
 
 const km = (m) => (m / 1000).toFixed(1);
@@ -45,6 +46,7 @@ export default function TripWorkspace({
   trip,
   track,
   packs,
+  packWeights,
   onUpdateTrip,
   onDeleteTrip,
   onReplaceGpx,
@@ -75,6 +77,7 @@ export default function TripWorkspace({
   const [hoverRouteM, setHoverRouteM] = useState(null);
   const [mapFull, setMapFull] = useState(false);
   const [fsPanel, setFsPanel] = useState(false); // floating controls in full screen
+  const [packPicker, setPackPicker] = useState(false); // pack chooser modal
   const [basemap, setBasemap] = useState(() => {
     try {
       return localStorage.getItem("ulpacker.tripBasemap") === "topo" ? "topo" : "standard";
@@ -396,6 +399,18 @@ export default function TripWorkspace({
     </div>
   );
 
+  // Linked pack, shown as a card in the Pack menu (same shape as the sidebar).
+  const linkedPack = packs.find((p) => p.id === trip.packId) || null;
+  const packRange = (packId) => {
+    const w = packWeights?.(packId);
+    if (!w) return "";
+    return `${((w.total - w.consumable) / 1000).toFixed(2)} - ${(w.total / 1000).toFixed(2)} kg`;
+  };
+  const choosePack = (packId) => {
+    onUpdateTrip({ packId });
+    setPackPicker(false);
+  };
+
   // Something is narrowing the map — surfaced as a dot on the collapsed button.
   const mapFiltered = cpFilter.length > 0 || selectedDay !== null || anchorPoints.length === 2;
 
@@ -417,17 +432,35 @@ export default function TripWorkspace({
           />
         </div>
         <div className="workspace-actions">
-          <label className="trip-pack-link">
-            Pack:
-            <select value={trip.packId} onChange={(e) => onUpdateTrip({ packId: e.target.value })}>
-              <option value="">No pack</option>
-              {packs.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="menu">
+            <button type="button" className="menu-trigger">
+              <BackpackIcon />
+              Pack
+            </button>
+            <div className="menu-list pack-menu">
+              {linkedPack ? (
+                <>
+                  <div
+                    className={`pack-card pack-menu-card ${linkedPack.image ? "has-image" : ""}`}
+                    style={linkedPack.image ? { "--pack-img": `url(${linkedPack.image})` } : undefined}
+                  >
+                    <strong>{linkedPack.name}</strong>
+                    <small>{linkedPack.description || "No description"}</small>
+                    <span>{packRange(linkedPack.id)}</span>
+                  </div>
+                  <button type="button" onClick={() => setPackPicker(true)}>
+                    <BackpackIcon />
+                    Change pack
+                  </button>
+                </>
+              ) : (
+                <button type="button" onClick={() => setPackPicker(true)}>
+                  <BackpackIcon />
+                  Choose a pack
+                </button>
+              )}
+            </div>
+          </div>
           <div className="menu">
             <button type="button" className="menu-trigger">
               <FileIcon />
@@ -836,6 +869,49 @@ export default function TripWorkspace({
             />
           </section>
         </>
+      )}
+
+      {packPicker && (
+        <div className="modal-overlay" onClick={() => setPackPicker(false)}>
+          <div className="modal-panel add-to-pack-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3>Link a pack to “{trip.name}”</h3>
+              <button type="button" onClick={() => setPackPicker(false)}>
+                ✕
+              </button>
+            </div>
+            {packs.length === 0 ? (
+              <p className="empty-hint">No packs yet — create one in the Packs view first.</p>
+            ) : (
+              <div className="add-pack-cards">
+                {packs.map((pack) => (
+                  <button
+                    key={pack.id}
+                    type="button"
+                    className={`pack-card ${pack.image ? "has-image" : ""} ${
+                      pack.id === trip.packId ? "active" : ""
+                    }`}
+                    style={pack.image ? { "--pack-img": `url(${pack.image})` } : undefined}
+                    onClick={() => choosePack(pack.id)}
+                  >
+                    <strong>{pack.name}</strong>
+                    <small>{pack.description || "No description"}</small>
+                    <span>{packRange(pack.id)}</span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className={`pack-card pack-card-none ${!trip.packId ? "active" : ""}`}
+                  onClick={() => choosePack("")}
+                >
+                  <strong>No pack</strong>
+                  <small>Plan this trip without a gear list</small>
+                  <span>—</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

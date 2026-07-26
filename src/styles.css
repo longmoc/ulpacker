@@ -3220,19 +3220,26 @@ button[type="submit"]:active {
 }
 
 /* Trip header mirrors the pack header (.workspace-head / .workspace-actions /
-   .pack-name-input / .action-danger). Trip-only extra: the pack-link select. */
+   .pack-name-input / .action-danger). */
 .workspace-actions .menu-trigger:hover { background: var(--surface-2); color: var(--text); }
-.trip-pack-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.85rem;
-  color: var(--text-2);
-  white-space: nowrap;
+
+/* Pack menu: the linked pack as a card (same shape as the sidebar), with the
+   change/choose action under it. */
+.pack-menu { min-width: 232px; }
+.pack-menu-card {
+  cursor: default;
+  margin-bottom: 4px;
 }
-.trip-pack-link select {
-  width: auto;
-  padding: 6px 8px;
+.pack-menu-card:hover {
+  border-color: var(--border);
+  transform: none;
+  box-shadow: none;
+}
+
+/* "No pack" option in the picker — deliberately plain, it isn't a real pack. */
+.pack-card-none {
+  border-style: dashed;
+  color: var(--text-2);
 }
 
 
