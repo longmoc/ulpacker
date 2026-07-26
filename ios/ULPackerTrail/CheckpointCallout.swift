@@ -68,7 +68,7 @@ struct CheckpointCallout: View {
                         .lineLimit(2)
                     Text(subtitle)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.subtle)
                 }
 
                 Spacer(minLength: 4)
@@ -76,7 +76,7 @@ struct CheckpointCallout: View {
                 Button(action: onDismiss) {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.subtle)
                         .frame(width: 26, height: 26)
                         .contentShape(Rectangle())
                 }

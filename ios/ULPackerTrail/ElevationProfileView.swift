@@ -22,7 +22,7 @@ struct ElevationProfileView: View {
             if samples.count < 2 {
                 Text("No elevation data in this route.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.subtle)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 let bounds = Self.bounds(samples)
@@ -119,7 +119,7 @@ struct ElevationProfileView: View {
             }
         }
         .font(.caption2)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Color.subtle)
         .padding(.horizontal, 2)
     }
 

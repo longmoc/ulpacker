@@ -89,7 +89,7 @@ struct TrailInfoPanel: View {
                 } label: {
                     Text(item.rawValue)
                         .font(.subheadline.weight(tab == item ? .semibold : .regular))
-                        .foregroundStyle(tab == item ? Color.primary : Color.secondary)
+                        .foregroundStyle(tab == item ? Color.primary : Color.subtle)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
                 }
@@ -271,7 +271,7 @@ private struct CheckpointRow: View {
                     }
                 }
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.subtle)
             }
             Spacer(minLength: 8)
             if let from {
@@ -279,12 +279,12 @@ private struct CheckpointRow: View {
                 VStack(alignment: .trailing, spacing: 1) {
                     Text(String(format: "%.2f km", distance / 1000))
                         .font(.subheadline.weight(.semibold).monospacedDigit())
-                    Text(estimate(distance)).font(.caption2).foregroundStyle(.secondary)
+                    Text(estimate(distance)).font(.caption2).foregroundStyle(Color.subtle)
                 }
             } else {
                 Text(String(format: "%.1f km", Double(checkpoint.routeDistanceM) / 1000))
                     .font(.subheadline.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.subtle)
             }
         }
         .padding(.horizontal, 16)
@@ -332,7 +332,7 @@ private struct CheckpointDetail: View {
                         .fixedSize(horizontal: false, vertical: true)
                     Text(subtitle)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.subtle)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -341,7 +341,7 @@ private struct CheckpointDetail: View {
                 Button(action: onClose) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.subtle)
                         .frame(width: 34, height: 34)
                         .contentShape(Rectangle())
                 }
@@ -353,7 +353,7 @@ private struct CheckpointDetail: View {
             if checkpoint.note.isEmpty {
                 Text("No note for this stop.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.subtle)
             } else {
                 // Notes are Markdown in the planner. Inline-only interpretation
                 // keeps the author's line breaks, which matters when the note
@@ -396,7 +396,7 @@ private struct CheckpointDetail: View {
             // which is the one number that runs long.
             Text(origin)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.subtle)
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
     }
@@ -413,7 +413,7 @@ private struct CheckpointDetail: View {
         VStack(spacing: 2) {
             Text(title)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.subtle)
             Text(value)
                 .font(.subheadline.weight(.semibold))
                 .monospacedDigit()
@@ -485,4 +485,21 @@ enum RouteProfiles {
     }
 
     private nonisolated(unsafe) static var cache: [String: RouteProfile] = [:]
+}
+
+extension Color {
+    /// Secondary text that survives being drawn on a material.
+    ///
+    /// `.secondary` — as a shape style or as `Color.secondary`, they are the
+    /// same thing — is hierarchical, and over a material SwiftUI renders it as
+    /// vibrancy rather than as grey ink. Vibrancy takes its contrast from
+    /// whatever lies *behind* the material, and behind this panel is the map:
+    /// on a pale valley floor it is nearly white, and every subtitle, stat
+    /// heading and close button dissolved into it while the titles beside them
+    /// stayed black. The smaller the type the worse it got, which is exactly
+    /// backwards.
+    ///
+    /// A plain colour is not reinterpreted, so it stays legible whatever the
+    /// map is doing underneath.
+    static let subtle = Color(uiColor: .secondaryLabel)
 }
