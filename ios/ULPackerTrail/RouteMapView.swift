@@ -292,8 +292,7 @@ struct RouteMapView: UIViewRepresentable {
             // terrain and forest, which is most of an alpine basemap.
             let casing = MLNLineStyleLayer(identifier: "route-casing", source: source)
             casing.lineColor = NSExpression(forConstantValue: UIColor.white)
-            casing.lineWidth = NSExpression(
-                format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
+            casing.lineWidth = Self.zoomStops(
                 [10: 7, 14: 11, 16: 16]
             )
             casing.lineCap = NSExpression(forConstantValue: "round")
@@ -303,8 +302,7 @@ struct RouteMapView: UIViewRepresentable {
 
             let line = MLNLineStyleLayer(identifier: "route-line", source: source)
             line.lineColor = NSExpression(forConstantValue: UIColor.brandOnMap)
-            line.lineWidth = NSExpression(
-                format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
+            line.lineWidth = Self.zoomStops(
                 [10: 4, 14: 7, 16: 10.5]
             )
             line.lineCap = NSExpression(forConstantValue: "round")
@@ -329,8 +327,7 @@ struct RouteMapView: UIViewRepresentable {
             arrows.symbolSpacing = NSExpression(forConstantValue: 100)
             arrows.iconAllowsOverlap = NSExpression(forConstantValue: false)
             arrows.iconRotationAlignment = NSExpression(forConstantValue: "map")
-            arrows.iconScale = NSExpression(
-                format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
+            arrows.iconScale = Self.zoomStops(
                 [10: 0.5, 14: 0.8, 16: 1.1]
             )
             arrows.iconOpacity = NSExpression(forConstantValue: 0.95)
@@ -382,8 +379,7 @@ struct RouteMapView: UIViewRepresentable {
                 pins.iconImageName = NSExpression(forConstantValue: "cp-\(kind.rawValue)")
                 // Grows with zoom: at trip scale these are marks, and close in
                 // they are things to read and press.
-                pins.iconScale = NSExpression(
-                    format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
+                pins.iconScale = Self.zoomStops(
                     [
                         10: kind.isMajor ? 0.74 : 0.62,
                         14: kind.isMajor ? 1.0 : 0.86,
@@ -470,6 +466,23 @@ struct RouteMapView: UIViewRepresentable {
         /// route unanswered on the map: where do I start, and where does this
         /// finish. On a closed loop they are the same place, and drawing two
         /// markers on top of each other there would be worse than drawing none.
+        /// A value that grows with zoom.
+        ///
+        /// Built with MapLibre's typed constructor rather than the format
+        /// string every example uses. The format string works, but it asks
+        /// Foundation's predicate parser to treat `mgl_interpolate:…` as a
+        /// function, which it refuses on principle and logs a fault for —
+        /// thirteen of them here, every time the style loads. Same expression,
+        /// no parser, no faults.
+        private static func zoomStops(_ stops: [Double: Double]) -> NSExpression {
+            NSExpression(
+                forMLNInterpolating: .zoomLevelVariable,
+                curveType: .linear,
+                parameters: nil,
+                stops: NSExpression(forConstantValue: stops)
+            )
+        }
+
         private func addEndpoints(to style: MLNStyle) {
             let segments = parent.package.plannedRoute.segments
             guard let first = segments.first?.points.first,
@@ -537,8 +550,7 @@ struct RouteMapView: UIViewRepresentable {
 
             let pin = MLNSymbolStyleLayer(identifier: "endpoint-\(id)", source: source)
             pin.iconImageName = NSExpression(forConstantValue: "endpoint-\(id)")
-            pin.iconScale = NSExpression(
-                format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
+            pin.iconScale = Self.zoomStops(
                 [10: 0.8, 14: 1.05, 16: 1.4]
             )
             // The ends of the walk are never dropped for anything.
