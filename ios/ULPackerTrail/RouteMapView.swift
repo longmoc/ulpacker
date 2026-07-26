@@ -317,7 +317,13 @@ struct RouteMapView: UIViewRepresentable {
             // are the reason the trip's checkpoints are visible at all.
             let byKind = Dictionary(grouping: parent.package.checkpoints) { $0.checkpointKind }
 
-            for (kind, checkpoints) in byKind {
+            // Least important first, so the layers that matter are added last
+            // and win collisions. Iterating the dictionary directly — which is
+            // what this did — leaves the order undefined and free to change
+            // between launches, so a hazard could lose its place to a nameless
+            // landmark, and differently each time the app started.
+            for kind in CheckpointKind.allCases.sorted(by: { $0.priority > $1.priority }) {
+                guard let checkpoints = byKind[kind] else { continue }
                 style.setImage(Self.pinImage(for: kind), forName: "cp-\(kind.rawValue)")
 
                 let features = checkpoints.map { checkpoint -> MLNPointFeature in
@@ -351,9 +357,13 @@ struct RouteMapView: UIViewRepresentable {
                         16: kind.isMajor ? 1.15 : 0.98
                     ]
                 )
-                // Sleeping places must never be dropped by collision: they are
-                // what the day is planned around. The rest may yield.
-                pins.iconAllowsOverlap = NSExpression(forConstantValue: kind.isMajor)
+                // Never dropped: the places the day is planned around, and
+                // anything flagged as a hazard. A washed-out footbridge
+                // vanishing because a viewpoint got there first is the one
+                // collision outcome with a real cost.
+                pins.iconAllowsOverlap = NSExpression(
+                    forConstantValue: kind.isMajor || kind == .hazard
+                )
                 style.addLayer(pins)
                 pinLayerIDs.insert(pins.identifier)
 
