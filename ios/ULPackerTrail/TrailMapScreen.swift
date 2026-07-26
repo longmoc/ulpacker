@@ -73,9 +73,6 @@ struct TrailMapScreen: View {
                 routeDistanceM: recorder.progress?.routeDistanceM,
                 followMode: followMode,
                 kindFilter: kindFilter,
-                onFollowModeOverride: { mode in
-                    withAnimation(.easeInOut(duration: 0.2)) { followMode = mode }
-                },
                 onSelectCheckpoint: { checkpoint, point in
                     // Answer where the walker pointed. Sending them to a panel
                     // instead would make them look away from the very thing

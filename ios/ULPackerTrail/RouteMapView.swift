@@ -31,9 +31,6 @@ struct RouteMapView: UIViewRepresentable {
     var followMode: FollowMode
     /// Kinds to show. Empty means all, matching the web planner.
     var kindFilter: Set<CheckpointKind> = []
-    /// Raised when the walker's own gesture should change the camera mode —
-    /// tapping the compass, or panning the map away.
-    var onFollowModeOverride: ((FollowMode) -> Void)?
     /// Called when a checkpoint pin is tapped.
     var onSelectCheckpoint: ((TripPackage.Checkpoint, CGPoint) -> Void)?
 
@@ -134,29 +131,53 @@ struct RouteMapView: UIViewRepresentable {
 
         // MARK: - Camera changes the walker made
 
-        /// MapLibre reports *why* the camera moved, which is what lets a tap on
-        /// the compass be told apart from our own recentring.
+        /// While set, automatic recentring and rotation stand down.
+        private var suspendedUntil: Date?
+        private var resumeWork: DispatchWorkItem?
+
+        /// How long a hand gesture holds the camera still.
+        ///
+        /// Long enough to look ahead at the next col and think about it, short
+        /// enough that the map comes back on its own. The mode is a standing
+        /// choice — panning to peek is not a decision to stop following, and
+        /// making someone re-pick from three modes afterwards is absurd.
+        private static let manualControlPause: TimeInterval = 15
+
+        /// MapLibre reports *why* the camera moved, which is what lets the
+        /// walker's own gestures be told apart from our recentring.
         func mapView(
             _ mapView: MLNMapView,
             regionDidChangeWith reason: MLNCameraChangeReason,
             animated: Bool
         ) {
-            // Tapping the compass is an explicit "show me north". Staying in
-            // course-up would turn the map back moments later, which reads as
-            // the app arguing; and the old code was worse than either — it left
-            // the map stuck north until the route happened to swing 20°.
-            if reason.contains(.resetNorth), parent.followMode == .courseUp {
-                lastCourse = nil
-                parent.onFollowModeOverride?(.northUp)
-                return
-            }
+            // A compass tap is a one-shot "point north". It fixes nothing and
+            // switches nothing — so it suspends the camera like any other
+            // gesture, and course-up resumes afterwards on its own.
+            let byHand: MLNCameraChangeReason = [.gesturePan, .gestureRotate, .resetNorth]
+            guard !reason.isDisjoint(with: byHand) else { return }
 
-            // Panning or rotating by hand means the walker is looking somewhere
-            // else on purpose. Recentring on the next fix would snatch it back.
-            let handMoved: MLNCameraChangeReason = [.gesturePan, .gestureRotate]
-            if !reason.isDisjoint(with: handMoved), parent.followMode != .free {
-                parent.onFollowModeOverride?(.free)
+            if reason.contains(.resetNorth) {
+                // Let the next course update apply from scratch rather than
+                // measuring its swing against a heading the walker just undid.
+                lastCourse = nil
             }
+            suspend()
+        }
+
+        private func suspend() {
+            suspendedUntil = Date().addingTimeInterval(Self.manualControlPause)
+            resumeWork?.cancel()
+
+            // Resume on a timer, not on the next fix: at a 15 m filter a fix can
+            // be half a minute away, and the map should come back when the
+            // walker stopped touching it, not when the GPS next speaks.
+            let work = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                suspendedUntil = nil
+                updatePosition(parent.position, mode: parent.followMode)
+            }
+            resumeWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + Self.manualControlPause, execute: work)
         }
 
         // MARK: - Interaction
@@ -493,6 +514,8 @@ struct RouteMapView: UIViewRepresentable {
             style.layer(withIdentifier: "position-heading")?.isVisible = bearing != nil
 
             guard mode != .free, let mapView else { return }
+            // Hands off while the walker is looking somewhere on purpose.
+            if let suspendedUntil, Date() < suspendedUntil { return }
             let moved = lastCentredOn.map {
                 abs($0.latitude - coordinate.latitude) > 1e-7
                     || abs($0.longitude - coordinate.longitude) > 1e-7
