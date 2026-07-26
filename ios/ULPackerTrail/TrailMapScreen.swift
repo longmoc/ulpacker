@@ -345,6 +345,23 @@ struct TrailMapScreen: View {
                 kindFilter = [.poi]
             case "filterNone":
                 kindFilter = []
+            case "zoomStop":
+                // An overnight stop, where the pins and their names crowd.
+                if let stop = package.checkpoints.first(where: { $0.checkpointKind == .overnight }) {
+                    NotificationCenter.default.post(
+                        name: Notification.Name("ULPDebugFocus"), object: nil,
+                        userInfo: ["lat": stop.lat, "lng": stop.lng, "zoom": 13.5]
+                    )
+                }
+            case "zoomStart":
+                // Close in on the first point of the route, where the loop's
+                // start/finish badge sits.
+                if let point = package.plannedRoute.segments.first?.points.first {
+                    NotificationCenter.default.post(
+                        name: Notification.Name("ULPDebugFocus"), object: nil,
+                        userInfo: ["lat": point.lat, "lng": point.lng, "zoom": 15.0]
+                    )
+                }
             case "panelStops":
                 panelTab = .stops
                 panelDetent = .medium

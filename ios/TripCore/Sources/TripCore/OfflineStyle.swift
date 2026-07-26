@@ -34,6 +34,22 @@ public enum OfflineStyle {
     /// - Parameters:
     ///   - tilesURL: the pack's `tiles.pmtiles` on disk.
     ///   - glyphsDirectory: directory holding `<fontstack>/<range>.pbf`.
+    /// The font every label on this map is drawn in, on the basemap and in the
+    /// app's own layers alike.
+    ///
+    /// Two rules, both learned the same silent way — no error, no warning, the
+    /// text simply never appears:
+    ///
+    ///   * A symbol layer must name its font. Left unset it asks for the SDK's
+    ///     default stack, which no pack ships glyphs for.
+    ///   * Name exactly one, never a fallback list. `{fontstack}` in the glyph
+    ///     URL is the whole array joined into a single path component, so two
+    ///     names ask for a directory that cannot exist.
+    ///
+    /// Keeping the app on the same font the style declares means any pack whose
+    /// place names render can render the trip's stops too.
+    public static let labelFont = "Noto Sans Regular"
+
     public static func json(tilesURL: URL, glyphsDirectory: URL) throws -> Data {
         let style: [String: Any] = [
             "version": 8,
@@ -147,7 +163,7 @@ public enum OfflineStyle {
             "id": "place-labels", "type": "symbol", "source": "protomaps", "source-layer": "places",
             "layout": [
                 "text-field": ["get", "name"],
-                "text-font": ["Noto Sans Regular"],
+                "text-font": [labelFont],
                 "text-size": ["interpolate", ["linear"], ["zoom"], 8, 10, 14, 14],
                 "text-max-width": 8
             ],

@@ -246,6 +246,10 @@ struct RouteMapView: UIViewRepresentable {
             addRoute(to: style)
             addDirectionArrows(to: style)
             addCheckpoints(to: style)
+            addEndpoints(to: style)
+            #if DEBUG
+            observeDebugFocus()
+            #endif
             // Under the pins so the ring reads as a halo, not a badge.
             let highlightSource = MLNShapeSource(identifier: "checkpoint-highlight", shape: nil)
             style.addSource(highlightSource)
@@ -288,7 +292,10 @@ struct RouteMapView: UIViewRepresentable {
             // terrain and forest, which is most of an alpine basemap.
             let casing = MLNLineStyleLayer(identifier: "route-casing", source: source)
             casing.lineColor = NSExpression(forConstantValue: UIColor.white)
-            casing.lineWidth = NSExpression(forConstantValue: 8)
+            casing.lineWidth = NSExpression(
+                format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
+                [10: 7, 14: 11, 16: 16]
+            )
             casing.lineCap = NSExpression(forConstantValue: "round")
             casing.lineJoin = NSExpression(forConstantValue: "round")
             casing.lineOpacity = NSExpression(forConstantValue: 0.9)
@@ -296,7 +303,10 @@ struct RouteMapView: UIViewRepresentable {
 
             let line = MLNLineStyleLayer(identifier: "route-line", source: source)
             line.lineColor = NSExpression(forConstantValue: UIColor.systemIndigo)
-            line.lineWidth = NSExpression(forConstantValue: 4.5)
+            line.lineWidth = NSExpression(
+                format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
+                [10: 4, 14: 7, 16: 10.5]
+            )
             line.lineCap = NSExpression(forConstantValue: "round")
             line.lineJoin = NSExpression(forConstantValue: "round")
             style.addLayer(line)
@@ -316,10 +326,13 @@ struct RouteMapView: UIViewRepresentable {
             arrows.iconImageName = NSExpression(forConstantValue: "route-arrow")
             arrows.symbolPlacement = NSExpression(forConstantValue: "line")
             // Far enough apart to read as direction rather than as decoration.
-            arrows.symbolSpacing = NSExpression(forConstantValue: 90)
+            arrows.symbolSpacing = NSExpression(forConstantValue: 100)
             arrows.iconAllowsOverlap = NSExpression(forConstantValue: false)
             arrows.iconRotationAlignment = NSExpression(forConstantValue: "map")
-            arrows.iconScale = NSExpression(forConstantValue: 0.55)
+            arrows.iconScale = NSExpression(
+                format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
+                [10: 0.5, 14: 0.8, 16: 1.1]
+            )
             arrows.iconOpacity = NSExpression(forConstantValue: 0.95)
             style.addLayer(arrows)
         }
@@ -372,11 +385,17 @@ struct RouteMapView: UIViewRepresentable {
                 pins.iconScale = NSExpression(
                     format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
                     [
-                        10: kind.isMajor ? 0.62 : 0.52,
-                        14: kind.isMajor ? 0.85 : 0.72,
-                        16: kind.isMajor ? 1.15 : 0.98
+                        10: kind.isMajor ? 0.74 : 0.62,
+                        14: kind.isMajor ? 1.0 : 0.86,
+                        16: kind.isMajor ? 1.35 : 1.15
                     ]
                 )
+                // Collision box tight to the artwork. The default 2 pt margin
+                // sits on top of the transparent border already inside each
+                // icon, and between them they were reserving far more room than
+                // the pin occupies — which is why over half the checkpoints
+                // never reached the screen.
+                pins.iconPadding = NSExpression(forConstantValue: 0)
                 // Never dropped: the places the day is planned around, and
                 // anything flagged as a hazard. A washed-out footbridge
                 // vanishing because a viewpoint got there first is the one
@@ -418,6 +437,11 @@ struct RouteMapView: UIViewRepresentable {
                         identifier: "cp-label-\(checkpoint.id)", source: labelSource
                     )
                     labels.text = NSExpression(forConstantValue: checkpoint.displayName)
+                    // Naming the font is not optional. Left unset the layer
+                    // asks for the SDK's default stack, the pack has no glyphs
+                    // under that name, and the label draws nothing at all —
+                    // which is why no stop on this map has ever shown a name.
+                    labels.textFontNames = NSExpression(forConstantValue: [OfflineStyle.labelFont])
                     labels.textFontSize = NSExpression(forConstantValue: 11)
                     // Refuge names run long ("Camping Les Rocailles,
                     // Champex-Lac"); unconstrained they sprawl off the screen.
@@ -426,11 +450,173 @@ struct RouteMapView: UIViewRepresentable {
                     labels.textHaloColor = NSExpression(forConstantValue: UIColor.systemBackground)
                     labels.textHaloWidth = NSExpression(forConstantValue: 1.5)
                     labels.textAnchor = NSExpression(forConstantValue: "top")
+                    // Clear of the pin. The label is a separate symbol to the
+                    // collision placer, so it neither pushes the pin aside nor
+                    // gets pushed — it just lands wherever it is told, and at
+                    // 1.2 em that was on top of the artwork.
                     labels.textOffset = NSExpression(
-                        forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 1.2))
+                        forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 2.2))
                     )
                     // Names may collide and drop; the pin beneath never does.
                     style.addLayer(labels)
+                }
+            }
+        }
+
+        /// Where the walk begins and ends.
+        ///
+        /// Absent until now, which left the two most basic questions about a
+        /// route unanswered on the map: where do I start, and where does this
+        /// finish. On a closed loop they are the same place, and drawing two
+        /// markers on top of each other there would be worse than drawing none.
+        private func addEndpoints(to style: MLNStyle) {
+            let segments = parent.package.plannedRoute.segments
+            guard let first = segments.first?.points.first,
+                  let last = segments.last?.points.last else { return }
+
+            let start = CLLocationCoordinate2D(latitude: first.lat, longitude: first.lng)
+            let finish = CLLocationCoordinate2D(latitude: last.lat, longitude: last.lng)
+
+            // Trust the planner's `loop` flag, but also catch a route that
+            // closes on itself without being marked as one — a GPX exported
+            // from a device rarely carries the intent, only the geometry.
+            let apart = ActivityJournal.haversine(first.lat, first.lng, last.lat, last.lng)
+            let isLoop = parent.package.trip.loop || apart < 120
+
+            if isLoop {
+                add(
+                    endpoint: start,
+                    name: endpointName(parent.package.trip.startName, fallback: "Start / Finish"),
+                    symbol: "flag.checkered", colour: .label, id: "loop", to: style
+                )
+                return
+            }
+            add(
+                endpoint: start,
+                name: endpointName(parent.package.trip.startName, fallback: "Start"),
+                symbol: "flag.fill", colour: .systemGreen, id: "start", to: style
+            )
+            add(
+                endpoint: finish,
+                name: endpointName(parent.package.trip.finishName, fallback: "Finish"),
+                symbol: "flag.checkered", colour: .label, id: "finish", to: style
+            )
+        }
+
+        private func endpointName(_ given: String, fallback: String) -> String {
+            given.isEmpty ? fallback : given
+        }
+
+        private func add(
+            endpoint coordinate: CLLocationCoordinate2D,
+            name: String,
+            symbol: String,
+            colour: UIColor,
+            id: String,
+            to style: MLNStyle
+        ) {
+            style.setImage(Self.endpointImage(symbol: symbol, colour: colour), forName: "endpoint-\(id)")
+
+            // One source per layer, never one shared by two.
+            //
+            // The pin and its label started out over a single source and
+            // *neither* drew — the same silent collapse this file has hit four
+            // times before, with no error and a perfectly valid-looking style.
+            // Whatever the underlying cause, the shape that works here is one
+            // source, one layer.
+            let source = MLNShapeSource(
+                identifier: "endpoint-\(id)", shape: pointFeature(at: coordinate), options: nil
+            )
+            style.addSource(source)
+
+            let pin = MLNSymbolStyleLayer(identifier: "endpoint-\(id)", source: source)
+            pin.iconImageName = NSExpression(forConstantValue: "endpoint-\(id)")
+            pin.iconScale = NSExpression(
+                format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
+                [10: 0.8, 14: 1.05, 16: 1.4]
+            )
+            // The ends of the walk are never dropped for anything.
+            pin.iconAllowsOverlap = NSExpression(forConstantValue: true)
+            pin.iconPadding = NSExpression(forConstantValue: 0)
+            style.addLayer(pin)
+
+            // The name goes on its own layer over its own source.
+            //
+            // Setting `text` on the badge layer itself — a plain constant,
+            // alongside `iconImageName` — makes the badge disappear. That is
+            // the fifth property on this build to take a working layer down
+            // without a word of explanation. Two layers cost nothing.
+            let labelSource = MLNShapeSource(
+                identifier: "endpoint-label-\(id)", shape: pointFeature(at: coordinate), options: nil
+            )
+            style.addSource(labelSource)
+
+            let label = MLNSymbolStyleLayer(identifier: "endpoint-label-\(id)", source: labelSource)
+            label.text = NSExpression(forConstantValue: name)
+            label.textFontNames = NSExpression(forConstantValue: [OfflineStyle.labelFont])
+            label.textFontSize = NSExpression(forConstantValue: 12)
+            label.maximumTextWidth = NSExpression(forConstantValue: 8)
+            label.textColor = NSExpression(forConstantValue: UIColor.label)
+            label.textHaloColor = NSExpression(forConstantValue: UIColor.systemBackground)
+            label.textHaloWidth = NSExpression(forConstantValue: 1.8)
+            label.textAnchor = NSExpression(forConstantValue: "top")
+            // Clear of the badge's own collision box, which is a separate
+            // symbol to the placer and wins every contest it enters.
+            label.textOffset = NSExpression(forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 2.4)))
+            style.addLayer(label)
+        }
+
+        #if DEBUG
+        /// Move the camera from a screenshot script.
+        ///
+        /// Detail shots — icon size, line width, whether a label survives its
+        /// collisions — can only be judged close in, and a headless run has no
+        /// way to pinch. DEBUG-only, and driven by a notification so the shipped
+        /// view keeps no test-shaped property.
+        func observeDebugFocus() {
+            NotificationCenter.default.addObserver(
+                forName: Notification.Name("ULPDebugFocus"), object: nil, queue: .main
+            ) { [weak self] note in
+                guard let self, let mapView = self.mapView,
+                      let info = note.userInfo as? [String: Double],
+                      let lat = info["lat"], let lng = info["lng"], let zoom = info["zoom"]
+                else { return }
+                mapView.setCenter(
+                    CLLocationCoordinate2D(latitude: lat, longitude: lng),
+                    zoomLevel: zoom, animated: false
+                )
+            }
+        }
+        #endif
+
+        private func pointFeature(at coordinate: CLLocationCoordinate2D) -> MLNPointFeature {
+            let feature = MLNPointFeature()
+            feature.coordinate = coordinate
+            return feature
+        }
+
+        /// A squarer, flag-bearing marker so the ends of the walk do not read as
+        /// just another checkpoint.
+        private static func endpointImage(symbol: String, colour: UIColor) -> UIImage {
+            let size = CGSize(width: 50, height: 50)
+            return UIGraphicsImageRenderer(size: size).image { _ in
+                let rect = CGRect(origin: .zero, size: size).insetBy(dx: 4, dy: 4)
+                let badge = UIBezierPath(roundedRect: rect, cornerRadius: 11)
+                colour.setFill()
+                UIColor.systemBackground.setStroke()
+                badge.lineWidth = 4
+                badge.fill()
+                badge.stroke()
+
+                let configuration = UIImage.SymbolConfiguration(pointSize: 21, weight: .heavy)
+                if let glyph = UIImage(systemName: symbol, withConfiguration: configuration)?
+                    .withTintColor(.systemBackground, renderingMode: .alwaysOriginal) {
+                    glyph.draw(in: CGRect(
+                        x: (size.width - glyph.size.width) / 2,
+                        y: (size.height - glyph.size.height) / 2,
+                        width: glyph.size.width,
+                        height: glyph.size.height
+                    ))
                 }
             }
         }
