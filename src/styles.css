@@ -4802,6 +4802,7 @@ button[type="submit"]:active {
 .off-route .day-route { color: var(--text-2); }
 
 /* Editable off-route day title */
+/* Only rendered while the card is in edit mode, so it should read as a field. */
 .day-title-input {
   flex: 1;
   min-width: 120px;
@@ -4809,29 +4810,21 @@ button[type="submit"]:active {
   font-weight: 650;
   color: var(--text);
   padding: 3px 6px;
-  border: 1px solid transparent;
-  background: transparent;
+  border: 1px solid var(--border);
+  background: var(--surface);
   border-radius: 6px;
 }
-.day-title-input:hover { border-color: var(--border); }
-.day-title-input:focus { border-color: var(--accent); background: var(--surface); }
+.day-title-input:focus { border-color: var(--accent); }
 
-/* Resting state of the same title — a heading, not a form field */
+/* Resting state of the same title — a heading. Not interactive: the pencil
+   button is the only way in, so it must not look clickable. */
 .day-title-text {
-  width: auto;
   flex: 0 1 auto;
-  text-align: left;
-  font: inherit;
   font-weight: 650;
   color: var(--text);
   padding: 3px 6px;
   border: 1px solid transparent;
-  border-radius: 6px;
-  background: transparent;
-  box-shadow: none;
-  cursor: text;
 }
-.day-title-text:hover { border-color: var(--border); background: var(--surface-2); }
 
 /* Endpoint legend: icon + editable name, with a loop link toggle between */
 .map-legend-ends { gap: 8px; }

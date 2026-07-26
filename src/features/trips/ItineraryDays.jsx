@@ -48,49 +48,23 @@ function NoteBlock({ isEditing, draft, setDraft, onSave, onCancel, note, onAdd }
   );
 }
 
-// Off-route day title: static text until you ask to edit it, so it reads as a
-// heading rather than a form field you can disturb by accident. Module scope for
-// the same reason as NoteBlock.
-function DayTitle({ value, placeholder, onSave }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value || "");
-
-  const commit = () => {
-    onSave((draft || "").trim());
-    setEditing(false);
-  };
-
-  if (editing) {
-    return (
-      <input
-        className="day-title-input"
-        autoFocus
-        value={draft}
-        placeholder={placeholder}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") commit();
-          if (e.key === "Escape") {
-            setDraft(value || "");
-            setEditing(false);
-          }
-        }}
-      />
-    );
+// Off-route day title. Plain text unless the card is in edit mode — which only
+// the pencil button opens — so it reads as a heading and can't be disturbed by a
+// stray click. Module scope for the same reason as NoteBlock.
+function DayTitle({ value, placeholder, editing, onChange, onDone }) {
+  if (!editing) {
+    return <span className="day-title-text">{value || placeholder}</span>;
   }
   return (
-    <button
-      type="button"
-      className="day-title-text"
-      title="Rename this day"
-      onClick={() => {
-        setDraft(value || "");
-        setEditing(true);
+    <input
+      className="day-title-input"
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onDone?.();
       }}
-    >
-      {value || placeholder}
-    </button>
+    />
   );
 }
 
@@ -231,7 +205,9 @@ export default function ItineraryDays({
                     <DayTitle
                       value={x.title}
                       placeholder="Off-route day"
-                      onSave={(v) => onUpdateExtraDay?.(x.id, { title: v || "Off-route day" })}
+                      editing={editing === key}
+                      onChange={(v) => onUpdateExtraDay?.(x.id, { title: v })}
+                      onDone={() => onUpdateExtraDay?.(x.id, { title: x.title.trim() || "Off-route day" })}
                     />
                     <span className="cp-flag off-route-badge">off-route</span>
                   </div>
@@ -240,8 +216,8 @@ export default function ItineraryDays({
                       <button
                         type="button"
                         className="icon-btn"
-                        title="Edit description"
-                        aria-label="Edit description"
+                        title="Edit title & description"
+                        aria-label="Edit title and description"
                         onClick={() => startEdit(key, x.note || "")}
                       >
                         <PencilIcon />
