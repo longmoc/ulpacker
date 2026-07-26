@@ -78,6 +78,8 @@ final class TrailRecorder {
                     allowsBackgroundUpdates: config.allowsBackgroundUpdates
                 )
             )
+            PowerMonitor.shared.start()
+            recordPower(force: true)
             location.startUpdates()
             status = .recording
         } catch {
@@ -88,6 +90,8 @@ final class TrailRecorder {
     func resumeCrashedSession(_ journal: ActivityJournal) {
         do {
             session = try RecordingSession.resume(journal: journal, package: package, index: index)
+            PowerMonitor.shared.start()
+            recordPower(force: true)
             location.startUpdates()
             status = .recording
         } catch {
@@ -117,16 +121,34 @@ final class TrailRecorder {
         guard let session else { return }
         do {
             location.stopUpdates()
+            // One last reading before the session closes, so the final stretch
+            // is inside the measurement rather than after it.
+            recordPower(force: true)
             status = .finished(try session.finish())
+            PowerMonitor.shared.stop()
             self.session = nil
         } catch {
             status = .failed(String(describing: error))
         }
     }
 
+    /// Throw the walk away — an accidental start, not a finished day.
+    ///
+    /// Only ever reached through a button that says so. "Start another" used to
+    /// call this, which meant the tap that cleared the summary also deleted the
+    /// walk it was summarising.
     func discard() {
         location.stopUpdates()
+        PowerMonitor.shared.stop()
         try? session?.discard()
+        session = nil
+        progress = nil
+        status = .idle
+    }
+
+    /// Clear the finished summary and go back to idle, keeping the walk.
+    func clearFinished() {
+        guard case .finished = status else { return }
         session = nil
         progress = nil
         status = .idle
@@ -140,6 +162,13 @@ final class TrailRecorder {
 
     func clearOffRouteAlert() {
         pendingOffRouteAlert = false
+    }
+
+    /// Offer the session a battery reading. Throttled inside the monitor, so
+    /// calling it on every fix costs a property read and nothing else.
+    private func recordPower(force: Bool = false) {
+        guard let sample = PowerMonitor.shared.sample(force: force) else { return }
+        session?.receive(power: sample)
     }
 
     // MARK: - Fixes
@@ -160,6 +189,7 @@ final class TrailRecorder {
                 bearing: fix.course >= 0 ? fix.course : nil
             )
             progress = update
+            recordPower()
             if update?.shouldAlertOffRoute == true { pendingOffRouteAlert = true }
         } catch {
             // A write failure mid-walk is worth surfacing, but not worth

@@ -78,6 +78,7 @@ public final class RecordingSession {
     private let configuration: Configuration
 
     private var buffer: [ActivityPackage.Fix] = []
+    private var powerBuffer: [Power.Sample] = []
     private var lastFlushAt: Date
     private var nextSequence: Int
     private var totalFixes: Int
@@ -233,10 +234,23 @@ public final class RecordingSession {
         return progress
     }
 
+    /// Record a battery reading.
+    ///
+    /// Buffered like a fix and written on the same flush, so a nine-day
+    /// measurement costs no wakeups of its own. The caller decides how often to
+    /// offer one; this only decides when it reaches the disk.
+    public func receive(power sample: Power.Sample) {
+        powerBuffer.append(sample)
+    }
+
     /// Commit whatever is buffered. Called on the flush schedule, and by the
     /// app whenever it is about to lose control — backgrounding, termination
     /// warnings, low power.
     public func flush(at time: Date = Date()) throws {
+        if !powerBuffer.isEmpty {
+            try journal.appendPower(contentsOf: powerBuffer)
+            powerBuffer.removeAll(keepingCapacity: true)
+        }
         guard !buffer.isEmpty else { return }
         try journal.append(contentsOf: buffer)
         buffer.removeAll(keepingCapacity: true)
@@ -265,12 +279,17 @@ public final class RecordingSession {
     public func finish(at time: Date = Date()) throws -> ActivityPackage {
         try flush(at: time)
         state = .finished
-        return try journal.makePackage(
+        let package = try journal.makePackage(
             status: recoveredFromCrash ? .recovered : .finished,
             endedAt: time,
             maxAccuracyM: configuration.matcher.maxAccuracyM,
             recoveredFromCrash: recoveredFromCrash
         )
+        // Committed here, not left to the caller. Handing the package back and
+        // trusting the screen to keep it is how a finished walk used to end up
+        // existing only in memory.
+        try journal.commit(package)
+        return package
     }
 
     /// Discard the session and its journal — an accidental start, or a walk the

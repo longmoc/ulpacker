@@ -53,11 +53,18 @@ public struct ActivityJournal: Sendable {
 
     private var sessionURL: URL { directory.appendingPathComponent("session.json") }
     private var fixesURL: URL { directory.appendingPathComponent("fixes.ndjson") }
+    private var powerURL: URL { directory.appendingPathComponent("power.ndjson") }
+    /// Written when the walk is closed out. Its presence is what separates a
+    /// finished walk from one the app died in the middle of — the difference
+    /// between "here is your day" and "shall I carry on?".
+    private var activityURL: URL { directory.appendingPathComponent("activity.json") }
 
     // Fractional seconds on both sides — see ISO8601 for why the built-in
     // strategy is unusable here.
     private static func encoder() -> JSONEncoder { ISO8601.encoder() }
     private static func decoder() -> JSONDecoder { ISO8601.decoder() }
+    private func encoder() -> JSONEncoder { Self.encoder() }
+    private func decoder() -> JSONDecoder { Self.decoder() }
 
     // MARK: - Lifecycle
 
@@ -87,6 +94,28 @@ public struct ActivityJournal: Sendable {
         return ActivityJournal(directory: directory, session: session)
     }
 
+    /// Whether this walk was closed out properly.
+    public var isFinished: Bool {
+        FileManager.default.fileExists(atPath: activityURL.path)
+    }
+
+    /// The finished walk, if there is one.
+    public func finishedPackage() throws -> ActivityPackage? {
+        guard isFinished else { return nil }
+        return try decoder().decode(ActivityPackage.self, from: Data(contentsOf: activityURL))
+    }
+
+    /// Commit the finished walk beside its journal.
+    ///
+    /// Written before the recorder lets go of the session, so the walk survives
+    /// everything from here on. It used to survive nothing: `finish()` returned
+    /// the package to the screen, the screen printed one line, and the next tap
+    /// deleted the directory. Nine days of walking could be lost to a button
+    /// labelled "Start another".
+    public func commit(_ package: ActivityPackage) throws {
+        try encoder().encode(package).write(to: activityURL, options: .atomic)
+    }
+
     /// Every session directory under `root`, oldest first. A non-empty result
     /// at launch means a previous run did not finish cleanly.
     public static func pendingSessions(in root: URL) throws -> [ActivityJournal] {
@@ -98,7 +127,24 @@ public struct ActivityJournal: Sendable {
         )
         return entries
             .compactMap { try? open(directory: $0) }
+            // A finished walk is not an interruption. Without this the app
+            // offered to continue a walk it had already closed, every launch,
+            // for as long as the directory sat there.
+            .filter { !$0.isFinished }
             .sorted { $0.session.startedAt < $1.session.startedAt }
+    }
+
+    /// Every finished walk under `root`, newest first — the activity history.
+    public static func finishedActivities(in root: URL) throws -> [ActivityPackage] {
+        guard FileManager.default.fileExists(atPath: root.path) else { return [] }
+        let entries = try FileManager.default.contentsOfDirectory(
+            at: root, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        )
+        return entries
+            .compactMap { try? open(directory: $0) }
+            .compactMap { try? $0.finishedPackage() }
+            .compactMap { $0 }
+            .sorted { $0.startedAt > $1.startedAt }
     }
 
     // MARK: - Append
@@ -150,6 +196,36 @@ public struct ActivityJournal: Sendable {
         return data
             .split(separator: 0x0A, omittingEmptySubsequences: true)
             .compactMap { try? decoder.decode(ActivityPackage.Fix.self, from: Data($0)) }
+    }
+
+    /// Append battery samples, in the same open/write/close shape as fixes and
+    /// on the same schedule, so measuring the battery never costs a wakeup of
+    /// its own. Measurement that changes what it measures is worth nothing.
+    public func appendPower(contentsOf samples: [Power.Sample]) throws {
+        guard !samples.isEmpty else { return }
+        let encoder = Self.encoder()
+        var buffer = Data()
+        for sample in samples {
+            buffer.append(try encoder.encode(sample))
+            buffer.append(0x0A)
+        }
+        if !FileManager.default.fileExists(atPath: powerURL.path) {
+            FileManager.default.createFile(atPath: powerURL.path, contents: nil)
+        }
+        let handle = try FileHandle(forWritingTo: powerURL)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        try handle.write(contentsOf: buffer)
+    }
+
+    public func readPowerSamples() throws -> [Power.Sample] {
+        guard FileManager.default.fileExists(atPath: powerURL.path) else { return [] }
+        let data = try Data(contentsOf: powerURL)
+        guard !data.isEmpty else { return [] }
+        let decoder = Self.decoder()
+        return data
+            .split(separator: 0x0A, omittingEmptySubsequences: true)
+            .compactMap { try? decoder.decode(Power.Sample.self, from: Data($0)) }
     }
 
     /// The highest sequence number safely on disk, or nil for an empty journal.
@@ -210,7 +286,8 @@ public struct ActivityJournal: Sendable {
                 maxGapM: Int(maxGapM.rounded()),
                 rejectedFixCount: fixes.count - usable.count,
                 recoveredFromCrash: recoveredFromCrash
-            )
+            ),
+            power: Power.report(for: (try? readPowerSamples()) ?? [])
         )
     }
 

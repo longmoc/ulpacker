@@ -58,6 +58,7 @@ private struct TripRow: View {
 
 struct TripDetailView: View {
     let package: TripPackage
+    @State private var store = ActivityStore()
 
     var body: some View {
         List {
@@ -79,6 +80,19 @@ struct TripDetailView: View {
                 } label: {
                     Label("Start trail", systemImage: "figure.hiking")
                 }
+                NavigationLink {
+                    ActivityListView(package: package)
+                } label: {
+                    LabeledContent {
+                        Text("\(store.activities(for: package).count)")
+                    } label: {
+                        Label("Recorded walks", systemImage: "clock.arrow.circlepath")
+                    }
+                }
+            }
+
+            if let report = store.batteryRate(for: package) {
+                BatteryForecastView(package: package, report: report)
             }
 
             Section("Itinerary") {
@@ -106,6 +120,7 @@ struct TripDetailView: View {
         }
         .navigationTitle(package.trip.name)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { store.reload() }
     }
 
 }

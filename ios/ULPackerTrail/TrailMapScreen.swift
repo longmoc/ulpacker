@@ -188,6 +188,17 @@ struct TrailMapScreen: View {
         }
     }
 
+    /// Distance, and what it cost. The battery line only appears once the
+    /// measurement is long enough to mean something — a first number that is
+    /// wrong is the one that gets remembered.
+    private func finishedSummary(_ activity: ActivityPackage) -> String {
+        var line = "\(km(Double(activity.stats.distanceM))) saved · \(activity.stats.fixCount) fixes"
+        if let power = activity.power, power.isReliable, let rate = power.percentPerHour {
+            line += String(format: "\n%.1f%% battery per hour", rate)
+        }
+        return line
+    }
+
     private func readout(_ label: String, _ value: String) -> some View {
         VStack(spacing: 3) {
             Text(label).font(.caption).foregroundStyle(.secondary)
@@ -215,10 +226,11 @@ struct TrailMapScreen: View {
                 }
             case .finished(let activity):
                 VStack(spacing: 8) {
-                    Text("\(km(Double(activity.stats.distanceM))) recorded · \(activity.stats.fixCount) fixes")
+                    Text(finishedSummary(activity))
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                    bigButton("Start another", tint: .brand) { recorder.discard() }
+                        .foregroundStyle(Color.subtle)
+                        .multilineTextAlignment(.center)
+                    bigButton("Done", tint: .brand) { recorder.clearFinished() }
                 }
             case .failed(let message):
                 VStack(spacing: 8) {

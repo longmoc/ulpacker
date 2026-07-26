@@ -28,6 +28,12 @@ public struct ActivityPackage: Codable, Sendable, Equatable {
     public let fixes: [Fix]
     public let stats: Stats
     public let diagnostics: Diagnostics
+    /// What the walk cost the battery, when it was measured.
+    ///
+    /// Optional so an activity recorded before this existed still decodes, and
+    /// so a session too short to say anything says nothing rather than a
+    /// number it cannot support.
+    public let power: Power.Report?
 
     public enum Status: String, Codable, Sendable {
         case recording
