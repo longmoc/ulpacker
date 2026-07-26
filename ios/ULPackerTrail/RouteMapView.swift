@@ -19,6 +19,8 @@ struct RouteMapView: UIViewRepresentable {
     /// Where along the route the walker is, used to colour progress.
     var routeDistanceM: Double?
     var followsPosition: Bool
+    /// Called when a checkpoint pin is tapped.
+    var onSelectCheckpoint: ((TripPackage.Checkpoint) -> Void)?
 
     func makeUIView(context: Context) -> MLNMapView {
         let mapView = MLNMapView(frame: .zero)
@@ -30,6 +32,20 @@ struct RouteMapView: UIViewRepresentable {
         mapView.delegate = context.coordinator
         mapView.showsUserLocation = false // we draw our own, from recorded fixes
         context.coordinator.mapView = mapView
+
+        // Tapping a checkpoint is how its note gets read, and some of those
+        // notes are the reason the checkpoint exists — a refuge that needs
+        // booking, a footbridge that washes out. A pin you cannot open is
+        // decoration.
+        let tap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleTap(_:))
+        )
+        // Let the map keep its own gestures; ours only claims a hit on a pin.
+        for existing in mapView.gestureRecognizers ?? [] where existing is UITapGestureRecognizer {
+            tap.require(toFail: existing)
+        }
+        mapView.addGestureRecognizer(tap)
         return mapView
     }
 
@@ -75,6 +91,25 @@ struct RouteMapView: UIViewRepresentable {
 
         init(parent: RouteMapView) {
             self.parent = parent
+        }
+
+        // MARK: - Interaction
+
+        /// Which layers a tap may hit, filled in as the pin layers are built.
+        private var pinLayerIDs: Set<String> = []
+
+        @MainActor @objc func handleTap(_ recognizer: UITapGestureRecognizer) {
+            guard let mapView, !pinLayerIDs.isEmpty else { return }
+            let point = recognizer.location(in: mapView)
+            // A generous box, not a point: these get tapped with cold hands,
+            // through gloves, on a moving path.
+            let box = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
+            let hits = mapView.visibleFeatures(in: box, styleLayerIdentifiers: pinLayerIDs)
+
+            guard let name = hits.compactMap({ $0.attribute(forKey: "name") as? String }).first,
+                  let checkpoint = parent.package.checkpoints.first(where: { $0.displayName == name })
+            else { return }
+            parent.onSelectCheckpoint?(checkpoint)
         }
 
         // MARK: - Style
@@ -187,11 +222,12 @@ struct RouteMapView: UIViewRepresentable {
                     identifier: "checkpoint-pins-\(kind.rawValue)", source: source
                 )
                 pins.iconImageName = NSExpression(forConstantValue: "cp-\(kind.rawValue)")
-                pins.iconScale = NSExpression(forConstantValue: kind.isMajor ? 0.5 : 0.34)
+                pins.iconScale = NSExpression(forConstantValue: kind.isMajor ? 0.72 : 0.58)
                 // Sleeping places must never be dropped by collision: they are
                 // what the day is planned around. The rest may yield.
                 pins.iconAllowsOverlap = NSExpression(forConstantValue: kind.isMajor)
                 style.addLayer(pins)
+                pinLayerIDs.insert(pins.identifier)
 
                 // Label only the places worth naming. Fifty-six labels on a
                 // phone is noise; the icons already say what the rest are.

@@ -15,6 +15,9 @@ struct TrailMapScreen: View {
     @State private var recorder: TrailRecorder
     @State private var recovery: ActivityJournal?
     @State private var followsPosition = true
+    @State private var panelDetent: TrailInfoPanel.Detent = .collapsed
+    @State private var panelTab: TrailInfoPanel.Tab = .profile
+    @State private var selectedCheckpoint: TripPackage.Checkpoint?
     private let autoStart: Bool
 
     init(package: TripPackage, autoStart: Bool = false) {
@@ -65,7 +68,16 @@ struct TrailMapScreen: View {
                 package: package,
                 position: currentCoordinate,
                 routeDistanceM: recorder.progress?.routeDistanceM,
-                followsPosition: followsPosition
+                followsPosition: followsPosition,
+                onSelectCheckpoint: { checkpoint in
+                    // Opening the panel on the tapped stop is the whole point
+                    // of the tap: the note is what the walker came for.
+                    selectedCheckpoint = checkpoint
+                    panelTab = .stops
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                        panelDetent = .expanded
+                    }
+                }
             )
             .ignoresSafeArea(edges: .horizontal)
 
@@ -83,6 +95,16 @@ struct TrailMapScreen: View {
                 .accessibilityLabel(followsPosition ? "Stop following position" : "Follow position")
             }
             .padding(12)
+
+            // Over the map, never over the readouts: the live numbers must
+            // stay visible whatever the panel is doing.
+            TrailInfoPanel(
+                package: package,
+                routeDistanceM: recorder.progress?.routeDistanceM,
+                selected: $selectedCheckpoint,
+                detent: $panelDetent,
+                tab: $panelTab
+            )
 
             if let banner = statusBanner {
                 Text(banner.text)
@@ -110,53 +132,8 @@ struct TrailMapScreen: View {
             }
             .padding(.vertical, 12)
 
-            if let here = recorder.progress?.routeDistanceM {
-                Divider()
-                upcoming(from: here)
-            }
         }
         .background(.background)
-    }
-
-    /// The next few stops, not just the next one.
-    ///
-    /// "Water in 2 km" answers one question. Deciding whether to push on to the
-    /// refuge or stop at the bivouac needs to see several stops and the gaps
-    /// between them at once — which is the judgement actually being made late
-    /// in the day, and the reason the trip carries 56 checkpoints.
-    private func upcoming(from here: Double) -> some View {
-        VStack(spacing: 0) {
-            ForEach(package.upcomingCheckpoints(after: here), id: \.id) { checkpoint in
-                let distance = Double(checkpoint.routeDistanceM) - here
-                HStack(spacing: 10) {
-                    Image(systemName: checkpoint.checkpointKind.symbolName)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 26, height: 26)
-                        .background(Circle().fill(tint(for: checkpoint.checkpointKind)))
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(checkpoint.displayName)
-                            .font(.subheadline.weight(.medium))
-                            .lineLimit(1)
-                        if let ele = checkpoint.ele {
-                            Text("\(ele) m").font(.caption2).foregroundStyle(.secondary)
-                        }
-                    }
-                    Spacer(minLength: 8)
-                    VStack(alignment: .trailing, spacing: 1) {
-                        Text(km(distance))
-                            .font(.subheadline.weight(.semibold).monospacedDigit())
-                        if let eta = estimatedTime(to: distance) {
-                            Text(eta).font(.caption2).foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 7)
-                Divider().padding(.leading, 52)
-            }
-        }
     }
 
     private func tint(for kind: CheckpointKind) -> Color {
@@ -299,6 +276,18 @@ struct TrailMapScreen: View {
             switch action {
             case "pause": recorder.pause()
             case "finish": recorder.finish()
+            case "panelProfile":
+                panelTab = .profile
+                panelDetent = .medium
+            case "panelStops":
+                panelTab = .stops
+                panelDetent = .medium
+            case "panelNote":
+                // Opening a stop's note is what a tap on the map does; a
+                // headless run has no way to synthesise that tap.
+                panelTab = .stops
+                panelDetent = .expanded
+                selectedCheckpoint = package.checkpoints.first { !$0.note.isEmpty }
             default: break
             }
         }

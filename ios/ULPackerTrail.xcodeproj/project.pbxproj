@@ -200,13 +200,13 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ULPackerTrail-Info.plist";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ULPacker records your track and warns you if you leave the route, including while your screen is off.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ULPacker records your track and warns you if you leave the route, including while your screen is off.";
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.longmoc.ulpacker.trail;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -225,13 +225,13 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ULPackerTrail-Info.plist";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ULPacker records your track and warns you if you leave the route, including while your screen is off.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ULPacker records your track and warns you if you leave the route, including while your screen is off.";
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.longmoc.ulpacker.trail;
 				PRODUCT_NAME = "$(TARGET_NAME)";

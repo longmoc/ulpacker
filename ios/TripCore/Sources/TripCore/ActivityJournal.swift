@@ -216,7 +216,7 @@ public struct ActivityJournal: Sendable {
 
     /// Mirrors `haversine()` in trail.js, including its earth radius, so the
     /// two sides report the same distance for the same points.
-    static func haversine(_ aLat: Double, _ aLng: Double, _ bLat: Double, _ bLng: Double) -> Double {
+    public static func haversine(_ aLat: Double, _ aLng: Double, _ bLat: Double, _ bLng: Double) -> Double {
         let radius = 6_371_000.0
         let toRad = Double.pi / 180
         let dLat = (bLat - aLat) * toRad
