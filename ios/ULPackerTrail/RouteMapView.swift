@@ -147,6 +147,21 @@ struct RouteMapView: UIViewRepresentable {
                 let show = kinds.isEmpty || kinds.contains(kind)
                 style.layer(withIdentifier: "checkpoint-pins-\(kind.rawValue)")?.isVisible = show
             }
+            #if DEBUG
+            // Does hiding a layer free the symbols it was colliding with?
+            if ProcessInfo.processInfo.arguments.contains("-uiTestCountVisible") {
+                let view = mapView
+                let names = kinds.isEmpty ? "all" : kinds.map(\.rawValue).joined(separator: ",")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                    guard let view else { return }
+                    let mapView = view
+                    let ids = Set(CheckpointKind.allCases.map { "checkpoint-pins-\($0.rawValue)" })
+                    let drawn = mapView.visibleFeatures(in: mapView.bounds, styleLayerIdentifiers: ids)
+                    NSLog("ULPCOUNT filter=%@ drawn=%d", names, drawn.count)
+                }
+            }
+            #endif
+
             // Names live in their own per-checkpoint layers, so they have to be
             // hidden alongside the pin they belong to.
             for checkpoint in parent.package.checkpoints {

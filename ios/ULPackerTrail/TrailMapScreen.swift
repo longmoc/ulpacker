@@ -338,6 +338,13 @@ struct TrailMapScreen: View {
             case "panelProfile":
                 panelTab = .profile
                 panelDetent = .medium
+            case "filterCycle":
+                kindFilter = [.poi]
+                DispatchQueue.main.asyncAfter(deadline: .now() + 6) { kindFilter = [] }
+            case "filterPoi":
+                kindFilter = [.poi]
+            case "filterNone":
+                kindFilter = []
             case "panelStops":
                 panelTab = .stops
                 panelDetent = .medium
