@@ -374,6 +374,24 @@ struct RouteMatcherTests {
         ).offsetM > 200)
     }
 
+    @Test func routeBearingFollowsTheLineAhead() throws {
+        // Course-up rotation reads this, so it has to point along the route
+        // rather than at the next vertex.
+        let package = try Self.tmb()
+        let north = package.routeBearing(at: 0)
+        #expect(north != nil)
+        #expect((0...360).contains(north ?? -1))
+
+        // A straight west-to-east leg must read as due east.
+        let index = Self.denseStraightRoute()
+        let here = try #require(index.position(atRouteDistance: 100))
+        let ahead = try #require(index.position(atRouteDistance: 160))
+        let bearing = TripPackage.bearing(
+            fromLat: here.lat, fromLng: here.lng, toLat: ahead.lat, toLng: ahead.lng
+        )
+        #expect(abs(bearing - 90) < 2)
+    }
+
     @Test func doesNotEscapeTheModelForOrdinaryNoise() {
         // The counterweight: the escape hatch must stay shut for a normal walk,
         // or the progress prior stops protecting switchbacks and parallel paths.

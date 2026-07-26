@@ -18,7 +18,17 @@ struct RouteMapView: UIViewRepresentable {
     var position: CLLocationCoordinate2D?
     /// Where along the route the walker is, used to colour progress.
     var routeDistanceM: Double?
-    var followsPosition: Bool
+    /// How the camera behaves while recording.
+    enum FollowMode {
+        /// The map stays where it was panned.
+        case free
+        /// Centred on the walker, north up.
+        case northUp
+        /// Centred on the walker and turned so the route ahead points up.
+        case courseUp
+    }
+
+    var followMode: FollowMode
     /// Kinds to show. Empty means all, matching the web planner.
     var kindFilter: Set<CheckpointKind> = []
     /// Called when a checkpoint pin is tapped.
@@ -64,7 +74,7 @@ struct RouteMapView: UIViewRepresentable {
 
     func updateUIView(_ mapView: MLNMapView, context: Context) {
         context.coordinator.parent = self
-        context.coordinator.updatePosition(position, follow: followsPosition)
+        context.coordinator.updatePosition(position, mode: followMode)
         context.coordinator.applyFilter(kindFilter)
     }
 
@@ -147,7 +157,7 @@ struct RouteMapView: UIViewRepresentable {
             addPosition(to: style)
             zoomToRoute(mapView)
             didAddRoute = true
-            updatePosition(parent.position, follow: parent.followsPosition)
+            updatePosition(parent.position, mode: parent.followMode)
         }
 
         private func addRoute(to style: MLNStyle) {
@@ -355,6 +365,13 @@ struct RouteMapView: UIViewRepresentable {
         /// Replaces the dot whenever a bearing is known. Drawn large: this is
         /// the one thing on the map that answers "am I facing the right way",
         /// and it competes with a busy topo basemap for attention.
+        /// Smallest angle between two bearings, in degrees.
+        static func angleDelta(_ a: Double, _ b: Double) -> Double {
+            var d = abs(a - b).truncatingRemainder(dividingBy: 360)
+            if d > 180 { d = 360 - d }
+            return d
+        }
+
         private static func headingImage() -> UIImage {
             let size = CGSize(width: 56, height: 56)
             return UIGraphicsImageRenderer(size: size).image { _ in
@@ -411,7 +428,19 @@ struct RouteMapView: UIViewRepresentable {
         /// the walker the moment they tapped a checkpoint to look at it.
         private var lastCentredOn: CLLocationCoordinate2D?
 
-        func updatePosition(_ coordinate: CLLocationCoordinate2D?, follow: Bool) {
+        /// The heading the camera was last turned to, so course-up only turns
+        /// when the route has genuinely changed direction.
+        private var lastCourse: Double?
+
+        /// How far the route must swing before the map follows it.
+        ///
+        /// Measured on the real Tour du Mont Blanc: turning on every fix means
+        /// 267 camera moves an hour, which is constant and nauseating to read.
+        /// At 20° it is 47 an hour — about one every 75 seconds, which is what
+        /// a walker actually experiences as "the map is pointing my way".
+        private static let courseChangeThreshold = 20.0
+
+        func updatePosition(_ coordinate: CLLocationCoordinate2D?, mode: FollowMode) {
             guard didAddRoute,
                   let style = mapView?.style,
                   let source = style.source(withIdentifier: Self.positionSourceID) as? MLNShapeSource
@@ -433,14 +462,40 @@ struct RouteMapView: UIViewRepresentable {
             style.layer(withIdentifier: "position-dot")?.isVisible = bearing == nil
             style.layer(withIdentifier: "position-heading")?.isVisible = bearing != nil
 
-            guard follow else { return }
+            guard mode != .free, let mapView else { return }
             let moved = lastCentredOn.map {
                 abs($0.latitude - coordinate.latitude) > 1e-7
                     || abs($0.longitude - coordinate.longitude) > 1e-7
             } ?? true
-            guard moved, let mapView else { return }
+
+            // Course-up turns only on a real change of direction. Switchbacks
+            // make the bearing wander by a few degrees constantly, and a map
+            // that answers every one of them is unreadable.
+            var direction = mapView.direction
+            var turning = false
+            if mode == .courseUp, let bearing {
+                let swing = lastCourse.map { Self.angleDelta($0, bearing) } ?? 360
+                if swing >= Self.courseChangeThreshold {
+                    direction = bearing
+                    lastCourse = bearing
+                    turning = true
+                }
+            } else if mode == .northUp, mapView.direction != 0 {
+                direction = 0
+                lastCourse = nil
+                turning = true
+            }
+
+            guard moved || turning else { return }
             lastCentredOn = coordinate
-            mapView.setCenter(coordinate, zoomLevel: max(mapView.zoomLevel, 13), animated: true)
+
+            let camera = MLNMapCamera(
+                lookingAtCenter: coordinate,
+                altitude: mapView.camera.altitude,
+                pitch: 0,
+                heading: direction
+            )
+            mapView.setCamera(camera, withDuration: 0.45, animationTimingFunction: nil)
         }
 
         /// Heading taken from the line ahead, using the cached index.

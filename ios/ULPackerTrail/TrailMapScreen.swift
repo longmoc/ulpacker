@@ -14,7 +14,7 @@ struct TrailMapScreen: View {
     let package: TripPackage
     @State private var recorder: TrailRecorder
     @State private var recovery: ActivityJournal?
-    @State private var followsPosition = true
+    @State private var followMode: RouteMapView.FollowMode = .northUp
     @State private var panelDetent: TrailInfoPanel.Detent = .collapsed
     @State private var panelTab: TrailInfoPanel.Tab = .profile
     @State private var kindFilter: Set<CheckpointKind> = []
@@ -71,7 +71,7 @@ struct TrailMapScreen: View {
                 package: package,
                 position: currentCoordinate,
                 routeDistanceM: recorder.progress?.routeDistanceM,
-                followsPosition: followsPosition,
+                followMode: followMode,
                 kindFilter: kindFilter,
                 onSelectCheckpoint: { checkpoint, point in
                     // Answer where the walker pointed. Sending them to a panel
@@ -84,24 +84,29 @@ struct TrailMapScreen: View {
             )
             .ignoresSafeArea(edges: .horizontal)
 
-            // Follow-position toggle. On, the map moves with each fix; off,
-            // it stays where it was panned, so looking ahead at the next col
-            // does not get snatched back.
+            // Camera mode, cycled the way every map app does it: free →
+            // centred → centred and turned the way you are walking. One button
+            // rather than three, because it is pressed one-handed on the move.
             //
-            // Bottom-trailing, not top: the compass lives top-right and this
-            // was sitting on top of it. Down here it is also where a thumb
-            // already is, which is the hand that presses it while walking.
+            // Bottom-trailing, above the attribution: the compass lives
+            // top-right and this is where a thumb already is.
             Button {
-                followsPosition.toggle()
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    followMode = switch followMode {
+                    case .free: .northUp
+                    case .northUp: .courseUp
+                    case .courseUp: .free
+                    }
+                }
             } label: {
-                Image(systemName: followsPosition ? "location.fill" : "location")
+                Image(systemName: followModeIcon)
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(followsPosition ? Color.indigo : Color.primary)
+                    .foregroundStyle(followMode == .free ? Color.primary : Color.indigo)
                     .frame(width: 44, height: 44)
                     .background(.regularMaterial, in: Circle())
                     .overlay(Circle().stroke(Color.primary.opacity(0.08), lineWidth: 1))
             }
-            .accessibilityLabel(followsPosition ? "Stop following position" : "Follow position")
+            .accessibilityLabel(followModeLabel)
             .padding(.trailing, 12)
             // Above both the collapsed panel handle and the attribution
             // button, which must stay tappable for the map licence.
@@ -234,6 +239,22 @@ struct TrailMapScreen: View {
         }
         .buttonStyle(.borderedProminent)
         .tint(tint)
+    }
+
+    private var followModeIcon: String {
+        switch followMode {
+        case .free: "location"
+        case .northUp: "location.fill"
+        case .courseUp: "location.north.line.fill"
+        }
+    }
+
+    private var followModeLabel: String {
+        switch followMode {
+        case .free: "Follow my position"
+        case .northUp: "Turn the map the way I am walking"
+        case .courseUp: "Stop following my position"
+        }
     }
 
     // MARK: - Derived
