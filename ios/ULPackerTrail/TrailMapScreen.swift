@@ -17,6 +17,7 @@ struct TrailMapScreen: View {
     @State private var followsPosition = true
     @State private var panelDetent: TrailInfoPanel.Detent = .collapsed
     @State private var panelTab: TrailInfoPanel.Tab = .profile
+    @State private var kindFilter: Set<CheckpointKind> = []
     @State private var selectedCheckpoint: TripPackage.Checkpoint?
     /// The pin tapped on the map, and where it is on screen.
     @State private var callout: (checkpoint: TripPackage.Checkpoint, at: CGPoint)?
@@ -71,6 +72,7 @@ struct TrailMapScreen: View {
                 position: currentCoordinate,
                 routeDistanceM: recorder.progress?.routeDistanceM,
                 followsPosition: followsPosition,
+                kindFilter: kindFilter,
                 onSelectCheckpoint: { checkpoint, point in
                     // Answer where the walker pointed. Sending them to a panel
                     // instead would make them look away from the very thing
@@ -121,7 +123,8 @@ struct TrailMapScreen: View {
                 routeDistanceM: recorder.progress?.routeDistanceM,
                 selected: $selectedCheckpoint,
                 detent: $panelDetent,
-                tab: $panelTab
+                tab: $panelTab,
+                kindFilter: $kindFilter
             )
 
             if let banner = statusBanner {

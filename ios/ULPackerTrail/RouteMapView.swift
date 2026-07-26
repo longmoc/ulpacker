@@ -19,6 +19,8 @@ struct RouteMapView: UIViewRepresentable {
     /// Where along the route the walker is, used to colour progress.
     var routeDistanceM: Double?
     var followsPosition: Bool
+    /// Kinds to show. Empty means all, matching the web planner.
+    var kindFilter: Set<CheckpointKind> = []
     /// Called when a checkpoint pin is tapped.
     var onSelectCheckpoint: ((TripPackage.Checkpoint, CGPoint) -> Void)?
 
@@ -52,6 +54,7 @@ struct RouteMapView: UIViewRepresentable {
     func updateUIView(_ mapView: MLNMapView, context: Context) {
         context.coordinator.parent = self
         context.coordinator.updatePosition(position, follow: followsPosition)
+        context.coordinator.applyFilter(kindFilter)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -91,6 +94,18 @@ struct RouteMapView: UIViewRepresentable {
 
         init(parent: RouteMapView) {
             self.parent = parent
+        }
+
+        /// Show only the kinds asked for. One layer per kind makes this a
+        /// visibility toggle rather than a rebuild — no source is touched, so
+        /// filtering costs nothing while walking.
+        func applyFilter(_ kinds: Set<CheckpointKind>) {
+            guard let style = mapView?.style else { return }
+            for kind in CheckpointKind.allCases {
+                let show = kinds.isEmpty || kinds.contains(kind)
+                style.layer(withIdentifier: "checkpoint-pins-\(kind.rawValue)")?.isVisible = show
+                style.layer(withIdentifier: "checkpoint-labels-\(kind.rawValue)")?.isVisible = show
+            }
         }
 
         // MARK: - Interaction
@@ -222,7 +237,16 @@ struct RouteMapView: UIViewRepresentable {
                     identifier: "checkpoint-pins-\(kind.rawValue)", source: source
                 )
                 pins.iconImageName = NSExpression(forConstantValue: "cp-\(kind.rawValue)")
-                pins.iconScale = NSExpression(forConstantValue: kind.isMajor ? 0.72 : 0.58)
+                // Grows with zoom: at trip scale these are marks, and close in
+                // they are things to read and press.
+                pins.iconScale = NSExpression(
+                    format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
+                    [
+                        10: kind.isMajor ? 0.62 : 0.52,
+                        14: kind.isMajor ? 0.85 : 0.72,
+                        16: kind.isMajor ? 1.15 : 0.98
+                    ]
+                )
                 // Sleeping places must never be dropped by collision: they are
                 // what the day is planned around. The rest may yield.
                 pins.iconAllowsOverlap = NSExpression(forConstantValue: kind.isMajor)
@@ -315,24 +339,28 @@ struct RouteMapView: UIViewRepresentable {
             }
         }
 
-        /// The walker's position, as a disc with a heading pointer.
+        /// The walker, as an arrow pointing the way the route runs.
+        ///
+        /// Replaces the dot whenever a bearing is known. Drawn large: this is
+        /// the one thing on the map that answers "am I facing the right way",
+        /// and it competes with a busy topo basemap for attention.
         private static func headingImage() -> UIImage {
-            let size = CGSize(width: 40, height: 40)
+            let size = CGSize(width: 56, height: 56)
             return UIGraphicsImageRenderer(size: size).image { _ in
-                // A triangle above the dot: which way the route goes from here,
-                // taken from the line rather than the compass, because a phone
-                // in a hand swings about and the path does not.
                 let path = UIBezierPath()
-                path.move(to: CGPoint(x: 20, y: 3))
-                path.addLine(to: CGPoint(x: 27, y: 16))
-                path.addLine(to: CGPoint(x: 20, y: 13))
-                path.addLine(to: CGPoint(x: 13, y: 16))
+                path.move(to: CGPoint(x: 28, y: 6))       // tip
+                path.addLine(to: CGPoint(x: 43, y: 44))   // right flank
+                path.addLine(to: CGPoint(x: 28, y: 35))   // notch
+                path.addLine(to: CGPoint(x: 13, y: 44))   // left flank
                 path.close()
-                UIColor.systemBlue.setFill()
+
                 UIColor.white.setStroke()
-                path.lineWidth = 2
-                path.fill()
+                path.lineWidth = 5
+                path.lineJoinStyle = .round
                 path.stroke()
+
+                UIColor.systemBlue.setFill()
+                path.fill()
             }
         }
 
@@ -341,34 +369,36 @@ struct RouteMapView: UIViewRepresentable {
             style.addSource(source)
 
             let halo = MLNCircleStyleLayer(identifier: "position-halo", source: source)
-            halo.circleRadius = NSExpression(forConstantValue: 14)
+            halo.circleRadius = NSExpression(forConstantValue: 16)
             halo.circleColor = NSExpression(forConstantValue: UIColor.systemBlue)
-            halo.circleOpacity = NSExpression(forConstantValue: 0.2)
+            halo.circleOpacity = NSExpression(forConstantValue: 0.18)
             style.addLayer(halo)
 
+            // Shown only when the route gives no bearing — see updatePosition.
             let dot = MLNCircleStyleLayer(identifier: "position-dot", source: source)
-            dot.circleRadius = NSExpression(forConstantValue: 7)
+            dot.circleRadius = NSExpression(forConstantValue: 8)
             dot.circleColor = NSExpression(forConstantValue: UIColor.systemBlue)
             dot.circleStrokeColor = NSExpression(forConstantValue: UIColor.white)
-            dot.circleStrokeWidth = NSExpression(forConstantValue: 2.5)
+            dot.circleStrokeWidth = NSExpression(forConstantValue: 3)
             style.addLayer(dot)
 
-            // Which way the route runs from here. Rotated per fix from the
-            // `bearing` attribute; hidden when there is no bearing to show
-            // rather than pointing north by default, because a wrong arrow is
-            // worse than none.
             style.setImage(Self.headingImage(), forName: "position-heading")
             let heading = MLNSymbolStyleLayer(identifier: "position-heading", source: source)
             heading.iconImageName = NSExpression(forConstantValue: "position-heading")
             heading.iconRotation = NSExpression(forKeyPath: "bearing")
             heading.iconRotationAlignment = NSExpression(forConstantValue: "map")
             heading.iconAllowsOverlap = NSExpression(forConstantValue: true)
-            heading.iconScale = NSExpression(forConstantValue: 0.85)
-            heading.predicate = NSPredicate(format: "hasBearing == YES")
+            heading.iconScale = NSExpression(forConstantValue: 1.25)
             style.addLayer(heading)
         }
 
         // MARK: - Updates
+
+        /// The coordinate the map was last recentred on. SwiftUI calls
+        /// `updateUIView` for *any* state change — opening a callout, switching
+        /// a panel tab — and recentring on each one snatched the map back to
+        /// the walker the moment they tapped a checkpoint to look at it.
+        private var lastCentredOn: CLLocationCoordinate2D?
 
         func updatePosition(_ coordinate: CLLocationCoordinate2D?, follow: Bool) {
             guard didAddRoute,
@@ -383,18 +413,30 @@ struct RouteMapView: UIViewRepresentable {
             let feature = MLNPointFeature()
             feature.coordinate = coordinate
             let bearing = parent.routeDistanceM.flatMap { bearingAlongRoute(at: $0) }
-            feature.attributes = [
-                "bearing": bearing ?? 0,
-                "hasBearing": bearing != nil
-            ]
+            feature.attributes = ["bearing": bearing ?? 0]
             source.shape = feature
 
-            if follow, let mapView {
-                mapView.setCenter(coordinate, zoomLevel: max(mapView.zoomLevel, 13), animated: true)
-            }
+            // One marker, not two. An arrow when the route says which way to
+            // face, a plain dot when it does not — both at once read as clutter
+            // and neither is clearer for it.
+            style.layer(withIdentifier: "position-dot")?.isVisible = bearing == nil
+            style.layer(withIdentifier: "position-heading")?.isVisible = bearing != nil
+
+            guard follow else { return }
+            let moved = lastCentredOn.map {
+                abs($0.latitude - coordinate.latitude) > 1e-7
+                    || abs($0.longitude - coordinate.longitude) > 1e-7
+            } ?? true
+            guard moved, let mapView else { return }
+            lastCentredOn = coordinate
+            mapView.setCenter(coordinate, zoomLevel: max(mapView.zoomLevel, 13), animated: true)
         }
 
         /// Heading taken from the line ahead, using the cached index.
+        ///
+        /// From the route rather than the compass: a phone in a hand swings
+        /// about, while the path does not, and "which way does the trail go
+        /// from here" is the question being asked.
         private func bearingAlongRoute(at routeDistanceM: Double) -> Double? {
             guard let here = index.position(atRouteDistance: routeDistanceM),
                   routeDistanceM + 1 < index.totalM,

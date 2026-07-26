@@ -37,6 +37,8 @@ struct TrailInfoPanel: View {
     @Binding var selected: TripPackage.Checkpoint?
     @Binding var detent: Detent
     @Binding var tab: Tab
+    /// Kinds to show. Empty means all, matching the web planner's chips.
+    @Binding var kindFilter: Set<CheckpointKind>
 
     @State private var dragOffset: CGFloat = 0
 
@@ -116,7 +118,10 @@ struct TrailInfoPanel: View {
     // MARK: - Stops
 
     private var stopsList: some View {
-        ScrollView {
+        VStack(spacing: 0) {
+            kindFilterBar
+            Divider()
+            ScrollView {
             LazyVStack(spacing: 0) {
                 if let selected {
                     CheckpointDetail(checkpoint: selected, from: routeDistanceM) {
@@ -136,16 +141,77 @@ struct TrailInfoPanel: View {
                     Divider().padding(.leading, 54)
                 }
             }
+            }
         }
+    }
+
+    /// Additive chips, the same rule as the web planner: each toggles its own
+    /// kind and an empty selection means All. Fifty-six stops is a lot to read
+    /// when the only question is "where is the next water".
+    private var kindFilterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                // Indigo, not grey: white on secondary is barely legible, and
+                // "All" is the state the filter spends most of its life in.
+                chip(label: "All", active: kindFilter.isEmpty, tint: .indigo) {
+                    kindFilter.removeAll()
+                }
+                ForEach(presentKinds, id: \.self) { kind in
+                    chip(
+                        label: kind.label,
+                        active: kindFilter.contains(kind),
+                        tint: ElevationProfileView.tint(for: kind),
+                        symbol: kind.symbolName
+                    ) {
+                        if kindFilter.contains(kind) { kindFilter.remove(kind) }
+                        else { kindFilter.insert(kind) }
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+    }
+
+    /// Only kinds this trip actually uses — offering a "Ferry" filter for a
+    /// route with no ferries is noise.
+    private var presentKinds: [CheckpointKind] {
+        let used = Set(package.checkpoints.map(\.checkpointKind))
+        return CheckpointKind.allCases.filter { used.contains($0) }
+    }
+
+    private func chip(
+        label: String,
+        active: Bool,
+        tint: Color,
+        symbol: String? = nil,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                if let symbol { Image(systemName: symbol).font(.system(size: 10, weight: .semibold)) }
+                Text(label).font(.caption.weight(active ? .semibold : .regular))
+            }
+            .foregroundStyle(active ? .white : Color.primary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(
+                Capsule().fill(active ? tint : Color.primary.opacity(0.07))
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     /// Ahead of the walker while recording, otherwise the whole trip. Before
     /// starting, the point is to read the plan; while walking, what is behind
     /// is not what the next decision is about.
     private var visibleCheckpoints: [TripPackage.Checkpoint] {
-        guard let routeDistanceM else { return package.checkpoints }
-        let ahead = package.checkpoints.filter { Double($0.routeDistanceM) > routeDistanceM }
-        return ahead.isEmpty ? package.checkpoints : ahead
+        let matching = kindFilter.isEmpty
+            ? package.checkpoints
+            : package.checkpoints.filter { kindFilter.contains($0.checkpointKind) }
+        guard let routeDistanceM else { return matching }
+        let ahead = matching.filter { Double($0.routeDistanceM) > routeDistanceM }
+        return ahead.isEmpty ? matching : ahead
     }
 
     // MARK: - Drag
