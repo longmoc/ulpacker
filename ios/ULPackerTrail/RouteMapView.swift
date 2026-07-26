@@ -146,7 +146,12 @@ struct RouteMapView: UIViewRepresentable {
             for kind in CheckpointKind.allCases {
                 let show = kinds.isEmpty || kinds.contains(kind)
                 style.layer(withIdentifier: "checkpoint-pins-\(kind.rawValue)")?.isVisible = show
-                style.layer(withIdentifier: "checkpoint-labels-\(kind.rawValue)")?.isVisible = show
+            }
+            // Names live in their own per-checkpoint layers, so they have to be
+            // hidden alongside the pin they belong to.
+            for checkpoint in parent.package.checkpoints {
+                let show = kinds.isEmpty || kinds.contains(checkpoint.checkpointKind)
+                style.layer(withIdentifier: "cp-label-\(checkpoint.id)")?.isVisible = show
             }
         }
 
@@ -369,23 +374,49 @@ struct RouteMapView: UIViewRepresentable {
 
                 // Label only the places worth naming. Fifty-six labels on a
                 // phone is noise; the icons already say what the rest are.
+                // Labels: one source and one layer per checkpoint, each with a
+                // constant string.
+                //
+                // `text = NSExpression(forKeyPath: "name")` looks like the
+                // obvious way and silently destroys the whole source — the pins
+                // vanish with the labels, which is why no overnight stop or
+                // refuge appeared on the map at all. That is the third property
+                // to behave this way here, after `iconImageName` and
+                // `predicate`: on this MapLibre build, a data-driven expression
+                // over a shape source takes the source down with it, with no
+                // error anywhere. Constants only.
+                //
+                // Only the major kinds get names, so this is about ten extra
+                // layers, not fifty-six.
                 guard kind.isMajor else { continue }
-                let labels = MLNSymbolStyleLayer(
-                    identifier: "checkpoint-labels-\(kind.rawValue)", source: source
-                )
-                labels.text = NSExpression(forKeyPath: "name")
-                labels.textFontSize = NSExpression(forConstantValue: 11)
-                // Refuge names run long ("Camping Les Rocailles, Champex-Lac").
-                // Unconstrained they sprawl off the screen edge.
-                labels.maximumTextWidth = NSExpression(forConstantValue: 8)
-                labels.textColor = NSExpression(forConstantValue: UIColor.label)
-                labels.textHaloColor = NSExpression(forConstantValue: UIColor.systemBackground)
-                labels.textHaloWidth = NSExpression(forConstantValue: 1.5)
-                labels.textAnchor = NSExpression(forConstantValue: "top")
-                labels.textOffset = NSExpression(
-                    forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 1.1))
-                )
-                style.addLayer(labels)
+                for checkpoint in checkpoints {
+                    let labelFeature = MLNPointFeature()
+                    labelFeature.coordinate = CLLocationCoordinate2D(
+                        latitude: checkpoint.lat, longitude: checkpoint.lng
+                    )
+                    let labelSource = MLNShapeSource(
+                        identifier: "cp-label-\(checkpoint.id)", shape: labelFeature, options: nil
+                    )
+                    style.addSource(labelSource)
+
+                    let labels = MLNSymbolStyleLayer(
+                        identifier: "cp-label-\(checkpoint.id)", source: labelSource
+                    )
+                    labels.text = NSExpression(forConstantValue: checkpoint.displayName)
+                    labels.textFontSize = NSExpression(forConstantValue: 11)
+                    // Refuge names run long ("Camping Les Rocailles,
+                    // Champex-Lac"); unconstrained they sprawl off the screen.
+                    labels.maximumTextWidth = NSExpression(forConstantValue: 8)
+                    labels.textColor = NSExpression(forConstantValue: UIColor.label)
+                    labels.textHaloColor = NSExpression(forConstantValue: UIColor.systemBackground)
+                    labels.textHaloWidth = NSExpression(forConstantValue: 1.5)
+                    labels.textAnchor = NSExpression(forConstantValue: "top")
+                    labels.textOffset = NSExpression(
+                        forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 1.2))
+                    )
+                    // Names may collide and drop; the pin beneath never does.
+                    style.addLayer(labels)
+                }
             }
         }
 
