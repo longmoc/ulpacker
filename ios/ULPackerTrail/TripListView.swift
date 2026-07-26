@@ -8,29 +8,27 @@ struct TripListView: View {
     let library: TripLibrary
 
     var body: some View {
-        NavigationStack {
-            Group {
-                switch library.state {
-                case .loading:
-                    ProgressView()
-                case .failed(let message):
-                    ContentUnavailableView {
-                        Label("Could not load a trip", systemImage: "exclamationmark.triangle")
-                    } description: {
-                        Text(message)
-                    }
-                case .loaded(let packages):
-                    List(packages, id: \.tripId) { package in
-                        NavigationLink {
-                            TripDetailView(package: package)
-                        } label: {
-                            TripRow(package: package)
-                        }
+        Group {
+            switch library.state {
+            case .loading:
+                ProgressView()
+            case .failed(let message):
+                ContentUnavailableView {
+                    Label("Could not load a trip", systemImage: "exclamationmark.triangle")
+                } description: {
+                    Text(message)
+                }
+            case .loaded(let packages):
+                List(packages, id: \.tripId) { package in
+                    NavigationLink {
+                        TripDetailView(package: package)
+                    } label: {
+                        TripRow(package: package)
                     }
                 }
             }
-            .navigationTitle("Trips")
         }
+        .navigationTitle("Trips")
     }
 }
 

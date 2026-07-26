@@ -3,6 +3,13 @@ import SwiftUI
 @main
 struct ULPackerTrailApp: App {
     @State private var library = TripLibrary()
+    #if DEBUG
+    /// Starts pushed, but is a real binding, so the back button pops it. A
+    /// debug launch that *replaced* the list left the app with no way back —
+    /// which is exactly what it looked like from the outside when the app was
+    /// resumed from the switcher after one of those launches.
+    @State private var debugPushed = true
+    #endif
 
     var body: some Scene {
         WindowGroup {
@@ -11,24 +18,41 @@ struct ULPackerTrailApp: App {
             // screen is otherwise two taps deep, and driving those taps needs
             // accessibility permissions that CI and a headless simulator run do
             // not have. Launch with `-uiTestAutoStartTrail` to land on it.
-            if ProcessInfo.processInfo.arguments.contains("-uiTestAutoStartTrail"),
-               case .loaded(let packages) = library.state,
-               let first = packages.first {
-                NavigationStack { TrailMapScreen(package: first, autoStart: true) }
-            } else if ProcessInfo.processInfo.arguments.contains("-uiTestOpenTrail"),
-                      case .loaded(let packages) = library.state,
-                      let first = packages.first {
-                NavigationStack { TrailMapScreen(package: first) }
-            } else if ProcessInfo.processInfo.arguments.contains("-uiTestOpenDetail"),
-                      case .loaded(let packages) = library.state,
-                      let first = packages.first {
-                NavigationStack { TripDetailView(package: first) }
-            } else {
+            NavigationStack {
                 TripListView(library: library)
+                    .navigationDestination(isPresented: debugDestinationBinding) {
+                        debugDestination
+                    }
             }
             #else
-            TripListView(library: library)
+            NavigationStack { TripListView(library: library) }
             #endif
         }
     }
+
+    #if DEBUG
+    private var debugArgument: String? {
+        let arguments = ProcessInfo.processInfo.arguments
+        return ["-uiTestAutoStartTrail", "-uiTestOpenTrail", "-uiTestOpenDetail"]
+            .first { arguments.contains($0) }
+    }
+
+    /// Never pushes without a launch argument, so a normal run opens the list.
+    private var debugDestinationBinding: Binding<Bool> {
+        Binding(
+            get: { debugArgument != nil && debugPushed },
+            set: { debugPushed = $0 }
+        )
+    }
+
+    @ViewBuilder private var debugDestination: some View {
+        if case .loaded(let packages) = library.state, let first = packages.first {
+            switch debugArgument {
+            case "-uiTestAutoStartTrail": TrailMapScreen(package: first, autoStart: true)
+            case "-uiTestOpenDetail": TripDetailView(package: first)
+            default: TrailMapScreen(package: first)
+            }
+        }
+    }
+    #endif
 }
