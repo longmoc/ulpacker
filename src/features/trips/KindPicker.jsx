@@ -4,10 +4,14 @@ import { CHECKPOINT_KINDS, CHECKPOINT_KIND_KEYS } from "../../lib/trail.js";
 // Compact category picker: the collapsed control shows only the emoji, the
 // dropdown lists emoji + full label. (A native <select> can't show emoji-only
 // when collapsed while keeping labels in the list.)
-export default function KindPicker({ value, onChange }) {
+export default function KindPicker({ value, onChange, disabled = false }) {
   const kind = CHECKPOINT_KINDS[value] ? value : "poi";
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
+
+  useEffect(() => {
+    if (disabled && open) setOpen(false);
+  }, [disabled, open]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -32,6 +36,7 @@ export default function KindPicker({ value, onChange }) {
         aria-label={`Category: ${CHECKPOINT_KINDS[kind].label}`}
         aria-haspopup="listbox"
         aria-expanded={open}
+        disabled={disabled}
         onClick={() => setOpen((o) => !o)}
       >
         <span className="kind-emoji">{CHECKPOINT_KINDS[kind].emoji}</span>

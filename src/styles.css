@@ -3671,8 +3671,10 @@ button[type="submit"]:active {
   box-shadow: none;
   min-width: 0;
 }
-.checkpoint-row input:hover { border-bottom-color: var(--border-2); }
+/* Only the rows in edit mode look (and behave) like fields. */
+.checkpoint-row.editable input:hover { border-bottom-color: var(--border-2); }
 .checkpoint-row input:focus { outline: none; box-shadow: none; border-bottom-color: var(--accent); }
+.checkpoint-row input[readonly] { cursor: default; user-select: text; }
 
 .cp-note { color: var(--text-2); }
 
@@ -4424,9 +4426,38 @@ button[type="submit"]:active {
   gap: 16px;
   margin-bottom: 10px;
 }
-.tool-links .link-btn { font-size: 0.85rem; }
+.tool-links .link-btn {
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
 .tool-links .link-btn.active { font-weight: 650; }
 .tool-links .link-btn:disabled { color: var(--text-3); text-decoration: none; cursor: default; }
+.tool-links .menu { display: inline-flex; }
+/* The trigger is a link-btn, so drop the menu-trigger chrome. */
+.tool-links .menu-trigger {
+  border: 0;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+}
+.suggest-menu { left: 0; right: auto; min-width: 232px; }
+.suggest-menu button.active { color: var(--accent); font-weight: 650; }
+.suggest-menu button:disabled {
+  color: var(--text-3);
+  cursor: default;
+  background: transparent;
+}
+
+/* Edit switch: unlocks the existing rows, so make its armed state obvious. */
+.cp-edit-toggle.active {
+  text-decoration: none;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
 
 .tool-panel {
   display: flex;

@@ -37,7 +37,10 @@ import {
   TargetIcon,
   SlidersIcon,
   CloseIcon,
-  BackpackIcon
+  BackpackIcon,
+  WandIcon,
+  SegmentIcon,
+  PinPlusIcon
 } from "../../components/icons.jsx";
 
 const km = (m) => (m / 1000).toFixed(1);
@@ -78,6 +81,9 @@ export default function TripWorkspace({
   const [mapFull, setMapFull] = useState(false);
   const [fsPanel, setFsPanel] = useState(false); // floating controls in full screen
   const [packPicker, setPackPicker] = useState(false); // pack chooser modal
+  // Existing checkpoints are read-only until this is switched on, so scrolling
+  // a long list can't nudge a name or hit a delete.
+  const [cpEdit, setCpEdit] = useState(false);
   const [basemap, setBasemap] = useState(() => {
     try {
       return localStorage.getItem("ulpacker.tripBasemap") === "topo" ? "topo" : "standard";
@@ -773,34 +779,62 @@ export default function TripWorkspace({
                 className={`link-btn ${openTool === "km" ? "active" : ""}`}
                 onClick={() => setOpenTool(openTool === "km" ? null : "km")}
               >
+                <PinPlusIcon size={14} />
                 Add checkpoint
               </button>
-              <button
-                type="button"
-                className={`link-btn ${openTool === "split" ? "active" : ""}`}
-                onClick={() => setOpenTool(openTool === "split" ? null : "split")}
-              >
-                Split into days
-              </button>
-              <button
-                type="button"
-                className="link-btn"
-                onClick={suggestHighPoints}
-                disabled={!hasEle}
-                title={hasEle ? "" : "This track has no elevation data"}
-              >
-                Detect passes &amp; high points
-              </button>
-              {canAddSegments && (
-                <button
-                  type="button"
-                  className="link-btn"
-                  onClick={addSegmentStops}
-                  title="Add a checkpoint at each segment boundary"
-                >
-                  Add segment stops ({boundaries.length})
+              {/* The three generators live behind one trigger — they all do the
+                  same job (propose checkpoints for you) and only differ in what
+                  they read from the track. */}
+              <div className="menu">
+                <button type="button" className="link-btn menu-trigger">
+                  <WandIcon size={14} />
+                  Suggest
+                  <ChevronIcon size={12} />
                 </button>
-              )}
+                <div className="menu-list suggest-menu">
+                  <button
+                    type="button"
+                    className={openTool === "split" ? "active" : ""}
+                    onClick={() => setOpenTool(openTool === "split" ? null : "split")}
+                  >
+                    <ClockIcon size={15} />
+                    Split into days…
+                  </button>
+                  <button
+                    type="button"
+                    onClick={suggestHighPoints}
+                    disabled={!hasEle}
+                    title={hasEle ? "" : "This track has no elevation data"}
+                  >
+                    <PeakIcon size={15} />
+                    Detect passes &amp; high points
+                  </button>
+                  {canAddSegments && (
+                    <button
+                      type="button"
+                      onClick={addSegmentStops}
+                      title="Add a checkpoint at each segment boundary"
+                    >
+                      <SegmentIcon size={15} />
+                      Add segment stops ({boundaries.length})
+                    </button>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                className={`link-btn cp-edit-toggle ${cpEdit ? "active" : ""}`}
+                aria-pressed={cpEdit}
+                title={
+                  cpEdit
+                    ? "Editing on — names, categories and notes are editable"
+                    : "Unlock editing of existing checkpoints"
+                }
+                onClick={() => setCpEdit((v) => !v)}
+              >
+                <PencilIcon size={14} />
+                {cpEdit ? "Editing" : "Edit"}
+              </button>
             </div>
 
             {openTool === "km" && (
@@ -850,6 +884,7 @@ export default function TripWorkspace({
               onHoverCheckpoint={setHoverCpId}
               anchorPoints={anchorPoints}
               onToggleAnchor={toggleAnchor}
+              editable={cpEdit}
             />
               </>
             )}

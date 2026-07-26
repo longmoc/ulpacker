@@ -159,6 +159,26 @@ export function UploadIcon({ size = 15 }) {
   );
 }
 
+export function WandIcon({ size = 15 }) {
+  return (
+    <svg {...base} width={size} height={size}>
+      <path d="M4 20 15 9" />
+      <path d="m16.5 3.5 1 2.5 2.5 1-2.5 1-1 2.5-1-2.5L13 7l2.5-1Z" />
+      <path d="M6 4.5 6.6 6l1.5.6-1.5.6L6 8.7l-.6-1.5L3.9 6.6 5.4 6Z" />
+    </svg>
+  );
+}
+
+export function SegmentIcon({ size = 15 }) {
+  return (
+    <svg {...base} width={size} height={size}>
+      <path d="M3 12h18" />
+      <circle cx="8.5" cy="12" r="2.2" />
+      <circle cx="16.5" cy="12" r="2.2" />
+    </svg>
+  );
+}
+
 export function BackpackIcon({ size = 15 }) {
   return (
     <svg {...base} width={size} height={size}>

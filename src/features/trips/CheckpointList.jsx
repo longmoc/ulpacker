@@ -21,7 +21,8 @@ export default function CheckpointList({
   onDelete,
   onHoverCheckpoint,
   anchorPoints = [],
-  onToggleAnchor
+  onToggleAnchor,
+  editable = false
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -69,7 +70,7 @@ export default function CheckpointList({
           return (
             <li
               key={cp.id}
-              className="checkpoint-row"
+              className={`checkpoint-row ${editable ? "editable" : ""}`}
               onMouseEnter={() => onHoverCheckpoint?.(cp.id)}
               onMouseLeave={() => onHoverCheckpoint?.(null)}
             >
@@ -84,11 +85,17 @@ export default function CheckpointList({
                   <TargetIcon size={15} />
                 </button>
               </span>
-              <KindPicker value={cp.kind} onChange={(k) => onUpdate(cp.id, { kind: k })} />
+              <KindPicker
+                value={cp.kind}
+                onChange={(k) => onUpdate(cp.id, { kind: k })}
+                disabled={!editable}
+              />
               <input
                 className="cp-name"
                 value={cp.name}
-                placeholder="Checkpoint"
+                placeholder={editable ? "Checkpoint" : ""}
+                readOnly={!editable}
+                tabIndex={editable ? 0 : -1}
                 onChange={(e) => onUpdate(cp.id, { name: e.target.value })}
               />
               <span className={`cp-metric cp-dist ${relative ? "relative" : ""}`} title="Distance">
@@ -104,15 +111,19 @@ export default function CheckpointList({
               <input
                 className="cp-note"
                 value={cp.note}
-                placeholder="Note"
+                placeholder={editable ? "Note" : ""}
+                readOnly={!editable}
+                tabIndex={editable ? 0 : -1}
                 onChange={(e) => onUpdate(cp.id, { note: e.target.value })}
               />
               <span className="cp-actions">
                 {offRoute && <span className="cp-flag off-route" title={`${cp.anchor.offsetM} m off route`}>off-route</span>}
                 {cp.anchor.ambiguous && <span className="cp-flag ambiguous" title="Ambiguous position on a loop">?</span>}
-                <button type="button" className="cp-delete" title="Delete checkpoint" onClick={() => onDelete(cp.id)}>
-                  ×
-                </button>
+                {editable && (
+                  <button type="button" className="cp-delete" title="Delete checkpoint" onClick={() => onDelete(cp.id)}>
+                    ×
+                  </button>
+                )}
               </span>
             </li>
           );
