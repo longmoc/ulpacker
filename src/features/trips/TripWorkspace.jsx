@@ -65,7 +65,9 @@ export default function TripWorkspace({
   const [addKm, setAddKm] = useState("");
   const [splitDays, setSplitDays] = useState("");
   const [cpOpen, setCpOpen] = useState(false);
-  const [cpFilter, setCpFilter] = useState(null); // kind filter, shared with map/profile
+  // Kind filter, shared with the map/profile. Additive: each chip toggles its
+  // own kind, and an empty selection means "All".
+  const [cpFilter, setCpFilter] = useState([]);
   const [hoverCpId, setHoverCpId] = useState(null);
   const [openTool, setOpenTool] = useState(null); // "km" | "split" | null
   const [selectedDay, setSelectedDay] = useState(null);
@@ -286,9 +288,17 @@ export default function TripWorkspace({
     kindCounts[k] = (kindCounts[k] || 0) + 1;
   }
   // The category filter applies everywhere: list, elevation profile and map.
-  const visibleCheckpoints = cpFilter
-    ? trip.checkpoints.filter((cp) => (cp.kind || "poi") === cpFilter)
+  const visibleCheckpoints = cpFilter.length
+    ? trip.checkpoints.filter((cp) => cpFilter.includes(cp.kind || "poi"))
     : trip.checkpoints;
+  // Selecting every kind that exists is the same view as "All" — collapse back
+  // to it so the chips can't sit in a state that looks filtered but isn't.
+  const toggleKind = (k) =>
+    setCpFilter((prev) => {
+      const next = prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k];
+      const available = CHECKPOINT_KIND_KEYS.filter((key) => kindCounts[key]);
+      return next.length === available.length ? [] : next;
+    });
 
   // Ticked reference checkpoints (max 2), sorted by route distance. Two of them
   // define a range that the map/profile isolate — like a day selection.
@@ -366,8 +376,8 @@ export default function TripWorkspace({
     <div className="cp-filters">
       <button
         type="button"
-        className={`cp-chip ${cpFilter === null ? "active" : ""}`}
-        onClick={() => setCpFilter(null)}
+        className={`cp-chip ${cpFilter.length === 0 ? "active" : ""}`}
+        onClick={() => setCpFilter([])}
       >
         All {trip.checkpoints.length}
       </button>
@@ -376,8 +386,9 @@ export default function TripWorkspace({
           key={k}
           type="button"
           title={CHECKPOINT_KINDS[k].label}
-          className={`cp-chip kind-${k} ${cpFilter === k ? "active" : ""}`}
-          onClick={() => setCpFilter(cpFilter === k ? null : k)}
+          aria-pressed={cpFilter.includes(k)}
+          className={`cp-chip kind-${k} ${cpFilter.includes(k) ? "active" : ""}`}
+          onClick={() => toggleKind(k)}
         >
           {CHECKPOINT_KINDS[k].emoji} {kindCounts[k]}
         </button>
@@ -386,7 +397,7 @@ export default function TripWorkspace({
   );
 
   // Something is narrowing the map — surfaced as a dot on the collapsed button.
-  const mapFiltered = cpFilter !== null || selectedDay !== null || anchorPoints.length === 2;
+  const mapFiltered = cpFilter.length > 0 || selectedDay !== null || anchorPoints.length === 2;
 
   return (
     <div className="trip-workspace">
@@ -717,27 +728,9 @@ export default function TripWorkspace({
                 </button>
               </h3>
               {/* Kept visible when the list is collapsed: the filter still
-                  drives the map and the elevation profile. */}
-              <div className="cp-filters">
-                <button
-                  type="button"
-                  className={`cp-chip ${cpFilter === null ? "active" : ""}`}
-                  onClick={() => setCpFilter(null)}
-                >
-                  All {trip.checkpoints.length}
-                </button>
-                {CHECKPOINT_KIND_KEYS.filter((k) => kindCounts[k]).map((k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    title={CHECKPOINT_KINDS[k].label}
-                    className={`cp-chip kind-${k} ${cpFilter === k ? "active" : ""}`}
-                    onClick={() => setCpFilter(cpFilter === k ? null : k)}
-                  >
-                    {CHECKPOINT_KINDS[k].emoji} {kindCounts[k]}
-                  </button>
-                ))}
-              </div>
+                  drives the map and the elevation profile. Same control as the
+                  full-screen map panel. */}
+              {kindControls}
             </div>
             {cpOpen && (
               <>
