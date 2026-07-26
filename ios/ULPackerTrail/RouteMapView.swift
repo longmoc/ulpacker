@@ -33,6 +33,12 @@ struct RouteMapView: UIViewRepresentable {
         // Attribution and logo must stay reachable: OpenStreetMap's licence
         // requires it, and the panel sits over the bottom of the map. Lift both
         // clear of the collapsed handle.
+        // Always show the compass, not MapLibre's default "only when rotated".
+        // On a mountain a compass is a navigation instrument, not a hint that
+        // the map is askew — and a walker who wants to know which way is north
+        // should not have to rotate the map to find out.
+        mapView.compassView.compassVisibility = .visible
+
         mapView.logoView.isHidden = false
         mapView.logoViewMargins = CGPoint(x: 8, y: 46)
         mapView.attributionButtonMargins = CGPoint(x: 8, y: 46)
