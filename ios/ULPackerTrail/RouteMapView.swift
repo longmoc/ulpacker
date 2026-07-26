@@ -255,9 +255,9 @@ struct RouteMapView: UIViewRepresentable {
             style.addSource(highlightSource)
             let ring = MLNCircleStyleLayer(identifier: "checkpoint-highlight", source: highlightSource)
             ring.circleRadius = NSExpression(forConstantValue: 22)
-            ring.circleColor = NSExpression(forConstantValue: UIColor.systemIndigo)
+            ring.circleColor = NSExpression(forConstantValue: UIColor.brandOnMap)
             ring.circleOpacity = NSExpression(forConstantValue: 0.22)
-            ring.circleStrokeColor = NSExpression(forConstantValue: UIColor.systemIndigo)
+            ring.circleStrokeColor = NSExpression(forConstantValue: UIColor.brandOnMap)
             ring.circleStrokeWidth = NSExpression(forConstantValue: 2.5)
             style.addLayer(ring)
 
@@ -302,7 +302,7 @@ struct RouteMapView: UIViewRepresentable {
             style.addLayer(casing)
 
             let line = MLNLineStyleLayer(identifier: "route-line", source: source)
-            line.lineColor = NSExpression(forConstantValue: UIColor.systemIndigo)
+            line.lineColor = NSExpression(forConstantValue: UIColor.brandOnMap)
             line.lineWidth = NSExpression(
                 format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
                 [10: 4, 14: 7, 16: 10.5]
@@ -492,6 +492,11 @@ struct RouteMapView: UIViewRepresentable {
                 )
                 return
             }
+            // Deliberately not the brand green: these two badges are the one
+            // place the phone is allowed to differ from the planner, because
+            // start and finish need to be told apart at a glance and a route
+            // already drawn in forest green cannot also mark its own start
+            // with it.
             add(
                 endpoint: start,
                 name: endpointName(parent.package.trip.startName, fallback: "Start"),
@@ -712,7 +717,7 @@ struct RouteMapView: UIViewRepresentable {
                 UIColor.white.setStroke()
                 path.stroke()
                 path.lineWidth = 2
-                UIColor.systemIndigo.setStroke()
+                UIColor.brandOnMap.setStroke()
                 path.stroke()
             }
         }

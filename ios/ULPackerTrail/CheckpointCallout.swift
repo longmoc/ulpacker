@@ -95,7 +95,7 @@ struct CheckpointCallout: View {
                     .font(.caption.weight(.semibold))
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Color.indigo)
+            .foregroundStyle(Color.brand)
         }
         .padding(11)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))

@@ -96,7 +96,7 @@ struct TrailInfoPanel: View {
                 .buttonStyle(.plain)
                 .overlay(alignment: .bottom) {
                     Rectangle()
-                        .fill(tab == item ? Color.indigo : .clear)
+                        .fill(tab == item ? Color.brand : .clear)
                         .frame(height: 2)
                 }
             }
@@ -153,9 +153,9 @@ struct TrailInfoPanel: View {
     private var kindFilterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 6) {
-                // Indigo, not grey: white on secondary is barely legible, and
+                // The accent, not grey: white on secondary is barely legible, and
                 // "All" is the state the filter spends most of its life in.
-                chip(label: "All", active: kindFilter.isEmpty, tint: .indigo) {
+                chip(label: "All", active: kindFilter.isEmpty, tint: .brand) {
                     kindFilter.removeAll()
                 }
                 ForEach(presentKinds, id: \.self) { kind in
@@ -485,21 +485,4 @@ enum RouteProfiles {
     }
 
     private nonisolated(unsafe) static var cache: [String: RouteProfile] = [:]
-}
-
-extension Color {
-    /// Secondary text that survives being drawn on a material.
-    ///
-    /// `.secondary` — as a shape style or as `Color.secondary`, they are the
-    /// same thing — is hierarchical, and over a material SwiftUI renders it as
-    /// vibrancy rather than as grey ink. Vibrancy takes its contrast from
-    /// whatever lies *behind* the material, and behind this panel is the map:
-    /// on a pale valley floor it is nearly white, and every subtitle, stat
-    /// heading and close button dissolved into it while the titles beside them
-    /// stayed black. The smaller the type the worse it got, which is exactly
-    /// backwards.
-    ///
-    /// A plain colour is not reinterpreted, so it stays legible whatever the
-    /// map is doing underneath.
-    static let subtle = Color(uiColor: .secondaryLabel)
 }

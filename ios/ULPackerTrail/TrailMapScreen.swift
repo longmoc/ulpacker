@@ -102,7 +102,7 @@ struct TrailMapScreen: View {
             } label: {
                 Image(systemName: followModeIcon)
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(followMode == .free ? Color.primary : Color.indigo)
+                    .foregroundStyle(followMode == .free ? Color.primary : Color.brand)
                     .frame(width: 44, height: 44)
                     .background(.regularMaterial, in: Circle())
                     .overlay(Circle().stroke(Color.primary.opacity(0.08), lineWidth: 1))
@@ -202,15 +202,15 @@ struct TrailMapScreen: View {
         Group {
             switch recorder.status {
             case .idle, .needsPermission:
-                bigButton("Start trail", tint: .indigo) { recorder.start() }
+                bigButton("Start trail", tint: .brand) { recorder.start() }
             case .recording:
                 HStack(spacing: 12) {
                     bigButton("Pause", tint: .secondary) { recorder.pause() }
-                    bigButton("Finish", tint: .indigo) { recorder.finish() }
+                    bigButton("Finish", tint: .brand) { recorder.finish() }
                 }
             case .paused:
                 HStack(spacing: 12) {
-                    bigButton("Resume", tint: .indigo) { recorder.resume() }
+                    bigButton("Resume", tint: .brand) { recorder.resume() }
                     bigButton("Finish", tint: .secondary) { recorder.finish() }
                 }
             case .finished(let activity):
@@ -218,7 +218,7 @@ struct TrailMapScreen: View {
                     Text("\(km(Double(activity.stats.distanceM))) recorded · \(activity.stats.fixCount) fixes")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    bigButton("Start another", tint: .indigo) { recorder.discard() }
+                    bigButton("Start another", tint: .brand) { recorder.discard() }
                 }
             case .failed(let message):
                 VStack(spacing: 8) {

@@ -129,7 +129,7 @@ private struct ItineraryRow: View {
                 .foregroundStyle(entry.isWalking ? Color.white : Color.secondary)
                 .frame(width: 26, height: 26)
                 .background(
-                    Circle().fill(entry.isWalking ? Color.indigo : Color.secondary.opacity(0.15))
+                    Circle().fill(entry.isWalking ? Color.brand : Color.secondary.opacity(0.15))
                 )
 
             VStack(alignment: .leading, spacing: 3) {

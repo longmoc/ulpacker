@@ -64,7 +64,7 @@ struct ElevationProfileView: View {
             }
             .fill(
                 LinearGradient(
-                    colors: [.indigo.opacity(0.28), .indigo.opacity(0.04)],
+                    colors: [.brand.opacity(0.28), .brand.opacity(0.04)],
                     startPoint: .top, endPoint: .bottom
                 )
             )
@@ -74,7 +74,7 @@ struct ElevationProfileView: View {
                 path.move(to: first)
                 for point in points.dropFirst() { path.addLine(to: point) }
             }
-            .stroke(Color.indigo, style: StrokeStyle(lineWidth: 1.6, lineJoin: .round))
+            .stroke(Color.brand, style: StrokeStyle(lineWidth: 1.6, lineJoin: .round))
         }
     }
 
