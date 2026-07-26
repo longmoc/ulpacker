@@ -327,6 +327,53 @@ struct RouteMatcherTests {
         #expect(settled.offsetM < 20)
     }
 
+    @Test func steppingOffTheLineNearAClosedLoopDoesNotJumpToTheFarBranch() throws {
+        // Found by screenshotting the off-route state on the real route: at Les
+        // Houches the Tour du Mont Blanc closes its loop, so the first and last
+        // kilometres run side by side. Stepping 400 m off the line there made
+        // the matcher report 163.59 km done and 0.64 km left — the walker
+        // teleported almost the whole way round without moving.
+        //
+        // The escape hatch caused it: abandoning the model is right for a GPS
+        // glitch, but it also discards the one thing that separates the two
+        // branches. What tells them apart is physical displacement — a glitch
+        // moves the walker as far as the route distance implies, a branch error
+        // does not move them at all.
+        let package = try Self.tmb()
+        let index = RouteIndex(segments: package.plannedRoute.segments)
+        var matcher = RouteMatcher(index: index)
+        let points = package.plannedRoute.segments[0].points
+
+        // Walk the first few hundred metres normally.
+        for step in 0..<8 {
+            let point = points[step * 3]
+            _ = matcher.match(Self.fix(step, point.lat, point.lng, at: Double(step) * 13))
+        }
+        let before = try #require(matcher.currentRouteDistanceM)
+        #expect(before < 2000)
+
+        // Step ~400 m north of point 12. Chosen deliberately: there the finish
+        // leg is genuinely *nearer* than the start leg (245 m against 394 m),
+        // so geometry alone gives the wrong answer and only the walker's
+        // history can resolve it. A few points further on the near branch wins
+        // on distance anyway and the bug hides.
+        let anchor = points[12]
+        var last = before
+        for step in 0..<6 {
+            let match = matcher.match(
+                Self.fix(100 + step, anchor.lat + 0.0036, anchor.lng, at: 200 + Double(step) * 13)
+            )
+            last = match.routeDistanceM
+        }
+
+        // Still near the start, and reported as off the line rather than as
+        // having completed the loop.
+        #expect(last < 5000, "matched \(last) m — jumped to the far branch")
+        #expect(matcher.match(
+            Self.fix(200, anchor.lat + 0.0036, anchor.lng, at: 400)
+        ).offsetM > 200)
+    }
+
     @Test func doesNotEscapeTheModelForOrdinaryNoise() {
         // The counterweight: the escape hatch must stay shut for a normal walk,
         // or the progress prior stops protecting switchbacks and parallel paths.
@@ -474,6 +521,47 @@ struct RouteMatcherTests {
         for step in 0..<20 {
             last = monitor.update(
                 match: Self.onRouteMatch(offsetM: 200, routeM: 1000 + Double(step)),
+                accuracyM: 8,
+                at: start.addingTimeInterval(Double(step) * 30)
+            )
+        }
+        #expect(last.state == .suspect)
+        #expect(!last.didEnterOffRoute)
+    }
+
+    @Test func alertsWhenStandingStillFarOffTheRoute() {
+        // Found by screenshotting the off-route state: parked 398 m off the
+        // line, the app stayed on "possibly off route" indefinitely. Requiring
+        // route progress to confirm a deviation conflates "not moving" with
+        // "not really off route" — but stopping to look at the map is exactly
+        // what someone does once they realise they are lost, and that is the
+        // moment the alert is worth most.
+        var monitor = OffRouteMonitor()
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+
+        var last = OffRouteMonitor.Update(state: .acquiring, didEnterOffRoute: false, didReturnToRoute: false)
+        for step in 0..<6 {
+            last = monitor.update(
+                // Stationary: route distance never advances.
+                match: Self.onRouteMatch(offsetM: 398, routeM: 1000),
+                accuracyM: 8,
+                at: start.addingTimeInterval(Double(step) * 15)
+            )
+        }
+        #expect(last.state == .offRoute)
+    }
+
+    @Test func stillIgnoresStationaryDriftAtDriftScale() {
+        // The counterweight, and why the distance condition existed: a fix
+        // wandering tens of metres beside the path must not alert, however long
+        // it wanders.
+        var monitor = OffRouteMonitor()
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+
+        var last = OffRouteMonitor.Update(state: .acquiring, didEnterOffRoute: false, didReturnToRoute: false)
+        for step in 0..<20 {
+            last = monitor.update(
+                match: Self.onRouteMatch(offsetM: 120, routeM: 1000 + Double(step)),
                 accuracyM: 8,
                 at: start.addingTimeInterval(Double(step) * 30)
             )

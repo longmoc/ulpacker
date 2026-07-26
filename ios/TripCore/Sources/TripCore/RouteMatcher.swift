@@ -33,6 +33,10 @@ public struct RouteMatcher: Sendable {
         /// good accuracy. Two branches this close are indistinguishable in
         /// practice whatever the device claims.
         public var minimumAmbiguityMarginM: Double
+        /// How much longer a path may be than the straight line between two
+        /// fixes. Switchbacks are why this is not 1; it is still far below
+        /// what a jump to the far side of a loop would require.
+        public var windingAllowance: Double
 
         public init(
             searchRadiusM: Double = 300,
@@ -40,7 +44,8 @@ public struct RouteMatcher: Sendable {
             nominalSpeedMPS: Double = 1.2,
             maxAccuracyM: Double = 50,
             ambiguitySeparationM: Double = 500,
-            minimumAmbiguityMarginM: Double = 10
+            minimumAmbiguityMarginM: Double = 10,
+            windingAllowance: Double = 4
         ) {
             self.searchRadiusM = searchRadiusM
             self.maxSpeedMPS = maxSpeedMPS
@@ -48,6 +53,7 @@ public struct RouteMatcher: Sendable {
             self.maxAccuracyM = maxAccuracyM
             self.ambiguitySeparationM = ambiguitySeparationM
             self.minimumAmbiguityMarginM = minimumAmbiguityMarginM
+            self.windingAllowance = windingAllowance
         }
     }
 
@@ -88,6 +94,10 @@ public struct RouteMatcher: Sendable {
     /// to reason from and will fall back to an exhaustive search.
     private var lastRouteM: Double?
     private var lastTime: Date?
+    /// The last accepted fix's own coordinates, needed to tell a real move
+    /// from a jump to another part of the route.
+    private var lastLat: Double?
+    private var lastLng: Double?
 
     public init(index: RouteIndex, configuration: Configuration = .init()) {
         self.index = index
@@ -101,6 +111,8 @@ public struct RouteMatcher: Sendable {
     public mutating func reset() {
         lastRouteM = nil
         lastTime = nil
+        lastLat = nil
+        lastLng = nil
     }
 
     /// Seed the matcher with a known position, e.g. the start of a chosen stage.
@@ -149,10 +161,36 @@ public struct RouteMatcher: Sendable {
             reachable = candidates
         }
 
-        // With nothing reachable, trust the fix: GPS is the only ground truth
-        // available, and the result is flagged `.jumped` below.
-        var pool = reachable.isEmpty ? candidates : reachable
+        // With nothing reachable, fall back — but not all the way to "nearest
+        // wins". Candidates whose route jump the walker could not physically
+        // have covered are dropped first, and only if that leaves nothing does
+        // the raw fix win outright.
+        //
+        // Skipping this step is what let a walker at Les Houches be placed
+        // 163 km along the loop: the route closes on itself there, and stepping
+        // 400 m off the line makes the finish leg genuinely the nearest one.
+        var pool = reachable
         var escaped = false
+        if pool.isEmpty {
+            var explainable = candidates.filter { isPhysicallyExplainable($0, from: fix) }
+
+            // Nothing the walker could have reached is in view. Usually that is
+            // because they are further off the line than the search radius —
+            // the branch they are actually on is simply out of range, while
+            // some other part of the route is not. Widen and look again rather
+            // than accept the only thing visible: at Les Houches, where the
+            // loop closes, the only visible candidate is the finish leg, and
+            // taking it credits 163 km to someone who walked 400 m.
+            if explainable.isEmpty {
+                let wider = index.candidates(lat: fix.lat, lng: fix.lng, radiusM: radius * 4)
+                explainable = wider.filter { isPhysicallyExplainable($0, from: fix) }
+                if !explainable.isEmpty { candidates = wider }
+            }
+
+            // Still nothing: a genuine teleport — a glitch, a lift, a shuttle.
+            // Follow the fix and let `.jumped` say so.
+            pool = explainable.isEmpty ? candidates : explainable
+        }
 
         // The reachable filter needs an escape hatch, or it becomes a trap.
         // Found by replaying a real recording: when the walker outruns
@@ -170,7 +208,8 @@ public struct RouteMatcher: Sendable {
         if !reachable.isEmpty,
            let bestReachable = reachable.min(by: { $0.offsetM < $1.offsetM }),
            let bestOverall = candidates.min(by: { $0.offsetM < $1.offsetM }),
-           bestReachable.offsetM > bestOverall.offsetM + escapeMargin(for: fix) {
+           bestReachable.offsetM > bestOverall.offsetM + escapeMargin(for: fix),
+           isPhysicallyExplainable(bestOverall, from: fix) {
             pool = candidates
             escaped = true
         }
@@ -214,6 +253,8 @@ public struct RouteMatcher: Sendable {
 
         lastRouteM = best.candidate.routeDistanceM
         lastTime = fix.t
+        lastLat = fix.lat
+        lastLng = fix.lng
 
         let confidence: Confidence = jumped ? .jumped : (ambiguous ? .ambiguous : .tracking)
         return Match(
@@ -262,6 +303,28 @@ public struct RouteMatcher: Sendable {
     /// fix cannot argue its way out of the constraint on noise alone.
     private func escapeMargin(for fix: ActivityPackage.Fix) -> Double {
         max(50, 3 * max(0, fix.hAcc))
+    }
+
+    /// Whether a candidate's route jump is consistent with the ground the
+    /// walker actually covered.
+    ///
+    /// This is what separates the two cases the escape hatch has to tell apart.
+    /// A GPS glitch or a cable car moves the walker *physically* about as far
+    /// as the route distance implies. A loop closing on itself does not: on the
+    /// Tour du Mont Blanc, stepping 400 m off the line near Les Houches makes
+    /// the finish leg genuinely nearer than the start leg, and following it
+    /// would credit 163 km of progress to someone who moved 400 m.
+    ///
+    /// Route distance can exceed straight-line displacement — paths wind — so
+    /// the allowance is generous. It is still nowhere near a whole loop.
+    private func isPhysicallyExplainable(
+        _ candidate: RouteIndex.Projection,
+        from fix: ActivityPackage.Fix
+    ) -> Bool {
+        guard let lastRouteM, let lastLat, let lastLng else { return true }
+        let displacement = ActivityJournal.haversine(lastLat, lastLng, fix.lat, fix.lng)
+        let routeJump = abs(candidate.routeDistanceM - lastRouteM)
+        return routeJump <= displacement * configuration.windingAllowance + escapeMargin(for: fix) * 4
     }
 
     private func lostMatch(lat: Double, lng: Double) -> Match {

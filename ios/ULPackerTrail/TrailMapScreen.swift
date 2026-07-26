@@ -34,6 +34,9 @@ struct TrailMapScreen: View {
         .onAppear {
             recovery = recorder.pendingRecovery()
             if autoStart, recovery == nil { recorder.start() }
+            #if DEBUG
+            applyScriptedAction()
+            #endif
         }
         .alert("Off route", isPresented: offRouteBinding) {
             Button("OK") { recorder.clearOffRouteAlert() }
@@ -107,31 +110,66 @@ struct TrailMapScreen: View {
             }
             .padding(.vertical, 12)
 
-            if let next = recorder.progress?.nextCheckpoint,
-               let distance = recorder.progress?.distanceToNextCheckpointM {
+            if let here = recorder.progress?.routeDistanceM {
                 Divider()
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Next")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(next.name.isEmpty ? next.kind.capitalized : next.name)
-                            .font(.headline)
+                upcoming(from: here)
+            }
+        }
+        .background(.background)
+    }
+
+    /// The next few stops, not just the next one.
+    ///
+    /// "Water in 2 km" answers one question. Deciding whether to push on to the
+    /// refuge or stop at the bivouac needs to see several stops and the gaps
+    /// between them at once — which is the judgement actually being made late
+    /// in the day, and the reason the trip carries 56 checkpoints.
+    private func upcoming(from here: Double) -> some View {
+        VStack(spacing: 0) {
+            ForEach(package.upcomingCheckpoints(after: here), id: \.id) { checkpoint in
+                let distance = Double(checkpoint.routeDistanceM) - here
+                HStack(spacing: 10) {
+                    Image(systemName: checkpoint.checkpointKind.symbolName)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 26, height: 26)
+                        .background(Circle().fill(tint(for: checkpoint.checkpointKind)))
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(checkpoint.displayName)
+                            .font(.subheadline.weight(.medium))
                             .lineLimit(1)
+                        if let ele = checkpoint.ele {
+                            Text("\(ele) m").font(.caption2).foregroundStyle(.secondary)
+                        }
                     }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(km(distance)).font(.title3.weight(.semibold).monospacedDigit())
+                    Spacer(minLength: 8)
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(km(distance))
+                            .font(.subheadline.weight(.semibold).monospacedDigit())
                         if let eta = estimatedTime(to: distance) {
-                            Text(eta).font(.caption).foregroundStyle(.secondary)
+                            Text(eta).font(.caption2).foregroundStyle(.secondary)
                         }
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.vertical, 7)
+                Divider().padding(.leading, 52)
             }
         }
-        .background(.background)
+    }
+
+    private func tint(for kind: CheckpointKind) -> Color {
+        switch kind {
+        case .overnight, .refuge: .orange
+        case .water: .teal
+        case .food, .resupply: .green
+        case .hazard: .red
+        case .transport: .purple
+        case .pass: .brown
+        case .viewpoint: .blue
+        case .poi: .gray
+        }
     }
 
     private func readout(_ label: String, _ value: String) -> some View {
@@ -240,4 +278,30 @@ struct TrailMapScreen: View {
     private var recoveryBinding: Binding<Bool> {
         Binding(get: { recovery != nil }, set: { if !$0 { recovery = nil } })
     }
+
+    #if DEBUG
+    /// Drives the screen into a state for automated screenshots.
+    ///
+    /// Reaching pause or finish otherwise needs a tap, and a headless simulator
+    /// run has no accessibility permission to synthesise one. Compiled out of
+    /// release builds; `-uiTestActionDelay` gives simulated fixes time to
+    /// arrive first, so the captured state has real numbers in it rather than
+    /// an empty recording.
+    private func applyScriptedAction() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "-uiTestAction"),
+              index + 1 < arguments.count else { return }
+        let action = arguments[index + 1]
+        let delay = arguments.firstIndex(of: "-uiTestActionDelay")
+            .flatMap { $0 + 1 < arguments.count ? Double(arguments[$0 + 1]) : nil } ?? 8
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            switch action {
+            case "pause": recorder.pause()
+            case "finish": recorder.finish()
+            default: break
+            }
+        }
+    }
+    #endif
 }

@@ -31,6 +31,14 @@ public struct OffRouteMonitor: Sendable {
         /// …and over at least this much travel, so standing still while a fix
         /// wanders cannot satisfy the time condition on its own.
         public var sustainedOverM: Double
+        /// Above this deviation the travel condition is waived.
+        ///
+        /// The travel requirement exists to ignore a phone resting on a rock
+        /// while its fix wanders — drift measured in tens of metres. A walker
+        /// several hundred metres off the line who has stopped is not drifting,
+        /// they are lost and standing still, which is precisely when the alert
+        /// is worth most. Defaults to three times `enterM`.
+        public var alertRegardlessOfTravelM: Double
         /// No usable fix for this long means the GPS state is reported, not
         /// silently assumed to be unchanged.
         public var noFixAfter: TimeInterval
@@ -40,13 +48,15 @@ public struct OffRouteMonitor: Sendable {
             exitM: Double = 40,
             sustainedFor: TimeInterval = 30,
             sustainedOverM: Double = 30,
-            noFixAfter: TimeInterval = 120
+            noFixAfter: TimeInterval = 120,
+            alertRegardlessOfTravelM: Double? = nil
         ) {
             self.enterM = enterM
             self.exitM = exitM
             self.sustainedFor = sustainedFor
             self.sustainedOverM = sustainedOverM
             self.noFixAfter = noFixAfter
+            self.alertRegardlessOfTravelM = alertRegardlessOfTravelM ?? enterM * 3
         }
 
         /// Thresholds published with the trip; the planner picks them per route
@@ -142,9 +152,14 @@ public struct OffRouteMonitor: Sendable {
             }
             let heldFor = time.timeIntervalSince(suspectSince ?? time)
             let movedM = abs(match.routeDistanceM - (suspectAtRouteM ?? match.routeDistanceM))
-            // Time *and* distance: a phone on a rock can satisfy the clock
-            // while its fix wanders, and that is not a wrong turn.
-            if state != .offRoute, heldFor >= configuration.sustainedFor, movedM >= configuration.sustainedOverM {
+            // Time, plus either travel or a deviation too large to be drift.
+            // Travel alone was the original rule and it left someone parked
+            // 400 m off the line permanently on "possibly off route" — the
+            // exact moment the alert matters, since stopping to check the map
+            // is what people do once they suspect they are lost.
+            let confirmed = movedM >= configuration.sustainedOverM
+                || certainlyOff >= configuration.alertRegardlessOfTravelM
+            if state != .offRoute, heldFor >= configuration.sustainedFor, confirmed {
                 state = .offRoute
                 return Update(state: state, didEnterOffRoute: true, didReturnToRoute: false)
             }

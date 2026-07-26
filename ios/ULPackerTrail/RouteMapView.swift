@@ -64,6 +64,10 @@ struct RouteMapView: UIViewRepresentable {
         var parent: RouteMapView
         weak var mapView: MLNMapView?
         private var didAddRoute = false
+        /// Built once. `routeBearing` would otherwise rebuild an
+        /// 8560-edge index on every fix, which is the one thing this view
+        /// is careful never to do.
+        private lazy var index = RouteIndex(segments: parent.package.plannedRoute.segments)
 
         private static let routeSourceID = "planned-route"
         private static let checkpointSourceID = "checkpoints"
@@ -77,6 +81,7 @@ struct RouteMapView: UIViewRepresentable {
 
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             addRoute(to: style)
+            addDirectionArrows(to: style)
             addCheckpoints(to: style)
             addPosition(to: style)
             zoomToRoute(mapView)
@@ -123,19 +128,48 @@ struct RouteMapView: UIViewRepresentable {
             style.addLayer(line)
         }
 
+        /// Direction-of-travel arrows repeated along the line.
+        ///
+        /// Every paper walking map and every hiking app marks this, because a
+        /// route drawn as a bare line does not say which way round it goes —
+        /// and on a loop like the Tour du Mont Blanc that is the difference
+        /// between the plan and its reverse.
+        private func addDirectionArrows(to style: MLNStyle) {
+            guard let source = style.source(withIdentifier: Self.routeSourceID) else { return }
+            style.setImage(Self.arrowImage(), forName: "route-arrow")
+
+            let arrows = MLNSymbolStyleLayer(identifier: "route-arrows", source: source)
+            arrows.iconImageName = NSExpression(forConstantValue: "route-arrow")
+            arrows.symbolPlacement = NSExpression(forConstantValue: "line")
+            // Far enough apart to read as direction rather than as decoration.
+            arrows.symbolSpacing = NSExpression(forConstantValue: 90)
+            arrows.iconAllowsOverlap = NSExpression(forConstantValue: false)
+            arrows.iconRotationAlignment = NSExpression(forConstantValue: "map")
+            arrows.iconScale = NSExpression(forConstantValue: 0.55)
+            arrows.iconOpacity = NSExpression(forConstantValue: 0.95)
+            style.addLayer(arrows)
+        }
+
         private func addCheckpoints(to style: MLNStyle) {
+            // One icon per kind, rendered once and reused by the symbol layer.
+            for kind in CheckpointKind.allCases {
+                style.setImage(Self.pinImage(for: kind), forName: "cp-\(kind.rawValue)")
+            }
+
             let features = parent.package.checkpoints.map { checkpoint -> MLNPointFeature in
+                let kind = checkpoint.checkpointKind
                 let feature = MLNPointFeature()
                 feature.coordinate = CLLocationCoordinate2D(
                     latitude: checkpoint.lat, longitude: checkpoint.lng
                 )
                 feature.attributes = [
-                    "name": checkpoint.name,
-                    "kind": checkpoint.kind,
-                    // Overnight stops structure the walk; everything else is
-                    // reference. Drawn differently so the important ones read
-                    // at a glance on a small screen.
-                    "overnight": checkpoint.kind == "overnight"
+                    "name": checkpoint.displayName,
+                    "icon": "cp-\(kind.rawValue)",
+                    // Sleeping places structure the walk; a viewpoint does not.
+                    // Used both for label priority and for what survives when
+                    // the map is too crowded to draw everything.
+                    "major": kind.isMajor,
+                    "priority": kind.priority
                 ]
                 return feature
             }
@@ -144,38 +178,123 @@ struct RouteMapView: UIViewRepresentable {
             let source = MLNShapeSource(identifier: Self.checkpointSourceID, features: features)
             style.addSource(source)
 
-            let circles = MLNCircleStyleLayer(identifier: "checkpoint-dots", source: source)
-            circles.circleRadius = NSExpression(
-                forConditional: NSPredicate(format: "overnight == YES"),
-                trueExpression: NSExpression(forConstantValue: 7),
-                falseExpression: NSExpression(forConstantValue: 4)
+            let pins = MLNSymbolStyleLayer(identifier: "checkpoint-pins", source: source)
+            pins.iconImageName = NSExpression(forKeyPath: "icon")
+            pins.iconScale = NSExpression(
+                forConditional: NSPredicate(format: "major == YES"),
+                trueExpression: NSExpression(forConstantValue: 0.55),
+                falseExpression: NSExpression(forConstantValue: 0.42)
             )
-            circles.circleColor = NSExpression(
-                forConditional: NSPredicate(format: "overnight == YES"),
-                trueExpression: NSExpression(forConstantValue: UIColor.systemOrange),
-                falseExpression: NSExpression(forConstantValue: UIColor.white)
-            )
-            circles.circleStrokeColor = NSExpression(forConstantValue: UIColor.darkGray)
-            circles.circleStrokeWidth = NSExpression(forConstantValue: 1.5)
-            style.addLayer(circles)
+            // Constant, not per-feature: MapLibre only accepts zoom-based
+            // expressions here, and a feature predicate throws at style load.
+            // Icons always draw — they are why the trip has checkpoints — and
+            // the labels below are what yields when space runs out.
+            pins.iconAllowsOverlap = NSExpression(forConstantValue: true)
+            pins.symbolSortKey = NSExpression(forKeyPath: "priority")
+            style.addLayer(pins)
 
             let labels = MLNSymbolStyleLayer(identifier: "checkpoint-labels", source: source)
             labels.text = NSExpression(forKeyPath: "name")
             labels.textFontSize = NSExpression(forConstantValue: 11)
-            // Refuge names run long ("Day 6 — Camping Les Rocailles,
-            // Champex-Lac"). Unconstrained they sprawl across the map and off
-            // the screen edge; wrapping at ~7 ems keeps them readable and lets
-            // MapLibre's collision detection drop the ones that would overlap.
-            labels.maximumTextWidth = NSExpression(forConstantValue: 7)
+            // Refuge names run long ("Camping Les Rocailles, Champex-Lac").
+            // Unconstrained they sprawl off the screen edge; wrapping at ~8 ems
+            // keeps them readable and lets collision drop the ones that clash.
+            labels.maximumTextWidth = NSExpression(forConstantValue: 8)
             labels.textColor = NSExpression(forConstantValue: UIColor.label)
             labels.textHaloColor = NSExpression(forConstantValue: UIColor.systemBackground)
             labels.textHaloWidth = NSExpression(forConstantValue: 1.5)
             labels.textAnchor = NSExpression(forConstantValue: "top")
-            labels.textOffset = NSExpression(forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 0.8)))
-            // Only label the overnight stops: 54 labels on a phone screen is
-            // noise, and these are the ones a walker navigates between.
-            labels.predicate = NSPredicate(format: "overnight == YES")
+            labels.textOffset = NSExpression(forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 1.1)))
+            labels.symbolSortKey = NSExpression(forKeyPath: "priority")
+            // Label only the places worth naming. Fifty-six labels on a phone
+            // is noise; the icons already say what the rest are.
+            labels.predicate = NSPredicate(format: "major == YES")
             style.addLayer(labels)
+        }
+
+        // MARK: - Icon rendering
+
+        /// A map pin for a checkpoint kind: coloured disc, white glyph, thin
+        /// outline so it survives both pale scree and dark forest.
+        private static func pinImage(for kind: CheckpointKind) -> UIImage {
+            let size = CGSize(width: 44, height: 44)
+            let colour = tint(for: kind)
+            return UIGraphicsImageRenderer(size: size).image { context in
+                let rect = CGRect(origin: .zero, size: size).insetBy(dx: 3, dy: 3)
+                colour.setFill()
+                UIColor.white.setStroke()
+                let circle = UIBezierPath(ovalIn: rect)
+                circle.lineWidth = 3
+                circle.fill()
+                circle.stroke()
+
+                let configuration = UIImage.SymbolConfiguration(pointSize: 20, weight: .bold)
+                if let glyph = UIImage(systemName: kind.symbolName, withConfiguration: configuration)?
+                    .withTintColor(.white, renderingMode: .alwaysOriginal) {
+                    let target = CGRect(
+                        x: (size.width - glyph.size.width) / 2,
+                        y: (size.height - glyph.size.height) / 2,
+                        width: glyph.size.width,
+                        height: glyph.size.height
+                    )
+                    glyph.draw(in: target)
+                }
+                _ = context
+            }
+        }
+
+        private static func tint(for kind: CheckpointKind) -> UIColor {
+            switch kind {
+            case .overnight, .refuge: .systemOrange
+            case .water: .systemTeal
+            case .food, .resupply: .systemGreen
+            case .hazard: .systemRed
+            case .transport: .systemPurple
+            case .pass: .systemBrown
+            case .viewpoint: .systemBlue
+            case .poi: .systemGray
+            }
+        }
+
+        /// A chevron pointing along the line, drawn rather than shipped so it
+        /// stays crisp at any scale and needs no asset catalogue.
+        private static func arrowImage() -> UIImage {
+            let size = CGSize(width: 24, height: 24)
+            return UIGraphicsImageRenderer(size: size).image { _ in
+                let path = UIBezierPath()
+                path.move(to: CGPoint(x: 7, y: 5))
+                path.addLine(to: CGPoint(x: 17, y: 12))
+                path.addLine(to: CGPoint(x: 7, y: 19))
+                path.lineWidth = 3.5
+                path.lineCapStyle = .round
+                path.lineJoinStyle = .round
+                UIColor.white.setStroke()
+                path.stroke()
+                path.lineWidth = 2
+                UIColor.systemIndigo.setStroke()
+                path.stroke()
+            }
+        }
+
+        /// The walker's position, as a disc with a heading pointer.
+        private static func headingImage() -> UIImage {
+            let size = CGSize(width: 40, height: 40)
+            return UIGraphicsImageRenderer(size: size).image { _ in
+                // A triangle above the dot: which way the route goes from here,
+                // taken from the line rather than the compass, because a phone
+                // in a hand swings about and the path does not.
+                let path = UIBezierPath()
+                path.move(to: CGPoint(x: 20, y: 3))
+                path.addLine(to: CGPoint(x: 27, y: 16))
+                path.addLine(to: CGPoint(x: 20, y: 13))
+                path.addLine(to: CGPoint(x: 13, y: 16))
+                path.close()
+                UIColor.systemBlue.setFill()
+                UIColor.white.setStroke()
+                path.lineWidth = 2
+                path.fill()
+                path.stroke()
+            }
         }
 
         private func addPosition(to style: MLNStyle) {
@@ -194,6 +313,20 @@ struct RouteMapView: UIViewRepresentable {
             dot.circleStrokeColor = NSExpression(forConstantValue: UIColor.white)
             dot.circleStrokeWidth = NSExpression(forConstantValue: 2.5)
             style.addLayer(dot)
+
+            // Which way the route runs from here. Rotated per fix from the
+            // `bearing` attribute; hidden when there is no bearing to show
+            // rather than pointing north by default, because a wrong arrow is
+            // worse than none.
+            style.setImage(Self.headingImage(), forName: "position-heading")
+            let heading = MLNSymbolStyleLayer(identifier: "position-heading", source: source)
+            heading.iconImageName = NSExpression(forConstantValue: "position-heading")
+            heading.iconRotation = NSExpression(forKeyPath: "bearing")
+            heading.iconRotationAlignment = NSExpression(forConstantValue: "map")
+            heading.iconAllowsOverlap = NSExpression(forConstantValue: true)
+            heading.iconScale = NSExpression(forConstantValue: 0.85)
+            heading.predicate = NSPredicate(format: "hasBearing == YES")
+            style.addLayer(heading)
         }
 
         // MARK: - Updates
@@ -210,11 +343,29 @@ struct RouteMapView: UIViewRepresentable {
             }
             let feature = MLNPointFeature()
             feature.coordinate = coordinate
+            let bearing = parent.routeDistanceM.flatMap { bearingAlongRoute(at: $0) }
+            feature.attributes = [
+                "bearing": bearing ?? 0,
+                "hasBearing": bearing != nil
+            ]
             source.shape = feature
 
             if follow, let mapView {
                 mapView.setCenter(coordinate, zoomLevel: max(mapView.zoomLevel, 13), animated: true)
             }
+        }
+
+        /// Heading taken from the line ahead, using the cached index.
+        private func bearingAlongRoute(at routeDistanceM: Double) -> Double? {
+            guard let here = index.position(atRouteDistance: routeDistanceM),
+                  routeDistanceM + 1 < index.totalM,
+                  let ahead = index.position(
+                      atRouteDistance: min(index.totalM, routeDistanceM + 60)
+                  )
+            else { return nil }
+            return TripPackage.bearing(
+                fromLat: here.lat, fromLng: here.lng, toLat: ahead.lat, toLng: ahead.lng
+            )
         }
 
         private func zoomToRoute(_ mapView: MLNMapView) {
