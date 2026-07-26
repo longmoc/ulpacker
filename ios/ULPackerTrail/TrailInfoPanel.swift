@@ -121,28 +121,47 @@ struct TrailInfoPanel: View {
         VStack(spacing: 0) {
             kindFilterBar
             Divider()
-            ScrollView {
-            LazyVStack(spacing: 0) {
-                if let selected {
-                    CheckpointDetail(
-                        checkpoint: selected, package: package, from: routeDistanceM
-                    ) {
-                        self.selected = nil
-                    }
-                    Divider()
-                }
+            // The detail opens under the row it belongs to, not at the top of
+            // the list. Detached, reading a stop meant scrolling down to find
+            // it, tapping, and scrolling all the way back up to read the
+            // answer — then back down again for the next one.
+            ScrollViewReader { scroller in
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(visibleCheckpoints, id: \.id) { checkpoint in
+                            Button {
+                                // Tapping the open stop closes it, so the list
+                                // can be collapsed back without hunting for the
+                                // small ✕.
+                                selected = selected?.id == checkpoint.id ? nil : checkpoint
+                                if selected != nil { detent = .expanded }
+                            } label: {
+                                CheckpointRow(
+                                    checkpoint: checkpoint,
+                                    from: routeDistanceM,
+                                    isOpen: selected?.id == checkpoint.id
+                                )
+                            }
+                            .buttonStyle(.plain)
 
-                ForEach(visibleCheckpoints, id: \.id) { checkpoint in
-                    Button {
-                        selected = checkpoint
-                        detent = .expanded
-                    } label: {
-                        CheckpointRow(checkpoint: checkpoint, from: routeDistanceM)
+                            if selected?.id == checkpoint.id {
+                                CheckpointDetail(
+                                    checkpoint: checkpoint, package: package, from: routeDistanceM
+                                )
+                            }
+                            Divider().padding(.leading, 54)
+                        }
                     }
-                    .buttonStyle(.plain)
-                    Divider().padding(.leading, 54)
                 }
-            }
+                // A tap on the map picks a stop the list may have scrolled far
+                // past, so the list follows the map rather than leaving the
+                // walker to find it.
+                .onChange(of: selected?.id) { _, id in
+                    guard let id else { return }
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        scroller.scrollTo(id, anchor: .top)
+                    }
+                }
             }
         }
     }
@@ -211,9 +230,19 @@ struct TrailInfoPanel: View {
         let matching = kindFilter.isEmpty
             ? package.checkpoints
             : package.checkpoints.filter { kindFilter.contains($0.checkpointKind) }
-        guard let routeDistanceM else { return matching }
-        let ahead = matching.filter { Double($0.routeDistanceM) > routeDistanceM }
-        return ahead.isEmpty ? matching : ahead
+        let listed: [TripPackage.Checkpoint]
+        if let routeDistanceM {
+            let ahead = matching.filter { Double($0.routeDistanceM) > routeDistanceM }
+            listed = ahead.isEmpty ? matching : ahead
+        } else {
+            listed = matching
+        }
+        // The open stop is never filtered away. Now that its detail lives
+        // inside the list, a filter that excluded it would take the thing being
+        // read off the screen — and a stop tapped on the map is often one the
+        // current filter does not cover.
+        guard let selected, !listed.contains(where: { $0.id == selected.id }) else { return listed }
+        return (listed + [selected]).sorted { $0.routeDistanceM < $1.routeDistanceM }
     }
 
     // MARK: - Drag
@@ -248,6 +277,7 @@ struct TrailInfoPanel: View {
 private struct CheckpointRow: View {
     let checkpoint: TripPackage.Checkpoint
     let from: Double?
+    var isOpen = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -286,6 +316,14 @@ private struct CheckpointRow: View {
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(Color.subtle)
             }
+
+            // Says the row opens, and which one is open. Without it a tap
+            // looks like it did nothing until the eye finds the card that
+            // appeared below.
+            Image(systemName: "chevron.down")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.subtle)
+                .rotationEffect(.degrees(isOpen ? 0 : -90))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 9)
@@ -303,7 +341,6 @@ private struct CheckpointDetail: View {
     let checkpoint: TripPackage.Checkpoint
     let package: TripPackage
     let from: Double?
-    let onClose: () -> Void
 
     /// What it takes to get there from where the walker is now — or, before the
     /// walk starts, from the beginning of the route.
@@ -313,41 +350,10 @@ private struct CheckpointDetail: View {
     }
 
     var body: some View {
+        // No name, no icon, no close button: the row this card opens under
+        // carries all three, and repeating them put "Bellevue" on the screen
+        // twice in a row. What is left is only what the row could not say.
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: checkpoint.checkpointKind.symbolName)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background(
-                        Circle().fill(ElevationProfileView.tint(for: checkpoint.checkpointKind))
-                    )
-
-                // Explicit width and layout priority: without them the title and
-                // the close button squeezed the subtitle out of existence
-                // entirely, which is how this card first shipped.
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(checkpoint.displayName)
-                        .font(.headline)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundStyle(Color.subtle)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .layoutPriority(1)
-
-                Button(action: onClose) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(Color.subtle)
-                        .frame(width: 34, height: 34)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-
             legRow
 
             if checkpoint.note.isEmpty {
@@ -451,16 +457,6 @@ private struct CheckpointDetail: View {
         return "↑\(Int(ascent.rounded())) ↓\(Int(descent.rounded()))"
     }
 
-    private var subtitle: String {
-        var parts = [checkpoint.checkpointKind.label]
-        if let ele = checkpoint.ele { parts.append("\(ele) m") }
-        parts.append(String(format: "km %.1f", Double(checkpoint.routeDistanceM) / 1000))
-        if let from {
-            let distance = Double(checkpoint.routeDistanceM) - from
-            if distance > 0 { parts.append(String(format: "%.2f km ahead", distance / 1000)) }
-        }
-        return parts.joined(separator: " \u{00B7} ")
-    }
 
     private var note: AttributedString {
         (try? AttributedString(
