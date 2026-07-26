@@ -450,12 +450,13 @@ struct RouteMapView: UIViewRepresentable {
                     labels.textHaloColor = NSExpression(forConstantValue: UIColor.systemBackground)
                     labels.textHaloWidth = NSExpression(forConstantValue: 1.5)
                     labels.textAnchor = NSExpression(forConstantValue: "top")
-                    // Clear of the pin. The label is a separate symbol to the
-                    // collision placer, so it neither pushes the pin aside nor
-                    // gets pushed — it just lands wherever it is told, and at
-                    // 1.2 em that was on top of the artwork.
+                    // Tight under the pin, touching it rather than clear of it.
+                    // Held there deliberately: at trip scale the map is a field
+                    // of pins, and a name floating a gap away stops belonging to
+                    // any one of them. Overlapping the artwork slightly costs
+                    // less than being unreadable about which stop it names.
                     labels.textOffset = NSExpression(
-                        forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 2.2))
+                        forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 1.2))
                     )
                     // Names may collide and drop; the pin beneath never does.
                     style.addLayer(labels)
@@ -560,9 +561,11 @@ struct RouteMapView: UIViewRepresentable {
             label.textHaloColor = NSExpression(forConstantValue: UIColor.systemBackground)
             label.textHaloWidth = NSExpression(forConstantValue: 1.8)
             label.textAnchor = NSExpression(forConstantValue: "top")
-            // Clear of the badge's own collision box, which is a separate
-            // symbol to the placer and wins every contest it enters.
-            label.textOffset = NSExpression(forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 2.4)))
+            // As close as the badge allows. The badge is squarer and larger
+            // than a checkpoint pin, so this cannot be as tight as a stop's
+            // name, but it is the same intent: the label belongs to the mark
+            // under it and should read that way.
+            label.textOffset = NSExpression(forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 1.9)))
             style.addLayer(label)
         }
 
