@@ -31,6 +31,9 @@ struct RouteMapView: UIViewRepresentable {
     var followMode: FollowMode
     /// Kinds to show. Empty means all, matching the web planner.
     var kindFilter: Set<CheckpointKind> = []
+    /// The checkpoint whose callout is open, ringed on the map so it is
+    /// obvious which pin the bubble belongs to.
+    var highlighted: TripPackage.Checkpoint?
     /// Called when a checkpoint pin is tapped.
     var onSelectCheckpoint: ((TripPackage.Checkpoint, CGPoint) -> Void)?
 
@@ -76,6 +79,7 @@ struct RouteMapView: UIViewRepresentable {
         context.coordinator.parent = self
         context.coordinator.updatePosition(position, mode: followMode)
         context.coordinator.applyFilter(kindFilter)
+        context.coordinator.applyHighlight(highlighted)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -115,6 +119,23 @@ struct RouteMapView: UIViewRepresentable {
 
         init(parent: RouteMapView) {
             self.parent = parent
+        }
+
+        /// Ring the checkpoint whose callout is open. Without it the bubble
+        /// floats with no visible tie to the pin it describes.
+        func applyHighlight(_ checkpoint: TripPackage.Checkpoint?) {
+            guard let style = mapView?.style,
+                  let source = style.source(withIdentifier: "checkpoint-highlight") as? MLNShapeSource
+            else { return }
+            guard let checkpoint else {
+                source.shape = nil
+                return
+            }
+            let feature = MLNPointFeature()
+            feature.coordinate = CLLocationCoordinate2D(
+                latitude: checkpoint.lat, longitude: checkpoint.lng
+            )
+            source.shape = feature
         }
 
         /// Show only the kinds asked for. One layer per kind makes this a
@@ -205,6 +226,17 @@ struct RouteMapView: UIViewRepresentable {
             addRoute(to: style)
             addDirectionArrows(to: style)
             addCheckpoints(to: style)
+            // Under the pins so the ring reads as a halo, not a badge.
+            let highlightSource = MLNShapeSource(identifier: "checkpoint-highlight", shape: nil)
+            style.addSource(highlightSource)
+            let ring = MLNCircleStyleLayer(identifier: "checkpoint-highlight", source: highlightSource)
+            ring.circleRadius = NSExpression(forConstantValue: 22)
+            ring.circleColor = NSExpression(forConstantValue: UIColor.systemIndigo)
+            ring.circleOpacity = NSExpression(forConstantValue: 0.22)
+            ring.circleStrokeColor = NSExpression(forConstantValue: UIColor.systemIndigo)
+            ring.circleStrokeWidth = NSExpression(forConstantValue: 2.5)
+            style.addLayer(ring)
+
             addPosition(to: style)
             zoomToRoute(mapView)
             didAddRoute = true
@@ -351,42 +383,71 @@ struct RouteMapView: UIViewRepresentable {
 
         /// A map pin for a checkpoint kind: coloured disc, white glyph, thin
         /// outline so it survives both pale scree and dark forest.
+        /// Glyphs are white except on the pale fills, where white on yellow is
+        /// unreadable at pin size.
+        private static func glyphColour(for kind: CheckpointKind) -> UIColor {
+            kind == .resupply ? UIColor(white: 0.15, alpha: 1) : .white
+        }
+
         private static func pinImage(for kind: CheckpointKind) -> UIImage {
-            let size = CGSize(width: 44, height: 44)
+            // A plain landmark is drawn as a small dot with no glyph. Twenty of
+            // the fifty-six checkpoints on this trip are landmarks, and giving
+            // them all a pin symbol made the map a field of identical grey
+            // blobs that buried the water and the refuges among them. They are
+            // reference marks; the things you plan around get the icons.
+            if kind == .poi {
+                let size = CGSize(width: 26, height: 26)
+                return UIGraphicsImageRenderer(size: size).image { _ in
+                    let rect = CGRect(origin: .zero, size: size).insetBy(dx: 5, dy: 5)
+                    tint(for: kind).setFill()
+                    UIColor.white.setStroke()
+                    let dot = UIBezierPath(ovalIn: rect)
+                    dot.lineWidth = 3
+                    dot.fill()
+                    dot.stroke()
+                }
+            }
+
+            let size = CGSize(width: 46, height: 46)
             let colour = tint(for: kind)
-            return UIGraphicsImageRenderer(size: size).image { context in
+            return UIGraphicsImageRenderer(size: size).image { _ in
                 let rect = CGRect(origin: .zero, size: size).insetBy(dx: 3, dy: 3)
                 colour.setFill()
                 UIColor.white.setStroke()
                 let circle = UIBezierPath(ovalIn: rect)
-                circle.lineWidth = 3
+                // A thicker ring: these sit on woodland green and pale scree,
+                // and the outline is what separates them from both.
+                circle.lineWidth = 3.5
                 circle.fill()
                 circle.stroke()
 
-                let configuration = UIImage.SymbolConfiguration(pointSize: 20, weight: .bold)
+                let configuration = UIImage.SymbolConfiguration(pointSize: 21, weight: .heavy)
                 if let glyph = UIImage(systemName: kind.symbolName, withConfiguration: configuration)?
-                    .withTintColor(.white, renderingMode: .alwaysOriginal) {
-                    let target = CGRect(
+                    .withTintColor(glyphColour(for: kind), renderingMode: .alwaysOriginal) {
+                    glyph.draw(in: CGRect(
                         x: (size.width - glyph.size.width) / 2,
                         y: (size.height - glyph.size.height) / 2,
                         width: glyph.size.width,
                         height: glyph.size.height
-                    )
-                    glyph.draw(in: target)
+                    ))
                 }
-                _ = context
             }
         }
 
+        /// Distinct hues, not a palette. Two kinds sharing a colour is two
+        /// kinds a walker has to stop and think about, and "food" and
+        /// "resupply" mean different things when the next shop is two days off.
         private static func tint(for kind: CheckpointKind) -> UIColor {
             switch kind {
-            case .overnight, .refuge: .systemOrange
-            case .water: .systemTeal
-            case .food, .resupply: .systemGreen
-            case .hazard: .systemRed
+            case .overnight: .systemOrange
+            case .refuge: .systemPink
+            case .food: .systemGreen
+            case .resupply: .systemYellow
+            case .water: .systemCyan
             case .transport: .systemPurple
             case .pass: .systemBrown
             case .viewpoint: .systemBlue
+            case .hazard: .systemRed
             case .poi: .systemGray
             }
         }

@@ -21,23 +21,35 @@ struct CheckpointCallout: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let width = min(280.0, geometry.size.width - 32)
-            let x = min(max(width / 2 + 12, anchor.x), geometry.size.width - width / 2 - 12)
-            // Above the pin normally; below it when the pin sits near the top,
-            // so the bubble never runs off the screen.
-            let above = anchor.y > 150
-            let y = above ? anchor.y - 12 : anchor.y + 12
+            let size = geometry.size
+            let width = min(300.0, size.width - 24)
+            let height = estimatedHeight(width: width)
+            let inset = 10.0
+
+            // Clamp inside the map on both axes. The first version only
+            // clamped x and pushed y by a fixed offset, so a pin near the top
+            // put the bubble half off the screen and over the title bar.
+            let preferAbove = anchor.y - height - 18 > inset
+            let rawY = preferAbove ? anchor.y - height / 2 - 18 : anchor.y + height / 2 + 18
+            let x = min(max(width / 2 + inset, anchor.x), size.width - width / 2 - inset)
+            let y = min(max(height / 2 + inset, rawY), size.height - height / 2 - inset)
 
             card
                 .frame(width: width)
                 .position(x: x, y: y)
-                .offset(y: above ? -cardHeight / 2 : cardHeight / 2)
-                .transition(.scale(scale: 0.9).combined(with: .opacity))
+                .transition(.scale(scale: 0.92).combined(with: .opacity))
         }
-        .ignoresSafeArea()
     }
 
-    private var cardHeight: CGFloat { checkpoint.note.isEmpty ? 86 : 118 }
+    /// Rough height, used only for clamping. Being a little wrong just shifts
+    /// the bubble a few points; being unclamped puts it off the screen.
+    private func estimatedHeight(width: CGFloat) -> CGFloat {
+        let base: CGFloat = 92
+        guard !checkpoint.note.isEmpty else { return base }
+        let charsPerLine = max(1, Int((width - 24) / 6.5))
+        let lines = CGFloat((checkpoint.note.count / charsPerLine) + 1)
+        return base + min(lines, 4) * 16
+    }
 
     private var card: some View {
         VStack(alignment: .leading, spacing: 7) {

@@ -73,6 +73,7 @@ struct TrailMapScreen: View {
                 routeDistanceM: recorder.progress?.routeDistanceM,
                 followMode: followMode,
                 kindFilter: kindFilter,
+                highlighted: callout?.checkpoint,
                 onSelectCheckpoint: { checkpoint, point in
                     // Answer where the walker pointed. Sending them to a panel
                     // instead would make them look away from the very thing
@@ -148,7 +149,10 @@ struct TrailMapScreen: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .background(banner.colour)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    // Top, not bottom: at the bottom it covered the panel's
+                    // grab handle, so going off route — exactly when you want
+                    // the profile and the stops — made the panel undraggable.
+                    .frame(maxHeight: .infinity, alignment: .top)
             }
         }
         .frame(maxHeight: .infinity)
@@ -296,6 +300,10 @@ struct TrailMapScreen: View {
 
     private func metres(_ value: Double?) -> String {
         guard let value, value.isFinite else { return "—" }
+        // Past a few kilometres the exact figure stops meaning anything — you
+        // are not near this route at all, and "10,044,476 m" reads as a bug.
+        if value >= 20_000 { return "far off" }
+        if value >= 1_000 { return String(format: "%.1f km", value / 1000) }
         return String(format: "%.0f m", value)
     }
 

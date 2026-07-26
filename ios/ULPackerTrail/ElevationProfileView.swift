@@ -198,15 +198,19 @@ struct ElevationProfileView: View {
 
     private nonisolated(unsafe) static var cache: [String: [(routeM: Double, ele: Double)]] = [:]
 
+    /// Must match `RouteMapView.tint(for:)` — a stop cannot be one colour on
+    /// the map and another in the list beneath it.
     static func tint(for kind: CheckpointKind) -> Color {
         switch kind {
-        case .overnight, .refuge: .orange
-        case .water: .teal
-        case .food, .resupply: .green
-        case .hazard: .red
+        case .overnight: .orange
+        case .refuge: .pink
+        case .food: .green
+        case .resupply: .yellow
+        case .water: .cyan
         case .transport: .purple
         case .pass: .brown
         case .viewpoint: .blue
+        case .hazard: .red
         case .poi: .gray
         }
     }
