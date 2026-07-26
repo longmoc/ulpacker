@@ -31,6 +31,9 @@ struct RouteMapView: UIViewRepresentable {
     var followMode: FollowMode
     /// Kinds to show. Empty means all, matching the web planner.
     var kindFilter: Set<CheckpointKind> = []
+    /// Raised when the walker's own gesture should change the camera mode —
+    /// tapping the compass, or panning the map away.
+    var onFollowModeOverride: ((FollowMode) -> Void)?
     /// Called when a checkpoint pin is tapped.
     var onSelectCheckpoint: ((TripPackage.Checkpoint, CGPoint) -> Void)?
 
@@ -126,6 +129,33 @@ struct RouteMapView: UIViewRepresentable {
                 let show = kinds.isEmpty || kinds.contains(kind)
                 style.layer(withIdentifier: "checkpoint-pins-\(kind.rawValue)")?.isVisible = show
                 style.layer(withIdentifier: "checkpoint-labels-\(kind.rawValue)")?.isVisible = show
+            }
+        }
+
+        // MARK: - Camera changes the walker made
+
+        /// MapLibre reports *why* the camera moved, which is what lets a tap on
+        /// the compass be told apart from our own recentring.
+        func mapView(
+            _ mapView: MLNMapView,
+            regionDidChangeWith reason: MLNCameraChangeReason,
+            animated: Bool
+        ) {
+            // Tapping the compass is an explicit "show me north". Staying in
+            // course-up would turn the map back moments later, which reads as
+            // the app arguing; and the old code was worse than either — it left
+            // the map stuck north until the route happened to swing 20°.
+            if reason.contains(.resetNorth), parent.followMode == .courseUp {
+                lastCourse = nil
+                parent.onFollowModeOverride?(.northUp)
+                return
+            }
+
+            // Panning or rotating by hand means the walker is looking somewhere
+            // else on purpose. Recentring on the next fix would snatch it back.
+            let handMoved: MLNCameraChangeReason = [.gesturePan, .gestureRotate]
+            if !reason.isDisjoint(with: handMoved), parent.followMode != .free {
+                parent.onFollowModeOverride?(.free)
             }
         }
 
