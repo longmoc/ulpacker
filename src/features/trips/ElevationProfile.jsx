@@ -28,6 +28,7 @@ export default function ElevationProfile({
 }) {
   const svgRef = useRef(null);
   const canvasRef = useRef(null);
+  const rootRef = useRef(null);
   const [hover, setHover] = useState(null);
   const [hoverCp, setHoverCp] = useState(null);
   const [pending, setPending] = useState(null); // { routeM, left, top } confirm popover
@@ -36,18 +37,50 @@ export default function ElevationProfile({
   const [addMode, setAddMode] = useState(false);
   const [full, setFull] = useState(false);
   const [box, setBox] = useState(FALLBACK);
+  const [shell, setShell] = useState(null); // full-screen inner size, for rotation
 
-  // Keep the drawing coordinates in step with the element's real size.
+  // A profile is a wide chart. Full screen on a phone held upright would squeeze
+  // 160 km into ~360 px and stretch the height absurdly, so lay the chart out
+  // landscape and rotate it a quarter turn: turning the phone then shows it the
+  // right way up, even with the OS rotation lock on.
+  const rotated = Boolean(full && shell && shell.h > shell.w && shell.w <= 640);
+
+  // Track the full-screen shell so we know its orientation and can size the
+  // rotated canvas (which needs the shell's height as its width).
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el || !full) {
+      setShell(null);
+      return;
+    }
+    const measure = () => {
+      const cs = getComputedStyle(el);
+      const w = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const h = el.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      if (w > 0 && h > 0) {
+        setShell((prev) =>
+          prev && Math.abs(prev.w - w) < 0.5 && Math.abs(prev.h - h) < 0.5 ? prev : { w, h }
+        );
+      }
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [full]);
+
+  // Keep the drawing coordinates in step with the element's real size. Uses the
+  // layout box (offsetWidth/Height), which — unlike getBoundingClientRect —
+  // ignores the rotation transform.
   useLayoutEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
     const measure = () => {
-      const r = el.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) {
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      if (w > 0 && h > 0) {
         setBox((prev) =>
-          Math.abs(prev.w - r.width) < 0.5 && Math.abs(prev.h - r.height) < 0.5
-            ? prev
-            : { w: r.width, h: r.height }
+          Math.abs(prev.w - w) < 0.5 && Math.abs(prev.h - h) < 0.5 ? prev : { w, h }
         );
       }
     };
@@ -160,9 +193,18 @@ export default function ElevationProfile({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [series, dayBands, hasEle, W, H, minEle, maxEle, totalM]);
 
-  const moveToClientX = (clientX) => {
-    const rect = svgRef.current.getBoundingClientRect();
-    const px = ((clientX - rect.left) / rect.width) * W;
+  // Screen point → chart-local point. A quarter turn clockwise maps the chart's
+  // x axis down the screen, so the distance axis is driven by clientY there.
+  const toLocal = (clientX, clientY, el) => {
+    const rect = el.getBoundingClientRect(); // the on-screen (transformed) box
+    if (rotated) {
+      return { x: clientY - rect.top, y: rect.left + rect.width - clientX };
+    }
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
+  const moveToPointer = (clientX, clientY) => {
+    const px = toLocal(clientX, clientY, svgRef.current).x;
     const frac = Math.max(0, Math.min(1, (px - PAD.left) / plotW));
     const routeM = frac * totalM;
     const x = PAD.left + frac * plotW;
@@ -178,20 +220,20 @@ export default function ElevationProfile({
     if ((near?.cp?.id || null) !== (hoverCp?.id || null)) setNearCp(near ? near.cp : null);
   };
 
-  const handleMove = (e) => moveToClientX(e.clientX);
+  const handleMove = (e) => moveToPointer(e.clientX, e.clientY);
   // Touch has no hover: dragging (or tapping) scrubs the read-out. Not
   // preventDefault-ed, so the page still scrolls normally.
   const handleTouch = (e) => {
     const touch = e.touches?.[0];
-    if (touch) moveToClientX(touch.clientX);
+    if (touch) moveToPointer(touch.clientX, touch.clientY);
   };
 
   // With add-mode on, clicking opens the same "Add a checkpoint here?" confirm
   // as the map. With it off (the default) the plot is read-only.
   const handleClick = (e) => {
     if (!addMode || !hasEle || !hover) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    setPending({ routeM: hover.routeM, left: e.clientX - rect.left, top: e.clientY - rect.top });
+    const p = toLocal(e.clientX, e.clientY, canvasRef.current);
+    setPending({ routeM: hover.routeM, left: p.x, top: p.y });
   };
 
   // Keep the distance pill inside the plot even at the very ends.
@@ -217,7 +259,7 @@ export default function ElevationProfile({
   })();
 
   return (
-    <div className={`elevation-profile ${full ? "fullscreen" : ""}`}>
+    <div ref={rootRef} className={`elevation-profile ${full ? "fullscreen" : ""} ${rotated ? "rotated" : ""}`}>
       <div className="profile-tools">
       {hasEle && (
         <button
@@ -252,8 +294,12 @@ export default function ElevationProfile({
           {full ? <MinimizeIcon size={15} /> : <MaximizeIcon size={15} />}
         </button>
       </div>
-      {full && <span className="profile-rotate-hint">Rotate your phone for a wider profile</span>}
-      <div className="profile-canvas" ref={canvasRef}>
+      {rotated && <span className="profile-rotate-hint">Turn your phone to read this</span>}
+      <div
+        className="profile-canvas"
+        ref={canvasRef}
+        style={rotated ? { width: shell.h, height: shell.w } : undefined}
+      >
       <svg
         ref={svgRef}
         viewBox={`0 0 ${W} ${H}`}

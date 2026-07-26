@@ -3315,26 +3315,50 @@ button[type="submit"]:active {
   .profile-canvas { aspect-ratio: 1000 / 420; }
 }
 
-/* Portrait full screen exaggerates the vertical scale hard; landscape is the
-   good view, so say so (and only there). */
+/* Held upright, the chart is laid out landscape and turned a quarter turn, so
+   turning the phone shows it upright and full width — even with rotation lock
+   on. The size comes from JS (the shell's height becomes the canvas width). */
+.elevation-profile.rotated .profile-canvas {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(90deg);
+  transform-origin: 50% 50%;
+  aspect-ratio: auto;
+  flex: none;
+}
+
+/* Turn the controls with the chart and move them to what becomes the top-right
+   once the phone is turned (a quarter turn maps that corner to bottom-right).
+   Needs to out-specify `.elevation-profile.fullscreen .profile-tools`, and must
+   clear top/left — leaving both edges of an axis set would stretch the box. */
+.elevation-profile.fullscreen.rotated .profile-tools {
+  top: auto;
+  left: auto;
+  bottom: 34px;
+  right: 26px;
+  transform: rotate(90deg);
+}
+
+/* Sits with the chart, so it too reads correctly once the phone is turned. */
 .profile-rotate-hint { display: none; }
-@media (max-width: 640px) and (orientation: portrait) {
-  .elevation-profile.fullscreen .profile-rotate-hint {
-    display: block;
-    position: absolute;
-    left: 50%;
-    bottom: 14px;
-    transform: translateX(-50%);
-    z-index: 6;
-    padding: 5px 11px;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--surface) 88%, transparent);
-    backdrop-filter: blur(6px);
-    border: 1px solid var(--border-2);
-    color: var(--text-3);
-    font-size: 0.76rem;
-    pointer-events: none;
-  }
+.elevation-profile.rotated .profile-rotate-hint {
+  display: block;
+  position: absolute;
+  top: 50%;
+  left: 14px;
+  transform: translateY(-50%) rotate(90deg);
+  transform-origin: left center;
+  white-space: nowrap;
+  z-index: 6;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border-2);
+  color: var(--text-3);
+  font-size: 0.76rem;
+  pointer-events: none;
 }
 
 .elevation-profile.fullscreen {
@@ -4791,6 +4815,23 @@ button[type="submit"]:active {
 }
 .day-title-input:hover { border-color: var(--border); }
 .day-title-input:focus { border-color: var(--accent); background: var(--surface); }
+
+/* Resting state of the same title — a heading, not a form field */
+.day-title-text {
+  width: auto;
+  flex: 0 1 auto;
+  text-align: left;
+  font: inherit;
+  font-weight: 650;
+  color: var(--text);
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  cursor: text;
+}
+.day-title-text:hover { border-color: var(--border); background: var(--surface-2); }
 
 /* Endpoint legend: icon + editable name, with a loop link toggle between */
 .map-legend-ends { gap: 8px; }

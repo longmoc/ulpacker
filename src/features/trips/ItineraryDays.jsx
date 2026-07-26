@@ -48,6 +48,52 @@ function NoteBlock({ isEditing, draft, setDraft, onSave, onCancel, note, onAdd }
   );
 }
 
+// Off-route day title: static text until you ask to edit it, so it reads as a
+// heading rather than a form field you can disturb by accident. Module scope for
+// the same reason as NoteBlock.
+function DayTitle({ value, placeholder, onSave }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value || "");
+
+  const commit = () => {
+    onSave((draft || "").trim());
+    setEditing(false);
+  };
+
+  if (editing) {
+    return (
+      <input
+        className="day-title-input"
+        autoFocus
+        value={draft}
+        placeholder={placeholder}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") {
+            setDraft(value || "");
+            setEditing(false);
+          }
+        }}
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      className="day-title-text"
+      title="Rename this day"
+      onClick={() => {
+        setDraft(value || "");
+        setEditing(true);
+      }}
+    >
+      {value || placeholder}
+    </button>
+  );
+}
+
 // Derived day-by-day itinerary. Trail days come from overnight checkpoints;
 // off-route days (travel/rest/shuttle) are stored on the trip and interleaved,
 // carry no distance, and never touch the trail on the map.
@@ -182,11 +228,10 @@ export default function ItineraryDays({
                     <span className="day-badge" style={{ background: OFF_ROUTE_COLOR, color: readableOn(OFF_ROUTE_COLOR) }}>
                       Day {n}
                     </span>
-                    <input
-                      className="day-title-input"
+                    <DayTitle
                       value={x.title}
                       placeholder="Off-route day"
-                      onChange={(e) => onUpdateExtraDay?.(x.id, { title: e.target.value })}
+                      onSave={(v) => onUpdateExtraDay?.(x.id, { title: v || "Off-route day" })}
                     />
                     <span className="cp-flag off-route-badge">off-route</span>
                   </div>
