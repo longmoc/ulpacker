@@ -124,7 +124,9 @@ struct TrailInfoPanel: View {
             ScrollView {
             LazyVStack(spacing: 0) {
                 if let selected {
-                    CheckpointDetail(checkpoint: selected, from: routeDistanceM) {
+                    CheckpointDetail(
+                        checkpoint: selected, package: package, from: routeDistanceM
+                    ) {
                         self.selected = nil
                     }
                     Divider()
@@ -299,8 +301,16 @@ private struct CheckpointRow: View {
 /// The opened checkpoint: everything the planner wrote about it.
 private struct CheckpointDetail: View {
     let checkpoint: TripPackage.Checkpoint
+    let package: TripPackage
     let from: Double?
     let onClose: () -> Void
+
+    /// What it takes to get there from where the walker is now — or, before the
+    /// walk starts, from the beginning of the route.
+    private var leg: RouteProfile.Leg {
+        RouteProfiles.profile(for: package)
+            .leg(fromRouteM: from ?? 0, toRouteM: Double(checkpoint.routeDistanceM))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -338,6 +348,8 @@ private struct CheckpointDetail: View {
                 .buttonStyle(.plain)
             }
 
+            legRow
+
             if checkpoint.note.isEmpty {
                 Text("No note for this stop.")
                     .font(.footnote)
@@ -360,6 +372,85 @@ private struct CheckpointDetail: View {
         .background(Color.primary.opacity(0.04))
     }
 
+    /// Distance, time and climb between here and the stop.
+    ///
+    /// The three together or none of them: on a mountain route the distance
+    /// alone is close to meaningless — the same 4 km is an hour along a valley
+    /// and three hours over a col — and it is exactly this row that answers
+    /// whether there is time to reach the next refuge or whether the answer is
+    /// to stop where you are.
+    private var legRow: some View {
+        VStack(spacing: 4) {
+            HStack(alignment: .top, spacing: 0) {
+                legStat("Distance", Self.distance(leg.distanceM))
+                legDivider
+                legStat("Time", Self.duration(leg.duration))
+                legDivider
+                legStat("Climb", Self.climb(leg))
+            }
+            .padding(.vertical, 9)
+            .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 9))
+
+            // Below the numbers rather than tucked into a corner of them: put
+            // anywhere inside the box it lands on top of the climb figure,
+            // which is the one number that runs long.
+            Text(origin)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+
+    /// Where the numbers are measured from. Never left implicit: "4.2 km" means
+    /// two different things before and after the walk starts, and a stop behind
+    /// you is a different answer again.
+    private var origin: String {
+        if leg.isBehind { return "walking back from here" }
+        return from == nil ? "from the start of the route" : "from where you are"
+    }
+
+    private func legStat(_ title: String, _ value: String) -> some View {
+        VStack(spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.subheadline.weight(.semibold))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var legDivider: some View {
+        Rectangle()
+            .fill(Color.primary.opacity(0.09))
+            .frame(width: 1, height: 26)
+    }
+
+    static func distance(_ metres: Double) -> String {
+        metres < 1000
+            ? "\(Int(metres.rounded())) m"
+            : String(format: "%.1f km", metres / 1000)
+    }
+
+    /// Hours and minutes, never decimal hours — "1 h 45" is a time a walker can
+    /// hold against a watch; "1.75 h" is arithmetic to do at a col.
+    static func duration(_ seconds: TimeInterval?) -> String {
+        guard let seconds, seconds.isFinite else { return "—" }
+        let minutes = Int((seconds / 60).rounded())
+        guard minutes >= 60 else { return "\(minutes) min" }
+        return String(format: "%d h %02d", minutes / 60, minutes % 60)
+    }
+
+    /// Ascent over descent, stacked. Both matter and for different reasons —
+    /// the climb decides the time, the descent decides the knees.
+    static func climb(_ leg: RouteProfile.Leg) -> String {
+        guard let ascent = leg.ascentM, let descent = leg.descentM else { return "—" }
+        return "↑\(Int(ascent.rounded())) ↓\(Int(descent.rounded()))"
+    }
+
     private var subtitle: String {
         var parts = [checkpoint.checkpointKind.label]
         if let ele = checkpoint.ele { parts.append("\(ele) m") }
@@ -377,4 +468,21 @@ private struct CheckpointDetail: View {
             options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
         )) ?? AttributedString(checkpoint.note)
     }
+}
+
+/// One `RouteProfile` per trip, kept alive between views.
+///
+/// Building it walks all 8,561 points of the route. That is nothing once and
+/// far too much on every SwiftUI redraw, and a detail card redraws whenever the
+/// walker moves.
+enum RouteProfiles {
+    static func profile(for package: TripPackage) -> RouteProfile {
+        let key = "\(package.tripId)#\(package.revision)"
+        if let cached = cache[key] { return cached }
+        let profile = RouteProfile(package: package)
+        cache[key] = profile
+        return profile
+    }
+
+    private nonisolated(unsafe) static var cache: [String: RouteProfile] = [:]
 }
