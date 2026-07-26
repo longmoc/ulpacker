@@ -18,6 +18,8 @@ struct TrailMapScreen: View {
     @State private var panelDetent: TrailInfoPanel.Detent = .collapsed
     @State private var panelTab: TrailInfoPanel.Tab = .profile
     @State private var selectedCheckpoint: TripPackage.Checkpoint?
+    /// The pin tapped on the map, and where it is on screen.
+    @State private var callout: (checkpoint: TripPackage.Checkpoint, at: CGPoint)?
     private let autoStart: Bool
 
     init(package: TripPackage, autoStart: Bool = false) {
@@ -69,13 +71,12 @@ struct TrailMapScreen: View {
                 position: currentCoordinate,
                 routeDistanceM: recorder.progress?.routeDistanceM,
                 followsPosition: followsPosition,
-                onSelectCheckpoint: { checkpoint in
-                    // Opening the panel on the tapped stop is the whole point
-                    // of the tap: the note is what the walker came for.
-                    selectedCheckpoint = checkpoint
-                    panelTab = .stops
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
-                        panelDetent = .expanded
+                onSelectCheckpoint: { checkpoint, point in
+                    // Answer where the walker pointed. Sending them to a panel
+                    // instead would make them look away from the very thing
+                    // they just asked about.
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.85)) {
+                        callout = (checkpoint, point)
                     }
                 }
             )
@@ -95,6 +96,23 @@ struct TrailMapScreen: View {
                 .accessibilityLabel(followsPosition ? "Stop following position" : "Follow position")
             }
             .padding(12)
+
+            if let callout {
+                CheckpointCallout(
+                    checkpoint: callout.checkpoint,
+                    anchor: callout.at,
+                    from: recorder.progress?.routeDistanceM,
+                    onOpenDetails: {
+                        selectedCheckpoint = callout.checkpoint
+                        panelTab = .stops
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.85)) {
+                            panelDetent = .expanded
+                            self.callout = nil
+                        }
+                    },
+                    onDismiss: { withAnimation(.easeOut(duration: 0.18)) { self.callout = nil } }
+                )
+            }
 
             // Over the map, never over the readouts: the live numbers must
             // stay visible whatever the panel is doing.

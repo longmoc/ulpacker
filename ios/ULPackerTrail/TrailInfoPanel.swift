@@ -14,7 +14,8 @@ struct TrailInfoPanel: View {
     }
 
     enum Detent {
-        /// Just the grab handle and the tab bar — the map keeps the screen.
+        /// A bare grab strip. Even the tab titles are given back to the map —
+        /// at rest this panel should cost almost nothing.
         case collapsed
         /// Enough for the profile or three or four stops.
         case medium
@@ -23,7 +24,7 @@ struct TrailInfoPanel: View {
 
         func height(in total: CGFloat) -> CGFloat {
             switch self {
-            case .collapsed: 74
+            case .collapsed: 26
             case .medium: min(320, total * 0.42)
             case .expanded: total * 0.82
             }
@@ -45,16 +46,14 @@ struct TrailInfoPanel: View {
 
             VStack(spacing: 0) {
                 handle
-                tabBar
-                // Collapsed shows chrome only: a chart squeezed into 20 pt is
-                // unreadable and steals map for nothing.
                 if detent != .collapsed {
+                    tabBar
                     Divider()
                     content
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
             }
-            .frame(height: max(74, height - dragOffset), alignment: .top)
+            .frame(height: max(26, height - dragOffset), alignment: .top)
             .frame(maxWidth: .infinity)
             .background(.regularMaterial)
             .clipShape(UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16))
@@ -70,8 +69,8 @@ struct TrailInfoPanel: View {
         Capsule()
             .fill(Color.secondary.opacity(0.4))
             .frame(width: 38, height: 5)
-            .padding(.top, 8)
-            .padding(.bottom, 6)
+            .padding(.top, 9)
+            .padding(.bottom, 9)
             // The whole strip is draggable, not just the bar: a 5 pt target is
             // not something to find with a gloved thumb.
             .frame(maxWidth: .infinity)
@@ -238,24 +237,37 @@ private struct CheckpointDetail: View {
     let onClose: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
                 Image(systemName: checkpoint.checkpointKind.symbolName)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 32, height: 32)
+                    .frame(width: 34, height: 34)
                     .background(
                         Circle().fill(ElevationProfileView.tint(for: checkpoint.checkpointKind))
                     )
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(checkpoint.displayName).font(.headline)
-                    Text(subtitle).font(.caption).foregroundStyle(.secondary)
+
+                // Explicit width and layout priority: without them the title and
+                // the close button squeezed the subtitle out of existence
+                // entirely, which is how this card first shipped.
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(checkpoint.displayName)
+                        .font(.headline)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+
                 Button(action: onClose) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title3)
                         .foregroundStyle(.secondary)
+                        .frame(width: 34, height: 34)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -272,11 +284,14 @@ private struct CheckpointDetail: View {
                 Text(note)
                     .font(.subheadline)
                     .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.vertical, 13)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04))
     }
 
     private var subtitle: String {
@@ -287,10 +302,8 @@ private struct CheckpointDetail: View {
             let distance = Double(checkpoint.routeDistanceM) - from
             if distance > 0 { parts.append(String(format: "%.2f km ahead", distance / 1000)) }
         }
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: " \u{00B7} ")
     }
-
-    private var AttributedNote: AttributedString { note }
 
     private var note: AttributedString {
         (try? AttributedString(

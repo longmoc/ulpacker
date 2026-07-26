@@ -20,7 +20,7 @@ struct RouteMapView: UIViewRepresentable {
     var routeDistanceM: Double?
     var followsPosition: Bool
     /// Called when a checkpoint pin is tapped.
-    var onSelectCheckpoint: ((TripPackage.Checkpoint) -> Void)?
+    var onSelectCheckpoint: ((TripPackage.Checkpoint, CGPoint) -> Void)?
 
     func makeUIView(context: Context) -> MLNMapView {
         let mapView = MLNMapView(frame: .zero)
@@ -109,7 +109,7 @@ struct RouteMapView: UIViewRepresentable {
             guard let name = hits.compactMap({ $0.attribute(forKey: "name") as? String }).first,
                   let checkpoint = parent.package.checkpoints.first(where: { $0.displayName == name })
             else { return }
-            parent.onSelectCheckpoint?(checkpoint)
+            parent.onSelectCheckpoint?(checkpoint, point)
         }
 
         // MARK: - Style
