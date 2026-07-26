@@ -84,20 +84,29 @@ struct TrailMapScreen: View {
             )
             .ignoresSafeArea(edges: .horizontal)
 
-            VStack(spacing: 8) {
-                // Re-centring is a manual affordance on purpose: the map should
-                // not fight someone who panned away to look at what is ahead.
-                Button {
-                    followsPosition.toggle()
-                } label: {
-                    Image(systemName: followsPosition ? "location.fill" : "location")
-                        .font(.system(size: 17, weight: .semibold))
-                        .frame(width: 40, height: 40)
-                        .background(.regularMaterial, in: Circle())
-                }
-                .accessibilityLabel(followsPosition ? "Stop following position" : "Follow position")
+            // Follow-position toggle. On, the map moves with each fix; off,
+            // it stays where it was panned, so looking ahead at the next col
+            // does not get snatched back.
+            //
+            // Bottom-trailing, not top: the compass lives top-right and this
+            // was sitting on top of it. Down here it is also where a thumb
+            // already is, which is the hand that presses it while walking.
+            Button {
+                followsPosition.toggle()
+            } label: {
+                Image(systemName: followsPosition ? "location.fill" : "location")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(followsPosition ? Color.indigo : Color.primary)
+                    .frame(width: 44, height: 44)
+                    .background(.regularMaterial, in: Circle())
+                    .overlay(Circle().stroke(Color.primary.opacity(0.08), lineWidth: 1))
             }
-            .padding(12)
+            .accessibilityLabel(followsPosition ? "Stop following position" : "Follow position")
+            .padding(.trailing, 12)
+            // Above both the collapsed panel handle and the attribution
+            // button, which must stay tappable for the map licence.
+            .padding(.bottom, 92)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
 
             if let callout {
                 CheckpointCallout(

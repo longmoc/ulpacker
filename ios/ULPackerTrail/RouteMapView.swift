@@ -30,7 +30,12 @@ struct RouteMapView: UIViewRepresentable {
         // development convenience only — on a trail there is no signal, and a
         // map that quietly needs some is worse than no map at all.
         mapView.styleURL = Self.styleURL(for: package)
+        // Attribution and logo must stay reachable: OpenStreetMap's licence
+        // requires it, and the panel sits over the bottom of the map. Lift both
+        // clear of the collapsed handle.
         mapView.logoView.isHidden = false
+        mapView.logoViewMargins = CGPoint(x: 8, y: 46)
+        mapView.attributionButtonMargins = CGPoint(x: 8, y: 46)
         mapView.delegate = context.coordinator
         mapView.showsUserLocation = false // we draw our own, from recorded fixes
         context.coordinator.mapView = mapView
@@ -388,7 +393,7 @@ struct RouteMapView: UIViewRepresentable {
             heading.iconRotation = NSExpression(forKeyPath: "bearing")
             heading.iconRotationAlignment = NSExpression(forConstantValue: "map")
             heading.iconAllowsOverlap = NSExpression(forConstantValue: true)
-            heading.iconScale = NSExpression(forConstantValue: 1.25)
+            heading.iconScale = NSExpression(forConstantValue: 0.92)
             style.addLayer(heading)
         }
 
