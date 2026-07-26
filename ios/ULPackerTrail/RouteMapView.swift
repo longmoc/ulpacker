@@ -151,65 +151,68 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         private func addCheckpoints(to style: MLNStyle) {
-            // One icon per kind, rendered once and reused by the symbol layer.
-            for kind in CheckpointKind.allCases {
+            // One source and one layer per kind, every property constant.
+            //
+            // This is deliberately the dumbest form that works. Three cleverer
+            // ones do not, all failing the same silent way — layer added,
+            // source valid, nothing drawn, no error anywhere:
+            //   * a Bool or Int anywhere in `feature.attributes`
+            //   * `iconImageName` as a keyPath expression
+            //   * `layer.predicate` filtering one source by attribute
+            // Ten sources of a handful of points each cost nothing, and they
+            // are the reason the trip's checkpoints are visible at all.
+            let byKind = Dictionary(grouping: parent.package.checkpoints) { $0.checkpointKind }
+
+            for (kind, checkpoints) in byKind {
                 style.setImage(Self.pinImage(for: kind), forName: "cp-\(kind.rawValue)")
-            }
 
-            let features = parent.package.checkpoints.map { checkpoint -> MLNPointFeature in
-                let kind = checkpoint.checkpointKind
-                let feature = MLNPointFeature()
-                feature.coordinate = CLLocationCoordinate2D(
-                    latitude: checkpoint.lat, longitude: checkpoint.lng
+                let features = checkpoints.map { checkpoint -> MLNPointFeature in
+                    let feature = MLNPointFeature()
+                    feature.coordinate = CLLocationCoordinate2D(
+                        latitude: checkpoint.lat, longitude: checkpoint.lng
+                    )
+                    feature.attributes = ["name": checkpoint.displayName]
+                    return feature
+                }
+                guard !features.isEmpty else { continue }
+
+                let source = MLNShapeSource(
+                    identifier: "checkpoints-\(kind.rawValue)",
+                    shape: MLNShapeCollectionFeature(shapes: features),
+                    options: nil
                 )
-                feature.attributes = [
-                    "name": checkpoint.displayName,
-                    "icon": "cp-\(kind.rawValue)",
-                    // Sleeping places structure the walk; a viewpoint does not.
-                    // Used both for label priority and for what survives when
-                    // the map is too crowded to draw everything.
-                    "major": kind.isMajor,
-                    "priority": kind.priority
-                ]
-                return feature
+                style.addSource(source)
+
+                let pins = MLNSymbolStyleLayer(
+                    identifier: "checkpoint-pins-\(kind.rawValue)", source: source
+                )
+                pins.iconImageName = NSExpression(forConstantValue: "cp-\(kind.rawValue)")
+                pins.iconScale = NSExpression(forConstantValue: kind.isMajor ? 0.5 : 0.34)
+                // Sleeping places must never be dropped by collision: they are
+                // what the day is planned around. The rest may yield.
+                pins.iconAllowsOverlap = NSExpression(forConstantValue: kind.isMajor)
+                style.addLayer(pins)
+
+                // Label only the places worth naming. Fifty-six labels on a
+                // phone is noise; the icons already say what the rest are.
+                guard kind.isMajor else { continue }
+                let labels = MLNSymbolStyleLayer(
+                    identifier: "checkpoint-labels-\(kind.rawValue)", source: source
+                )
+                labels.text = NSExpression(forKeyPath: "name")
+                labels.textFontSize = NSExpression(forConstantValue: 11)
+                // Refuge names run long ("Camping Les Rocailles, Champex-Lac").
+                // Unconstrained they sprawl off the screen edge.
+                labels.maximumTextWidth = NSExpression(forConstantValue: 8)
+                labels.textColor = NSExpression(forConstantValue: UIColor.label)
+                labels.textHaloColor = NSExpression(forConstantValue: UIColor.systemBackground)
+                labels.textHaloWidth = NSExpression(forConstantValue: 1.5)
+                labels.textAnchor = NSExpression(forConstantValue: "top")
+                labels.textOffset = NSExpression(
+                    forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 1.1))
+                )
+                style.addLayer(labels)
             }
-            guard !features.isEmpty else { return }
-
-            let source = MLNShapeSource(identifier: Self.checkpointSourceID, features: features)
-            style.addSource(source)
-
-            let pins = MLNSymbolStyleLayer(identifier: "checkpoint-pins", source: source)
-            pins.iconImageName = NSExpression(forKeyPath: "icon")
-            pins.iconScale = NSExpression(
-                forConditional: NSPredicate(format: "major == YES"),
-                trueExpression: NSExpression(forConstantValue: 0.55),
-                falseExpression: NSExpression(forConstantValue: 0.42)
-            )
-            // Constant, not per-feature: MapLibre only accepts zoom-based
-            // expressions here, and a feature predicate throws at style load.
-            // Icons always draw — they are why the trip has checkpoints — and
-            // the labels below are what yields when space runs out.
-            pins.iconAllowsOverlap = NSExpression(forConstantValue: true)
-            pins.symbolSortKey = NSExpression(forKeyPath: "priority")
-            style.addLayer(pins)
-
-            let labels = MLNSymbolStyleLayer(identifier: "checkpoint-labels", source: source)
-            labels.text = NSExpression(forKeyPath: "name")
-            labels.textFontSize = NSExpression(forConstantValue: 11)
-            // Refuge names run long ("Camping Les Rocailles, Champex-Lac").
-            // Unconstrained they sprawl off the screen edge; wrapping at ~8 ems
-            // keeps them readable and lets collision drop the ones that clash.
-            labels.maximumTextWidth = NSExpression(forConstantValue: 8)
-            labels.textColor = NSExpression(forConstantValue: UIColor.label)
-            labels.textHaloColor = NSExpression(forConstantValue: UIColor.systemBackground)
-            labels.textHaloWidth = NSExpression(forConstantValue: 1.5)
-            labels.textAnchor = NSExpression(forConstantValue: "top")
-            labels.textOffset = NSExpression(forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 1.1)))
-            labels.symbolSortKey = NSExpression(forKeyPath: "priority")
-            // Label only the places worth naming. Fifty-six labels on a phone
-            // is noise; the icons already say what the rest are.
-            labels.predicate = NSPredicate(format: "major == YES")
-            style.addLayer(labels)
         }
 
         // MARK: - Icon rendering

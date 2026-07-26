@@ -3,11 +3,23 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
-    # The iOS companion app lives in this repo but ships through Xcode, not
-    # Pages. Skip the web deploy for commits that only touch it. Commits that
-    # touch both (e.g. a TripPackage schema change) still deploy.
-    paths-ignore:
-      - 'ios/**'
+    # An allow-list, not an ignore-list. `paths-ignore: [ios/**]` only skips a
+    # commit when *every* changed file matches, so an iOS commit that also
+    # touched .gitignore or tools/ still rebuilt and redeployed the site —
+    # which is exactly what happened. Naming what the web build actually
+    # depends on means a new directory never triggers a deploy by accident.
+    #
+    # fixtures/ is here on purpose: it is not shipped, but `npm test` asserts
+    # against it and this workflow is the only CI the repo has.
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'fixtures/**'
+      - 'index.html'
+      - 'vite.config.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 permissions:
