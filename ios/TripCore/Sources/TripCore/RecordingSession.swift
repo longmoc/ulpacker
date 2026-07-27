@@ -268,11 +268,25 @@ public final class RecordingSession {
     public func resumeRecording() {
         guard state == .paused else { return }
         state = .recording
-        // The gap says nothing about where they are now — a pause can be a
-        // lunch stop or a night in a refuge. Let the next fix re-establish it
-        // rather than scoring against a position hours old.
-        matcher.reset()
+
+        // The off-route judgement starts again — a deviation from before lunch
+        // says nothing about now, and replaying it would alert about something
+        // hours old.
         monitor.reset()
+
+        // The *position* is kept. This used to be reset too, on the reasoning
+        // that a pause can be a lunch stop or a night in a refuge, so the old
+        // position was stale. But stale is not the same as worthless: a walker
+        // resuming is somewhere a walker could have got to, and the matcher
+        // already widens its window by the elapsed time — an hour allows 14 km,
+        // a night allows more than the whole route, so a long pause relaxes
+        // into the old behaviour by itself.
+        //
+        // What the reset cost is the one case that needs it most. Stand on the
+        // start line of a loop and two candidates 164 km apart are metres
+        // apart on the ground; with no prior the winner is decided by the order
+        // the candidates happen to come out of the index. Having been at metre
+        // 300 a moment ago settles it on evidence instead.
     }
 
     /// Finish and fold the journal into the package that leaves this device.

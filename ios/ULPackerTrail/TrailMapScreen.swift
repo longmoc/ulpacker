@@ -309,6 +309,19 @@ struct TrailMapScreen: View {
 
     private var statusBanner: (text: String, colour: Color)? {
         if let offRouteText { return (offRouteText, .red) }
+
+        // The matcher knows when it might be wrong, and until now the app threw
+        // that away and showed a confident number anyway. On a loop the first
+        // and last kilometre are the same ground: standing at Les Houches, "you
+        // are at metre zero" and "you have walked 164 km" fit the evidence
+        // equally well. Saying so costs a line of text; not saying so means the
+        // one moment the app is unsure is the one moment it looks certain.
+        switch recorder.progress?.confidence {
+        case .ambiguous: return ("Two places on the route match", .orange)
+        case .jumped: return ("Position jumped", .orange)
+        default: break
+        }
+
         guard let state = recorder.progress?.offRouteState else { return nil }
         switch state {
         case .onRoute: return nil
