@@ -727,6 +727,7 @@ export default function TripWorkspace({
                 <OfflineMaps
                   track={track}
                   basemap={basemap}
+                  dayBands={dayBands}
                   open={offlineOpen}
                   onClose={() => setOfflineOpen(false)}
                   onChange={refreshSavedTiles}

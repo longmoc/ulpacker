@@ -4181,6 +4181,38 @@ button[type="submit"]:active {
   font-variant-numeric: tabular-nums;
 }
 
+.offline-days { display: flex; flex-direction: column; gap: 6px; }
+.offline-sub {
+  font-size: 0.75rem;
+  color: var(--text-3);
+  line-height: 1.35;
+}
+.offline-day-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.offline-day {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.offline-day:hover { background: var(--surface-2); }
+.offline-day.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.offline-day input { margin: 0; width: 13px; height: 13px; }
+
+.offline-total {
+  margin: 0;
+  padding-top: 2px;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+}
+.offline-total strong { color: var(--text); }
+
 .offline-progress {
   height: 6px;
   border-radius: 999px;

@@ -75,6 +75,64 @@ const CACHE = "ulpacker-" + VERSION;
 const TILES = "ulpacker-tiles";
 const PRECACHE = __PRECACHE__;
 
+const TILE_HOST = /\\.tile\\.(openstreetmap|opentopomap)\\.org$/;
+const SUBDOMAINS = ["a", "b", "c"];
+// Four levels up is a 16x blow-up — past that it is a coloured blur, and a
+// missing square is the more honest answer.
+const MAX_UPSCALE = 4;
+
+// A tile that was never saved, with no network to fetch it: crop the matching
+// square out of the nearest saved ancestor and scale it to tile size. Detail
+// downloaded for one day stays sharp; the rest of the trail turns soft instead
+// of blank, which is what makes mixing zoom depths usable.
+async function upscaleFromAncestor(url) {
+  if (typeof OffscreenCanvas === "undefined" || typeof createImageBitmap === "undefined") return null;
+  const m = url.pathname.match(/^(.*)\\/(\\d+)\\/(\\d+)\\/(\\d+)\\.(png|jpg|jpeg|webp)$/);
+  if (!m) return null;
+  const prefix = m[1];
+  const ext = m[5];
+  const z = Number(m[2]);
+  const x = Number(m[3]);
+  const y = Number(m[4]);
+  const cache = await caches.open(TILES);
+
+  for (let up = 1; up <= MAX_UPSCALE && z - up >= 0; up += 1) {
+    const scale = Math.pow(2, up);
+    const px = Math.floor(x / scale);
+    const py = Math.floor(y / scale);
+    let hit = null;
+    // The {s} subdomain is derived from the tile's own x+y, so the ancestor
+    // usually sits on a different host than the tile that missed.
+    for (const s of SUBDOMAINS) {
+      const host = url.host.replace(/^[^.]+\\./, s + ".");
+      const href =
+        url.protocol + "//" + host + prefix + "/" + (z - up) + "/" + px + "/" + py + "." + ext;
+      hit = await cache.match(href);
+      if (hit) break;
+    }
+    if (!hit) continue;
+
+    try {
+      const bmp = await createImageBitmap(await hit.blob());
+      const size = bmp.width || 256;
+      const part = size / scale;
+      const canvas = new OffscreenCanvas(size, size);
+      const ctx = canvas.getContext("2d");
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = "high";
+      ctx.drawImage(bmp, (x % scale) * part, (y % scale) * part, part, part, 0, 0, size, size);
+      bmp.close();
+      const blob = await canvas.convertToBlob({ type: "image/png" });
+      return new Response(blob, {
+        headers: { "Content-Type": "image/png", "X-ULPacker-Upscaled": String(up) }
+      });
+    } catch (e) {
+      return null;
+    }
+  }
+  return null;
+}
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
@@ -115,15 +173,18 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Map tiles: serve whatever was explicitly saved, otherwise go to the network
-  // untouched. Never written to here — browsing the map must not silently
+  // Map tiles: serve whatever was explicitly saved; otherwise the network; and
+  // if that is gone too, upscale the nearest saved ancestor rather than leaving
+  // a blank square. Never written to here — browsing the map must not silently
   // accumulate tiles.
-  if (/\\.tile\\.(openstreetmap|opentopomap)\\.org$/.test(url.host)) {
+  if (TILE_HOST.test(url.host)) {
     event.respondWith(
       caches
         .open(TILES)
         .then((c) => c.match(req))
-        .then((hit) => hit || fetch(req))
+        .then((hit) => hit || fetch(req).catch(() => null))
+        .then((res) => res || upscaleFromAncestor(url))
+        .then((res) => res || Response.error())
     );
     return;
   }

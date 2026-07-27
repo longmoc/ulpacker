@@ -3,6 +3,7 @@ import {
   BASEMAPS,
   TILE_CACHE,
   TILE_LEVELS,
+  DEEP_ZOOM,
   MAX_TILES,
   routeTiles,
   sampleForTiles,
@@ -10,6 +11,7 @@ import {
   formatBytes,
   tileUrl
 } from "../../lib/tiles.js";
+import { buildCumulatives, sliceSegments } from "../../lib/trail.js";
 import { DownloadIcon, TrashIcon, CloseIcon } from "../../components/icons.jsx";
 
 // How many tiles to fetch at once. Kept low on purpose: these are volunteer-run
@@ -22,8 +24,9 @@ const CONCURRENCY = 4;
 // Only the panel lives here; the trigger button sits in the map's control stack,
 // so the panel can stay a direct child of the map panel and anchor to it (as a
 // bottom sheet on phones) rather than to the little control cluster.
-export default function OfflineMaps({ track, basemap, open, onClose, onChange }) {
+export default function OfflineMaps({ track, basemap, dayBands = [], open, onClose, onChange }) {
   const [level, setLevel] = useState("standard");
+  const [deepDays, setDeepDays] = useState([]); // day indexes to also save at DEEP_ZOOM
   const [saved, setSaved] = useState(null); // { count } already on the device
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(0);
@@ -41,7 +44,30 @@ export default function OfflineMaps({ track, basemap, open, onClose, onChange })
     return out;
   }, [track]);
 
-  const keys = plans[level] || [];
+  // The deepest level, sliced per itinerary day so it can be bought piecemeal.
+  const dayPlans = useMemo(() => {
+    if (!track || dayBands.length < 2) return [];
+    const cums = buildCumulatives(track.segments);
+    return dayBands.map((b) => ({
+      index: b.index,
+      num: b.num,
+      color: b.color,
+      keys: routeTiles(sampleForTiles(sliceSegments(track.segments, cums, b.startRouteM, b.endRouteM), 900), {
+        zooms: [DEEP_ZOOM]
+      })
+    }));
+  }, [track, dayBands]);
+
+  const toggleDay = (index) =>
+    setDeepDays((prev) => (prev.includes(index) ? prev.filter((i) => i !== index) : [...prev, index]));
+
+  // Union, so days that overlap at a boundary are only counted (and fetched) once.
+  const keys = useMemo(() => {
+    const all = new Set(plans[level] || []);
+    for (const d of dayPlans) if (deepDays.includes(d.index)) for (const k of d.keys) all.add(k);
+    return [...all];
+  }, [plans, level, dayPlans, deepDays]);
+
   const tooMany = keys.length > MAX_TILES;
 
   const refreshSaved = async () => {
@@ -144,6 +170,37 @@ export default function OfflineMaps({ track, basemap, open, onClose, onChange })
                 })}
               </div>
 
+              {dayPlans.length > 0 && (
+                <div className="offline-days">
+                  <span className="offline-sub">
+                    Sharpest detail, per day — elsewhere the map is upscaled, not blank
+                  </span>
+                  <div className="offline-day-chips">
+                    {dayPlans.map((d) => (
+                      <label
+                        key={d.index}
+                        className={`offline-day ${deepDays.includes(d.index) ? "active" : ""}`}
+                        title={`${d.keys.length} tiles · ~${formatBytes(estimateBytes(d.keys.length))}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={deepDays.includes(d.index)}
+                          disabled={busy}
+                          onChange={() => toggleDay(d.index)}
+                        />
+                        <span className="day-legend-swatch" style={{ background: d.color }} />
+                        Day {d.num}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <p className="offline-total">
+                Total <strong>{keys.length.toLocaleString()}</strong> tiles ·{" "}
+                <strong>~{formatBytes(estimateBytes(keys.length))}</strong>
+              </p>
+
               {busy ? (
                 <>
                   <div className="offline-progress">
@@ -178,7 +235,8 @@ export default function OfflineMaps({ track, basemap, open, onClose, onChange })
 
               {tooMany && (
                 <p className="offline-note warn">
-                  That’s more than {MAX_TILES.toLocaleString()} tiles — pick a lower detail level.
+                  That’s more than {MAX_TILES.toLocaleString()} tiles — pick a lower detail level, or
+                  fewer days.
                 </p>
               )}
               {error && <p className="offline-note warn">{error}</p>}

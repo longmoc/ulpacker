@@ -29,13 +29,19 @@ export const BASEMAPS = {
   }
 };
 
-// Detail levels offered in the UI. Zoom 15 is as deep as we go: each extra
-// level quadruples the count, and 15 is already street/path detail.
+// Detail levels for the whole trail. Zoom 15 is as deep as this goes: each
+// extra level quadruples the count, and covering 164 km at 16 would be ~3,200
+// more tiles. That depth is offered per day instead (DEEP_ZOOM).
 export const TILE_LEVELS = [
   { id: "overview", label: "Overview", zooms: [10, 11, 12, 13], hint: "Valleys and towns" },
   { id: "standard", label: "Standard", zooms: [10, 11, 12, 13, 14], hint: "Enough to follow the trail" },
   { id: "detailed", label: "Detailed", zooms: [10, 11, 12, 13, 14, 15], hint: "Paths and contours" }
 ];
+
+// One level deeper, bought a day at a time (~440 tiles / 10 MB per TMB day).
+// Where it isn't saved the service worker upscales the level above, so the map
+// stays readable rather than going blank.
+export const DEEP_ZOOM = 16;
 
 // A raster PNG tile averages around this; used only to preview the download
 // size before committing to it.
