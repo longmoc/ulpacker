@@ -63,6 +63,76 @@ function lighterpackProxyMiddleware() {
   };
 }
 
+// Service worker source. `__PRECACHE__` and `__VERSION__` are substituted at
+// build time with the real emitted filenames, so a new build can never be served
+// half-old: the cache name changes and the previous one is dropped outright.
+const SW_SOURCE = `
+const VERSION = "__VERSION__";
+const CACHE = "ulpacker-" + VERSION;
+const PRECACHE = __PRECACHE__;
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE).then((cache) => cache.addAll(PRECACHE)).then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+// The document is network-first so a deploy is picked up as soon as there is a
+// connection, and falls back to the cached shell when there isn't. Everything
+// else we precache is content-hashed, so cache-first is safe and instant.
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET") return;
+
+  const url = new URL(req.url);
+  const sameOrigin = url.origin === self.location.origin;
+
+  if (req.mode === "navigate") {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(INDEX, copy));
+          return res;
+        })
+        .catch(() => caches.match(INDEX).then((hit) => hit || Response.error()))
+    );
+    return;
+  }
+
+  // Google Fonts: cache on first success so the offline shell keeps its type.
+  const isFont =
+    url.host === "fonts.googleapis.com" || url.host === "fonts.gstatic.com";
+
+  if (!sameOrigin && !isFont) return;
+
+  event.respondWith(
+    caches.match(req).then(
+      (hit) =>
+        hit ||
+        fetch(req)
+          .then((res) => {
+            if (res.ok || res.type === "opaque") {
+              const copy = res.clone();
+              caches.open(CACHE).then((c) => c.put(req, copy));
+            }
+            return res;
+          })
+          .catch(() => hit)
+    )
+  );
+});
+`;
+
 export default defineConfig(({ command }) => ({
   // GitHub Pages serves the site under /<repo>/, so built asset URLs need that
   // prefix. Local dev/preview stays at "/" so the import proxy keeps working.
@@ -109,6 +179,35 @@ export default defineConfig(({ command }) => ({
             injectTo: "head-prepend"
           }
         ];
+      }
+    },
+    {
+      // Offline shell. Emits sw.js listing the exact files this build produced,
+      // so the app opens with no connection at all — the trips and packs it
+      // reads live in localStorage, which never needed the network anyway.
+      name: "offline-sw",
+      apply: "build",
+      generateBundle(_options, bundle) {
+        const base = "/ulpacker/";
+        const assets = Object.keys(bundle)
+          .filter((name) => !name.endsWith(".map"))
+          .map((name) => base + name);
+        // Static files copied from public/ aren't in the bundle — list them.
+        const statics = [
+          "favicon.png",
+          "apple-touch-icon.png",
+          "icon-512.png",
+          "manifest.webmanifest"
+        ].map((name) => base + name);
+        const precache = [base, ...assets, ...statics];
+        const version = Date.now().toString(36);
+        const code =
+          `const INDEX = ${JSON.stringify(base)};\n` +
+          SW_SOURCE.replace("__VERSION__", version).replace(
+            "__PRECACHE__",
+            JSON.stringify([...new Set(precache)], null, 2)
+          );
+        this.emitFile({ type: "asset", fileName: "sw.js", source: code });
       }
     }
   ]
