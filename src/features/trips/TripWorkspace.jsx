@@ -656,28 +656,34 @@ export default function TripWorkspace({
                   the full-screen button so the row can't outgrow a phone's width
                   and push the last button off the map. */}
               <div className="map-controls">
-                {showMap ? (
-                  <div className="map-toggle">
-                    <button
-                      type="button"
-                      className={basemap === "standard" ? "active" : ""}
-                      onClick={() => chooseBasemap("standard")}
-                    >
-                      Standard
-                    </button>
-                    <button
-                      type="button"
-                      className={basemap === "topo" ? "active" : ""}
-                      title="Topographic basemap — contour lines + hillshade"
-                      onClick={() => chooseBasemap("topo")}
-                    >
-                      Topo
-                    </button>
-                  </div>
-                ) : (
-                  <span className="map-offline-tag">Offline — route shape</span>
-                )}
-                {!online && savedTiles && <span className="map-offline-tag">Offline — saved map</span>}
+                {/* Pill and its offline badge share a column, so the badge drops
+                    below rather than shoving the pill into the zoom controls. */}
+                <div className="map-controls-left">
+                  {showMap && (
+                    <div className="map-toggle">
+                      <button
+                        type="button"
+                        className={basemap === "standard" ? "active" : ""}
+                        onClick={() => chooseBasemap("standard")}
+                      >
+                        Standard
+                      </button>
+                      <button
+                        type="button"
+                        className={basemap === "topo" ? "active" : ""}
+                        title="Topographic basemap — contour lines + hillshade"
+                        onClick={() => chooseBasemap("topo")}
+                      >
+                        Topo
+                      </button>
+                    </div>
+                  )}
+                  {!online && (
+                    <span className="map-badge">
+                      {savedTiles ? "Offline — saved map" : "Offline — route shape"}
+                    </span>
+                  )}
+                </div>
                 <div className="map-btn-stack">
                   <button
                     type="button"
