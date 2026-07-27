@@ -18,6 +18,8 @@ struct RouteMapView: UIViewRepresentable {
     var position: CLLocationCoordinate2D?
     /// Where along the route the walker is, used to colour progress.
     var routeDistanceM: Double?
+    /// Frame this stretch of the route instead of the whole thing.
+    var focusRange: ClosedRange<Double>?
     /// How the camera behaves while recording.
     enum FollowMode {
         /// The map stays where it was panned.
@@ -80,6 +82,7 @@ struct RouteMapView: UIViewRepresentable {
         context.coordinator.updatePosition(position, mode: followMode)
         context.coordinator.applyFilter(kindFilter)
         context.coordinator.applyHighlight(highlighted)
+        context.coordinator.applyFocus(focusRange)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -123,6 +126,37 @@ struct RouteMapView: UIViewRepresentable {
 
         /// Ring the checkpoint whose callout is open. Without it the bubble
         /// floats with no visible tie to the pin it describes.
+        private var lastFocus: ClosedRange<Double>?
+
+        /// Frame a chosen day, once per change of choice.
+        ///
+        /// Not on every update: the walker is free to pan around inside the day
+        /// they are reading, and a camera that snapped back on each redraw
+        /// would make that impossible.
+        func applyFocus(_ range: ClosedRange<Double>?) {
+            guard didAddRoute, let mapView, range != lastFocus else { return }
+            lastFocus = range
+            guard let range else {
+                zoomToRoute(mapView)
+                return
+            }
+            guard let bounds = RouteProfiles.profile(for: parent.package)
+                .bounds(fromRouteM: range.lowerBound, toRouteM: range.upperBound)
+            else { return }
+            mapView.setVisibleCoordinateBounds(
+                MLNCoordinateBounds(
+                    sw: CLLocationCoordinate2D(latitude: bounds.minLat, longitude: bounds.minLng),
+                    ne: CLLocationCoordinate2D(latitude: bounds.maxLat, longitude: bounds.maxLng)
+                ),
+                // The bottom inset clears the panel. Choosing a day is only
+                // possible with the panel open, so framing the day into the
+                // half of the map the panel is covering would hide the thing
+                // just asked for.
+                edgePadding: UIEdgeInsets(top: 56, left: 32, bottom: 270, right: 32),
+                animated: true
+            )
+        }
+
         func applyHighlight(_ checkpoint: TripPackage.Checkpoint?) {
             guard let style = mapView?.style,
                   let source = style.source(withIdentifier: "checkpoint-highlight") as? MLNShapeSource

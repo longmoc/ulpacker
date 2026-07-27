@@ -23,6 +23,8 @@ public struct RouteProfile: Sendable {
         let routeM: Double
         let ele: Double?
         let segmentIndex: Int
+        let lat: Double
+        let lng: Double
     }
 
     let samples: [Sample]
@@ -48,7 +50,9 @@ public struct RouteProfile: Sendable {
                     Sample(
                         routeM: routeM,
                         ele: point.ele.map(Double.init),
-                        segmentIndex: segmentIndex
+                        segmentIndex: segmentIndex,
+                        lat: point.lat,
+                        lng: point.lng
                     )
                 )
             }
@@ -98,6 +102,31 @@ public struct RouteProfile: Sendable {
             ),
             isBehind: isBehind
         )
+    }
+
+    /// The corner coordinates of one stretch of the route.
+    ///
+    /// What a map needs to show a single day rather than the whole trip. Taken
+    /// from the same walk of the points the climb figures come from, so a day
+    /// framed on the map and a day measured in the panel are the same day.
+    public struct Bounds: Sendable, Equatable {
+        public let minLat: Double
+        public let minLng: Double
+        public let maxLat: Double
+        public let maxLng: Double
+    }
+
+    public func bounds(fromRouteM: Double, toRouteM: Double) -> Bounds? {
+        var minLat = Double.greatestFiniteMagnitude, maxLat = -Double.greatestFiniteMagnitude
+        var minLng = Double.greatestFiniteMagnitude, maxLng = -Double.greatestFiniteMagnitude
+        var found = false
+        for sample in samples where sample.routeM >= fromRouteM && sample.routeM <= toRouteM {
+            found = true
+            minLat = min(minLat, sample.lat); maxLat = max(maxLat, sample.lat)
+            minLng = min(minLng, sample.lng); maxLng = max(maxLng, sample.lng)
+        }
+        guard found else { return nil }
+        return Bounds(minLat: minLat, minLng: minLng, maxLat: maxLat, maxLng: maxLng)
     }
 
     // MARK: - Climb

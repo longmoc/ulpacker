@@ -192,3 +192,30 @@ struct RouteProfileTests {
         #expect(try #require(hours) < 8.5)
     }
 }
+
+/// Framing one stretch of the route on a map.
+struct RouteBoundsTests {
+    @Test func aDayIsFramedInsideTheWholeTrip() throws {
+        let package = try RouteProfileTests.package("tmb-ccw")
+        let profile = RouteProfile(package: package)
+        let whole = try #require(profile.bounds(fromRouteM: 0, toRouteM: profile.totalM))
+        let day = try #require(package.itinerary.first)
+        let dayBounds = try #require(
+            profile.bounds(fromRouteM: Double(day.startRouteM), toRouteM: Double(day.endRouteM))
+        )
+
+        // Inside the trip's box, and meaningfully smaller than it — a day that
+        // framed the whole Mont Blanc massif would be no use as a preview.
+        #expect(dayBounds.minLat >= whole.minLat && dayBounds.maxLat <= whole.maxLat)
+        #expect(dayBounds.minLng >= whole.minLng && dayBounds.maxLng <= whole.maxLng)
+        let dayArea = (dayBounds.maxLat - dayBounds.minLat) * (dayBounds.maxLng - dayBounds.minLng)
+        let wholeArea = (whole.maxLat - whole.minLat) * (whole.maxLng - whole.minLng)
+        #expect(dayArea < wholeArea / 4)
+    }
+
+    @Test func anEmptyStretchHasNoBounds() throws {
+        let package = try RouteProfileTests.package("tmb-ccw")
+        let profile = RouteProfile(package: package)
+        #expect(profile.bounds(fromRouteM: profile.totalM + 1_000, toRouteM: profile.totalM + 2_000) == nil)
+    }
+}

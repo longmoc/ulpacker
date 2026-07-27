@@ -13,11 +13,18 @@ struct ElevationProfileView: View {
     var routeDistanceM: Double?
     /// Checkpoints are marked so climbs can be read against the stops.
     var showsCheckpoints = true
+    /// Draw only this stretch of the route.
+    ///
+    /// The whole trip on a phone gives a walking day about forty points of
+    /// width — three millimetres for twenty-five kilometres and 1,900 m of
+    /// climb. The numbers were always there; the shape was not, and the shape
+    /// is what says "one long col" rather than "three climbs".
+    var range: ClosedRange<Double>?
 
     var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
-            let samples = Self.samples(for: package)
+            let samples = Self.samples(for: package, in: range)
 
             if samples.count < 2 {
                 Text("No elevation data in this route.")
@@ -25,7 +32,7 @@ struct ElevationProfileView: View {
                     .foregroundStyle(Color.subtle)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                let bounds = Self.bounds(samples)
+                let bounds = Self.bounds(samples, range: range)
                 ZStack(alignment: .topLeading) {
                     profileShape(samples: samples, bounds: bounds, size: size)
                     if showsCheckpoints {
@@ -79,7 +86,10 @@ struct ElevationProfileView: View {
     }
 
     private func checkpointMarks(bounds: Bounds, size: CGSize) -> some View {
-        ForEach(package.checkpoints.filter { $0.ele != nil }, id: \.id) { checkpoint in
+        let visible = package.checkpoints.filter {
+            $0.ele != nil && (range?.contains(Double($0.routeDistanceM)) ?? true)
+        }
+        return ForEach(visible, id: \.id) { checkpoint in
             let x = bounds.x(Double(checkpoint.routeDistanceM), in: size)
             let y = bounds.y(Double(checkpoint.ele ?? 0), in: size)
             Circle()
@@ -110,7 +120,7 @@ struct ElevationProfileView: View {
             HStack {
                 Text("\(Int(bounds.maxEle)) m")
                 Spacer()
-                Text("\(Int(package.plannedRoute.stats.distanceM / 1000)) km")
+                Text(String(format: "%.1f km", bounds.spanM / 1000))
             }
             Spacer()
             HStack {
@@ -133,13 +143,16 @@ struct ElevationProfileView: View {
     }
 
     struct Bounds {
-        let totalM: Double
+        let startM: Double
+        let endM: Double
         let minEle: Double
         let maxEle: Double
 
+        var spanM: Double { endM - startM }
+
         func x(_ routeM: Double, in size: CGSize) -> CGFloat {
-            guard totalM > 0 else { return 0 }
-            return CGFloat(routeM / totalM) * size.width
+            guard spanM > 0 else { return 0 }
+            return CGFloat((routeM - startM) / spanM) * size.width
         }
 
         func y(_ ele: Double, in size: CGSize) -> CGFloat {
@@ -150,10 +163,16 @@ struct ElevationProfileView: View {
         }
     }
 
-    private static func bounds(_ samples: [(routeM: Double, ele: Double)]) -> Bounds {
+    private static func bounds(
+        _ samples: [(routeM: Double, ele: Double)], range: ClosedRange<Double>?
+    ) -> Bounds {
         let elevations = samples.map(\.ele)
         return Bounds(
-            totalM: samples.last?.routeM ?? 1,
+            // The chosen range, not the sampled extent: a day whose first
+            // sample lands 30 m in should still start at its own kilometre
+            // zero, or the checkpoint marks drift against the line.
+            startM: range?.lowerBound ?? 0,
+            endM: range?.upperBound ?? (samples.last?.routeM ?? 1),
             minEle: elevations.min() ?? 0,
             maxEle: elevations.max() ?? 1
         )
@@ -164,8 +183,15 @@ struct ElevationProfileView: View {
     /// 8561 points is far more than a 390-point-wide phone screen can show, and
     /// drawing them all would rebuild a path of thousands of segments on every
     /// position update. Cached per trip so the cost is paid once.
-    static func samples(for package: TripPackage) -> [(routeM: Double, ele: Double)] {
-        if let cached = cache[package.tripId] { return cached }
+    static func samples(
+        for package: TripPackage, in range: ClosedRange<Double>? = nil
+    ) -> [(routeM: Double, ele: Double)] {
+        // Decimated per range, not once for the trip: 400 samples spread over
+        // 164 km leave a single day with about forty, which is a sketch of a
+        // day rather than a profile of one.
+        let key = range.map { "\(package.tripId)#\(Int($0.lowerBound))-\(Int($0.upperBound))" }
+            ?? package.tripId
+        if let cached = cache[key] { return cached }
 
         var result: [(routeM: Double, ele: Double)] = []
         var routeM = 0.0
@@ -180,6 +206,7 @@ struct ElevationProfileView: View {
                     )
                 }
                 previous = point
+                guard range?.contains(routeM) ?? true else { continue }
                 if let ele = point.ele { raw.append((routeM, Double(ele))) }
             }
         }
@@ -192,7 +219,7 @@ struct ElevationProfileView: View {
         }
         if let last = raw.last { result.append((routeM: last.0, ele: last.1)) }
 
-        cache[package.tripId] = result
+        cache[key] = result
         return result
     }
 

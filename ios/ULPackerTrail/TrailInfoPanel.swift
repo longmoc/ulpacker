@@ -37,6 +37,9 @@ struct TrailInfoPanel: View {
     @Binding var selected: TripPackage.Checkpoint?
     @Binding var detent: Detent
     @Binding var tab: Tab
+    /// The walking day the whole screen is narrowed to, by `index`. Nil is the
+    /// whole trip.
+    @Binding var dayScope: Int?
     /// Kinds to show. Empty means all, matching the web planner's chips.
     @Binding var kindFilter: Set<CheckpointKind>
 
@@ -49,6 +52,8 @@ struct TrailInfoPanel: View {
             VStack(spacing: 0) {
                 handle
                 if detent != .collapsed {
+                    dayBar
+                    Divider()
                     tabBar
                     Divider()
                     content
@@ -79,6 +84,88 @@ struct TrailInfoPanel: View {
             .contentShape(Rectangle())
     }
 
+    /// The day picker, and that day's headline numbers.
+    ///
+    /// One row above the tabs because the choice governs both of them and the
+    /// map behind. The numbers on the right are the reason to look: distance,
+    /// climb and the Alpine club's time for the day, which is the answer to
+    /// "what is tomorrow" without opening anything else.
+    private var dayBar: some View {
+        HStack(spacing: 8) {
+            Menu {
+                Button {
+                    dayScope = nil
+                } label: {
+                    Label("Whole trip", systemImage: dayScope == nil ? "checkmark" : "")
+                }
+                ForEach(walkingDays, id: \.day.index) { entry in
+                    Button {
+                        dayScope = entry.day.index
+                    } label: {
+                        Label(
+                            "Day \(entry.number) · \(entry.day.endName)",
+                            systemImage: dayScope == entry.day.index ? "checkmark" : ""
+                        )
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(scopeTitle).font(.subheadline.weight(.semibold))
+                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
+                }
+                .foregroundStyle(Color.brand)
+            }
+
+            Spacer(minLength: 4)
+
+            if let summary = scopeSummary {
+                Text(summary)
+                    .font(.caption)
+                    .foregroundStyle(Color.subtle)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+    }
+
+    private var walkingDays: [(day: TripPackage.Day, number: Int)] {
+        Itinerary.combined(package).compactMap { entry in
+            guard case .walking(let day, let number) = entry else { return nil }
+            return (day, number)
+        }
+    }
+
+    private var scopedDay: TripPackage.Day? {
+        dayScope.flatMap { index in package.itinerary.first { $0.index == index } }
+    }
+
+    /// The route distances the chosen day covers, or nil for the whole trip.
+    var scopeRange: ClosedRange<Double>? {
+        guard let day = scopedDay else { return nil }
+        return Double(day.startRouteM)...Double(day.endRouteM)
+    }
+
+    private var scopeTitle: String {
+        guard let day = scopedDay else { return "Whole trip" }
+        let number = walkingDays.first { $0.day.index == day.index }?.number ?? day.index
+        return "Day \(number)"
+    }
+
+    private var scopeSummary: String? {
+        guard let range = scopeRange else { return nil }
+        let leg = RouteProfiles.profile(for: package)
+            .leg(fromRouteM: range.lowerBound, toRouteM: range.upperBound)
+        var parts = [String(format: "%.1f km", leg.distanceM / 1000)]
+        if let ascent = leg.ascentM { parts.append("↑\(Int(ascent.rounded())) m") }
+        if let duration = leg.duration {
+            let minutes = Int((duration / 60).rounded())
+            parts.append("\(minutes / 60) h \(minutes % 60)")
+        }
+        return parts.joined(separator: " · ")
+    }
+
     private var tabBar: some View {
         HStack(spacing: 0) {
             ForEach(Tab.allCases, id: \.self) { item in
@@ -107,7 +194,9 @@ struct TrailInfoPanel: View {
     @ViewBuilder private var content: some View {
         switch tab {
         case .profile:
-            ElevationProfileView(package: package, routeDistanceM: routeDistanceM)
+            ElevationProfileView(
+                package: package, routeDistanceM: routeDistanceM, range: scopeRange
+            )
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
         case .stops:
@@ -227,9 +316,20 @@ struct TrailInfoPanel: View {
     /// starting, the point is to read the plan; while walking, what is behind
     /// is not what the next decision is about.
     private var visibleCheckpoints: [TripPackage.Checkpoint] {
+        // The day, if one is chosen, narrows the list before anything else —
+        // and it replaces the "only what is ahead" rule, because a day being
+        // read as a preview is not a day being walked.
+        let inScope = scopeRange.map { range in
+            package.checkpoints.filter { range.contains(Double($0.routeDistanceM)) }
+        } ?? package.checkpoints
         let matching = kindFilter.isEmpty
-            ? package.checkpoints
-            : package.checkpoints.filter { kindFilter.contains($0.checkpointKind) }
+            ? inScope
+            : inScope.filter { kindFilter.contains($0.checkpointKind) }
+        if scopeRange != nil {
+            guard let selected, !matching.contains(where: { $0.id == selected.id })
+            else { return matching }
+            return (matching + [selected]).sorted { $0.routeDistanceM < $1.routeDistanceM }
+        }
         let listed: [TripPackage.Checkpoint]
         if let routeDistanceM {
             let ahead = matching.filter { Double($0.routeDistanceM) > routeDistanceM }

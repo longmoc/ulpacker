@@ -18,6 +18,8 @@ struct TrailMapScreen: View {
     @State private var panelDetent: TrailInfoPanel.Detent = .collapsed
     @State private var panelTab: TrailInfoPanel.Tab = .profile
     @State private var kindFilter: Set<CheckpointKind> = []
+    /// The walking day the screen is narrowed to, or nil for the whole trip.
+    @State private var dayScope: Int?
     @State private var selectedCheckpoint: TripPackage.Checkpoint?
     /// The pin tapped on the map, and where it is on screen.
     @State private var callout: (checkpoint: TripPackage.Checkpoint, at: CGPoint)?
@@ -75,6 +77,7 @@ struct TrailMapScreen: View {
                 // the route cannot say which way the walker faces when it does
                 // not know where they are on it.
                 routeDistanceM: isOnRoute ? recorder.progress?.routeDistanceM : nil,
+                focusRange: scopeRange,
                 followMode: followMode,
                 kindFilter: kindFilter,
                 highlighted: callout?.checkpoint,
@@ -143,8 +146,16 @@ struct TrailMapScreen: View {
                 selected: $selectedCheckpoint,
                 detent: $panelDetent,
                 tab: $panelTab,
+                dayScope: $dayScope,
                 kindFilter: $kindFilter
             )
+            .onChange(of: dayScope) { _, scope in
+                // Reading a day is not following yourself. Leaving the camera
+                // on the walker would drag the map off the day the moment the
+                // next fix arrived; the walker takes following back by pressing
+                // the button, which now shows the truth either way.
+                if scope != nil { followMode = .free }
+            }
 
             if let banner = statusBanner {
                 // A badge, not a bar. Full width it spanned the map edge to
@@ -302,6 +313,13 @@ struct TrailMapScreen: View {
         return CLLocationCoordinate2D(latitude: progress.lat, longitude: progress.lng)
     }
 
+    /// The route distances covered by the chosen day.
+    private var scopeRange: ClosedRange<Double>? {
+        guard let dayScope, let day = package.itinerary.first(where: { $0.index == dayScope })
+        else { return nil }
+        return Double(day.startRouteM)...Double(day.endRouteM)
+    }
+
     /// Whether the position on screen is a place on this route.
     private var isOnRoute: Bool {
         recorder.progress?.confidence != .lost
@@ -402,6 +420,14 @@ struct TrailMapScreen: View {
                 kindFilter = [.poi]
             case "filterNone":
                 kindFilter = []
+            case "dayScope":
+                dayScope = 4
+                panelTab = .profile
+                panelDetent = .medium
+            case "dayScopeStops":
+                dayScope = 4
+                panelTab = .stops
+                panelDetent = .medium
             case "zoomStop":
                 // An overnight stop, where the pins and their names crowd.
                 if let stop = package.checkpoints.first(where: { $0.checkpointKind == .overnight }) {
