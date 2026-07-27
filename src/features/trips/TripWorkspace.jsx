@@ -17,6 +17,8 @@ import TrackMap from "./TrackMap.jsx";
 import CheckpointList from "./CheckpointList.jsx";
 import ItineraryDays from "./ItineraryDays.jsx";
 import EndpointLabel from "./EndpointLabel.jsx";
+import OfflineMaps from "./OfflineMaps.jsx";
+import { TILE_CACHE } from "../../lib/tiles.js";
 import { WhistleIcon, FlagIcon, LinkIcon } from "../../components/icons.jsx";
 import {
   PencilIcon,
@@ -100,8 +102,20 @@ export default function TripWorkspace({
     }
   };
   // The real map needs tiles; when the browser is offline we fall back to the
-  // self-contained SVG shape (no network) so the route is still visible.
+  // self-contained SVG shape (no network) so the route is still visible —
+  // unless the trail's tiles were saved, in which case the map still works.
   const [online, setOnline] = useState(() => (typeof navigator === "undefined" ? true : navigator.onLine));
+  const [savedTiles, setSavedTiles] = useState(false);
+  const refreshSavedTiles = () => {
+    if (typeof caches === "undefined") return;
+    caches
+      .open(TILE_CACHE)
+      .then((c) => c.keys())
+      .then((k) => setSavedTiles(k.length > 0))
+      .catch(() => setSavedTiles(false));
+  };
+  useEffect(refreshSavedTiles, []);
+  const showMap = online || savedTiles;
 
   // Track connectivity so the map can fall back to the offline shape.
   useEffect(() => {
@@ -638,7 +652,7 @@ export default function TripWorkspace({
             />
             <div className={`map-panel ${mapFull ? "fullscreen" : ""}`}>
               <div className="map-toggle">
-                {online ? (
+                {showMap ? (
                   <>
                     <button
                       type="button"
@@ -658,6 +672,10 @@ export default function TripWorkspace({
                   </>
                 ) : (
                   <span className="map-offline-tag">Offline — route shape</span>
+                )}
+                {!online && savedTiles && <span className="map-offline-tag">Offline — saved map</span>}
+                {online && (
+                  <OfflineMaps track={track} basemap={basemap} onChange={refreshSavedTiles} />
                 )}
                 {mapFull && (
                   <button
@@ -684,7 +702,7 @@ export default function TripWorkspace({
                   {mapFull ? <MinimizeIcon size={15} /> : <MaximizeIcon size={15} />}
                 </button>
               </div>
-              {online ? (
+              {showMap ? (
                 <TrackMap
                   key={trip.id}
                   track={track}

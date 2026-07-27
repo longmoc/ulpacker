@@ -69,6 +69,10 @@ function lighterpackProxyMiddleware() {
 const SW_SOURCE = `
 const VERSION = "__VERSION__";
 const CACHE = "ulpacker-" + VERSION;
+// Written only by the explicit "save map" action, and survives every deploy —
+// re-downloading a trail's tiles on each release would be rude to the donated
+// tile servers and slow for the user.
+const TILES = "ulpacker-tiles";
 const PRECACHE = __PRECACHE__;
 
 self.addEventListener("install", (event) => {
@@ -81,7 +85,9 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE && k !== TILES).map((k) => caches.delete(k)))
+      )
       .then(() => self.clients.claim())
   );
 });
@@ -105,6 +111,19 @@ self.addEventListener("fetch", (event) => {
           return res;
         })
         .catch(() => caches.match(INDEX).then((hit) => hit || Response.error()))
+    );
+    return;
+  }
+
+  // Map tiles: serve whatever was explicitly saved, otherwise go to the network
+  // untouched. Never written to here — browsing the map must not silently
+  // accumulate tiles.
+  if (/\\.tile\\.(openstreetmap|opentopomap)\\.org$/.test(url.host)) {
+    event.respondWith(
+      caches
+        .open(TILES)
+        .then((c) => c.match(req))
+        .then((hit) => hit || fetch(req))
     );
     return;
   }
@@ -163,7 +182,9 @@ export default defineConfig(({ command }) => ({
         const csp = [
           "default-src 'self'",
           "script-src 'self' https://accounts.google.com",
-          "connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com",
+          // Tile hosts appear here as well as in img-src: the offline "save map"
+          // downloads them with fetch(), which connect-src governs.
+          "connect-src 'self' https://www.googleapis.com https://oauth2.googleapis.com https://accounts.google.com https://*.tile.openstreetmap.org https://*.tile.opentopomap.org",
           "img-src 'self' data: https://*.googleusercontent.com https://*.tile.openstreetmap.org https://*.tile.opentopomap.org",
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com",

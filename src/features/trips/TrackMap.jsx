@@ -2,26 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { CHECKPOINT_KINDS, buildCumulatives, sliceSegments, anchorAtRouteM } from "../../lib/trail.js";
+import { BASEMAPS } from "../../lib/tiles.js";
 
 const ACCENT = "#1b5e3f";
 const GREEN = "#2e9e5b";
 const RED = "#b42318";
 
-// Selectable basemaps. Topo (OpenTopoMap) adds contour lines + hillshade, which
-// the plain OSM street map lacks — far more useful for trip planning. Both tile
-// origins are allow-listed in vite.config.js (CSP is build-only).
-const BASEMAPS = {
-  standard: {
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    maxZoom: 17,
-    attribution: "© OpenStreetMap contributors"
-  },
-  topo: {
-    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-    maxZoom: 17,
-    attribution: "© OpenTopoMap (CC-BY-SA) · © OpenStreetMap contributors"
-  }
-};
 
 // White line-icons for the start/finish pins (matching the legend icons).
 const WHISTLE_SVG =
