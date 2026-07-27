@@ -83,6 +83,7 @@ export default function TripWorkspace({
   const [mapFull, setMapFull] = useState(false);
   const [fsPanel, setFsPanel] = useState(false); // floating controls in full screen
   const [packPicker, setPackPicker] = useState(false); // pack chooser modal
+  const [offlineOpen, setOfflineOpen] = useState(false); // save-map-offline panel
   // Existing checkpoints are read-only until this is switched on, so scrolling
   // a long list can't nudge a name or hit a delete.
   const [cpEdit, setCpEdit] = useState(false);
@@ -651,9 +652,12 @@ export default function TripWorkspace({
               dayBands={dayBands}
             />
             <div className={`map-panel ${mapFull ? "fullscreen" : ""}`}>
-              <div className="map-toggle">
+              {/* Basemap pill on the left; the icon actions stack downwards from
+                  the full-screen button so the row can't outgrow a phone's width
+                  and push the last button off the map. */}
+              <div className="map-controls">
                 {showMap ? (
-                  <>
+                  <div className="map-toggle">
                     <button
                       type="button"
                       className={basemap === "standard" ? "active" : ""}
@@ -669,39 +673,59 @@ export default function TripWorkspace({
                     >
                       Topo
                     </button>
-                  </>
+                  </div>
                 ) : (
                   <span className="map-offline-tag">Offline — route shape</span>
                 )}
                 {!online && savedTiles && <span className="map-offline-tag">Offline — saved map</span>}
-                {online && (
-                  <OfflineMaps track={track} basemap={basemap} onChange={refreshSavedTiles} />
-                )}
-                {mapFull && (
+                <div className="map-btn-stack">
                   <button
                     type="button"
-                    className={`map-full-btn map-fs-toggle ${fsPanel ? "active" : ""} ${
-                      mapFiltered ? "filtered" : ""
-                    }`}
-                    title="Filters, days & route labels"
-                    aria-label="Map controls"
-                    aria-pressed={fsPanel}
-                    onClick={() => setFsPanel((v) => !v)}
+                    className="map-stack-btn"
+                    title={mapFull ? "Exit full screen (Esc)" : "Full screen"}
+                    aria-label={mapFull ? "Exit full screen" : "Full screen"}
+                    aria-pressed={mapFull}
+                    onClick={() => setMapFull((v) => !v)}
                   >
-                    <SlidersIcon size={15} />
+                    {mapFull ? <MinimizeIcon size={15} /> : <MaximizeIcon size={15} />}
                   </button>
-                )}
-                <button
-                  type="button"
-                  className="map-full-btn"
-                  title={mapFull ? "Exit full screen (Esc)" : "Full screen"}
-                  aria-label={mapFull ? "Exit full screen" : "Full screen"}
-                  aria-pressed={mapFull}
-                  onClick={() => setMapFull((v) => !v)}
-                >
-                  {mapFull ? <MinimizeIcon size={15} /> : <MaximizeIcon size={15} />}
-                </button>
+                  {mapFull && (
+                    <button
+                      type="button"
+                      className={`map-stack-btn map-fs-toggle ${fsPanel ? "active" : ""} ${
+                        mapFiltered ? "filtered" : ""
+                      }`}
+                      title="Filters, days & route labels"
+                      aria-label="Map controls"
+                      aria-pressed={fsPanel}
+                      onClick={() => setFsPanel((v) => !v)}
+                    >
+                      <SlidersIcon size={15} />
+                    </button>
+                  )}
+                  {online && (
+                    <button
+                      type="button"
+                      className={`map-stack-btn offline-btn ${savedTiles ? "saved" : ""}`}
+                      title="Save this trail's map for offline use"
+                      aria-label="Save map for offline use"
+                      aria-pressed={offlineOpen}
+                      onClick={() => setOfflineOpen((v) => !v)}
+                    >
+                      <DownloadIcon size={15} />
+                    </button>
+                  )}
+                </div>
               </div>
+              {online && (
+                <OfflineMaps
+                  track={track}
+                  basemap={basemap}
+                  open={offlineOpen}
+                  onClose={() => setOfflineOpen(false)}
+                  onChange={refreshSavedTiles}
+                />
+              )}
               {showMap ? (
                 <TrackMap
                   key={trip.id}

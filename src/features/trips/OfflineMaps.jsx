@@ -18,8 +18,11 @@ const CONCURRENCY = 4;
 
 // "Save this trail's basemap on the device" — a bounded download of the tiles
 // along the route, kept in its own cache that the service worker reads from.
-export default function OfflineMaps({ track, basemap, onChange }) {
-  const [open, setOpen] = useState(false);
+//
+// Only the panel lives here; the trigger button sits in the map's control stack,
+// so the panel can stay a direct child of the map panel and anchor to it (as a
+// bottom sheet on phones) rather than to the little control cluster.
+export default function OfflineMaps({ track, basemap, open, onClose, onChange }) {
   const [level, setLevel] = useState("standard");
   const [saved, setSaved] = useState(null); // { count } already on the device
   const [busy, setBusy] = useState(false);
@@ -99,26 +102,13 @@ export default function OfflineMaps({ track, basemap, onChange }) {
     await refreshSaved();
   };
 
-  if (!track) return null;
+  if (!track || !open) return null;
 
   return (
-    <>
-      <button
-        type="button"
-        className={`map-full-btn offline-btn ${saved?.count ? "saved" : ""}`}
-        title="Save this trail's map for offline use"
-        aria-label="Save map for offline use"
-        aria-pressed={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <DownloadIcon size={15} />
-      </button>
-
-      {open && (
-        <div className="offline-panel">
+    <div className="offline-panel">
           <div className="map-fs-head">
             <strong>Offline map</strong>
-            <button type="button" title="Close" aria-label="Close" onClick={() => setOpen(false)}>
+            <button type="button" title="Close" aria-label="Close" onClick={onClose}>
               <CloseIcon size={14} />
             </button>
           </div>
@@ -197,8 +187,6 @@ export default function OfflineMaps({ track, basemap, onChange }) {
               </p>
             </>
           )}
-        </div>
-      )}
-    </>
+    </div>
   );
 }
