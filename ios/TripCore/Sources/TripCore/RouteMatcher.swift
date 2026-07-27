@@ -37,6 +37,19 @@ public struct RouteMatcher: Sendable {
         /// fixes. Switchbacks are why this is not 1; it is still far below
         /// what a jump to the far side of a loop would require.
         public var windingAllowance: Double
+        /// Beyond this far from the line, the nearest point on the route stops
+        /// being a position and becomes an artefact.
+        ///
+        /// Every fix has a nearest point on the route — a fix in another
+        /// country has one. Without a limit the matcher answers the question it
+        /// was asked, faithfully and uselessly: start the app anywhere but the
+        /// Alps and it reports a confident position 28 km along the Tour du
+        /// Mont Blanc, because that is genuinely the closest the route comes.
+        ///
+        /// Two kilometres is chosen to be well beyond any real detour — a wrong
+        /// turn, a variant, a bail-out down a valley are all far inside it —
+        /// while excluding the case where the walker is not on this walk at all.
+        public var maxCredibleOffsetM: Double
 
         public init(
             searchRadiusM: Double = 300,
@@ -45,7 +58,8 @@ public struct RouteMatcher: Sendable {
             maxAccuracyM: Double = 50,
             ambiguitySeparationM: Double = 500,
             minimumAmbiguityMarginM: Double = 10,
-            windingAllowance: Double = 4
+            windingAllowance: Double = 4,
+            maxCredibleOffsetM: Double = 2_000
         ) {
             self.searchRadiusM = searchRadiusM
             self.maxSpeedMPS = maxSpeedMPS
@@ -54,6 +68,7 @@ public struct RouteMatcher: Sendable {
             self.ambiguitySeparationM = ambiguitySeparationM
             self.minimumAmbiguityMarginM = minimumAmbiguityMarginM
             self.windingAllowance = windingAllowance
+            self.maxCredibleOffsetM = maxCredibleOffsetM
         }
     }
 
@@ -139,7 +154,8 @@ public struct RouteMatcher: Sendable {
         if candidates.isEmpty {
             // Nothing nearby in the grid. One exhaustive scan tells us whether
             // this is genuinely off-route or the index simply had no cell here.
-            guard let nearest = index.nearestExhaustive(lat: fix.lat, lng: fix.lng) else {
+            guard let nearest = index.nearestExhaustive(lat: fix.lat, lng: fix.lng),
+                  nearest.offsetM <= configuration.maxCredibleOffsetM else {
                 return lostMatch(lat: fix.lat, lng: fix.lng)
             }
             candidates = [nearest]

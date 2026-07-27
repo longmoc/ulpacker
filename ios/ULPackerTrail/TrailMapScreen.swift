@@ -70,7 +70,11 @@ struct TrailMapScreen: View {
             RouteMapView(
                 package: package,
                 position: currentCoordinate,
-                routeDistanceM: recorder.progress?.routeDistanceM,
+                // No route distance while off the route, which is also what
+                // turns the marker from a direction arrow into a plain dot:
+                // the route cannot say which way the walker faces when it does
+                // not know where they are on it.
+                routeDistanceM: isOnRoute ? recorder.progress?.routeDistanceM : nil,
                 followMode: followMode,
                 kindFilter: kindFilter,
                 highlighted: callout?.checkpoint,
@@ -143,16 +147,23 @@ struct TrailMapScreen: View {
             )
 
             if let banner = statusBanner {
+                // A badge, not a bar. Full width it spanned the map edge to
+                // edge and swallowed the compass with it, so the moment the
+                // walker most needs to know which way north is, the app hid it.
+                // Sized to its text and inset clear of the compass instead.
                 Text(banner.text)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.footnote.weight(.semibold))
                     .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(banner.colour)
-                    // Top, not bottom: at the bottom it covered the panel's
-                    // grab handle, so going off route — exactly when you want
-                    // the profile and the stops — made the panel undraggable.
-                    .frame(maxHeight: .infinity, alignment: .top)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(banner.colour, in: Capsule())
+                    .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+                    .padding(.top, 10)
+                    // The compass sits top-right and is 44 pt of it; leaving
+                    // that much on both sides keeps the badge centred and the
+                    // compass uncovered.
+                    .padding(.horizontal, 68)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
         .frame(maxHeight: .infinity)
@@ -163,9 +174,12 @@ struct TrailMapScreen: View {
     private var readouts: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                readout("Done", km(recorder.progress?.routeDistanceM))
+                // Withheld rather than guessed while off the route entirely:
+                // "28.26 km done" for someone who has not started walking is
+                // worse than a dash.
+                readout("Done", km(isOnRoute ? recorder.progress?.routeDistanceM : nil))
                 Divider().frame(height: 44)
-                readout("Left", km(recorder.progress?.remainingM))
+                readout("Left", km(isOnRoute ? recorder.progress?.remainingM : nil))
                 Divider().frame(height: 44)
                 readout("Off line", metres(recorder.progress?.offsetM))
             }
@@ -276,14 +290,25 @@ struct TrailMapScreen: View {
     // MARK: - Derived
 
     private var currentCoordinate: CLLocationCoordinate2D? {
-        // The snapped position, not the raw fix: drawing the raw observation
-        // puts the walker beside the line whenever GPS is noisy, which reads as
-        // a bug rather than as noise. `Off line` already reports the real gap.
-        guard let progress = recorder.progress, progress.confidence != .lost else { return nil }
+        // Snapped when the match is real, raw when it is not — and `Progress`
+        // carries whichever one applies, so this only has to pass it through.
+        //
+        // Snapping exists because drawing the raw observation puts the walker
+        // beside the line whenever GPS is noisy, which reads as a bug rather
+        // than as noise. It stops being a correction and starts being a
+        // fabrication once the fix is nowhere near the route, which the matcher
+        // now refuses to project at all.
+        guard let progress = recorder.progress else { return nil }
         return CLLocationCoordinate2D(latitude: progress.lat, longitude: progress.lng)
     }
 
+    /// Whether the position on screen is a place on this route.
+    private var isOnRoute: Bool {
+        recorder.progress?.confidence != .lost
+    }
+
     private var statusBanner: (text: String, colour: Color)? {
+        if let offRouteText { return (offRouteText, .red) }
         guard let state = recorder.progress?.offRouteState else { return nil }
         switch state {
         case .onRoute: return nil
@@ -293,6 +318,13 @@ struct TrailMapScreen: View {
         case .degraded: return ("Weak GPS signal", .orange)
         case .noFix: return ("No GPS fix", .red)
         }
+    }
+
+    /// The state as the walker should read it. A match the route refused to
+    /// make is not "possibly off route" — it is not this route at all.
+    private var offRouteText: String? {
+        guard !isOnRoute else { return nil }
+        return "Not on this route"
     }
 
     /// Naismith with a slope correction, computed from the planned route's own
