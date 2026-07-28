@@ -532,8 +532,8 @@ struct RouteMapView: UIViewRepresentable {
                     )
                     close.iconImageName = NSExpression(forConstantValue: closeName)
                     close.iconScale = kind == .poi
-                        ? Self.zoomStops([12.5: 0.75, 17: 1.1])
-                        : Self.zoomStops([12.5: 0.8, 16: 1.15])
+                        ? Self.zoomStops([Double(Self.nameZoom): 0.75, 17: 1.1])
+                        : Self.zoomStops([Double(Self.nameZoom): 0.8, 16: 1.15])
                     if kind == .poi {
                         // Anchored at the tip, which is the point of the shape.
                         close.iconAnchor = NSExpression(forConstantValue: "bottom")
@@ -833,14 +833,14 @@ struct RouteMapView: UIViewRepresentable {
 
         /// Zoom levels at which the map starts saying more.
         ///
-        /// First pick was z14 for a name and z16 for a note, reasoned from how
-        /// much ground the screen covers. On the phone that turned out to be
-        /// most of a zoom too late — the map was already closer than anyone
-        /// walking would hold it before anything appeared. Down a notch and a
-        /// half each.
-        static let nameZoom: Float = 12.5
-        static let noteZoom: Float = 15
-        static let markerZoom: Float = 12.5
+        /// Reasoned from how much ground the screen covers, then moved twice
+        /// on what the phone actually looked like in the hand. The first pick
+        /// was z14 for a name and z16 for a note; both were late enough that
+        /// the map was already closer than anyone walking would hold it before
+        /// anything appeared, and lowering them a notch and a half was still
+        /// late. These are the numbers the device settled on.
+        static let nameZoom: Float = 10.5
+        static let noteZoom: Float = 13
 
         /// The first sentence of a note, short enough to sit on a map.
         ///
@@ -863,6 +863,11 @@ struct RouteMapView: UIViewRepresentable {
             )
             return feature
         }
+
+        /// The landmark balloon's colour. Shared with nothing — a hazard is a
+        /// red disc with a warning inside it, which is a different shape doing
+        /// a different job.
+        static let markerColour = UIColor.systemRed
 
         /// The map marker everyone already reads as "here".
         ///
@@ -904,7 +909,12 @@ struct RouteMapView: UIViewRepresentable {
 
             return UIGraphicsImageRenderer(size: size).image { _ in
                 UIColor.white.setStroke()
-                tint(for: kind).setFill()
+                // Red, not the kind's own grey. Grey is right for a dot at
+                // trip scale, where a landmark is a reference mark among
+                // fifty-six others; it is wrong for the one shape on the map
+                // whose whole job is to say "this exact spot". The grey dot it
+                // hands over from is unchanged.
+                Self.markerColour.setFill()
                 path.lineWidth = 3
                 path.stroke()
                 path.fill()
