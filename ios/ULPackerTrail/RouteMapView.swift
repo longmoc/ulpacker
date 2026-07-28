@@ -433,8 +433,30 @@ struct RouteMapView: UIViewRepresentable {
                 pins.iconAllowsOverlap = NSExpression(
                     forConstantValue: kind.isMajor || kind == .hazard
                 )
+                // A landmark's grey dot is a mark at trip scale and a smudge
+                // close in. Past this zoom it hands over to a marker that hangs
+                // above the point instead of sitting on it.
+                if kind == .poi { pins.maximumZoomLevel = Self.markerZoom }
                 style.addLayer(pins)
                 pinLayerIDs.insert(pins.identifier)
+
+                if kind == .poi {
+                    style.setImage(Self.markerImage(for: kind), forName: "cp-marker-\(kind.rawValue)")
+                    let markers = MLNSymbolStyleLayer(
+                        identifier: "checkpoint-markers-\(kind.rawValue)", source: source
+                    )
+                    markers.iconImageName = NSExpression(
+                        forConstantValue: "cp-marker-\(kind.rawValue)"
+                    )
+                    markers.iconScale = Self.zoomStops([14: 0.8, 17: 1.1])
+                    // Anchored at the tip, which is the whole point of the shape.
+                    markers.iconAnchor = NSExpression(forConstantValue: "bottom")
+                    markers.iconPadding = NSExpression(forConstantValue: 0)
+                    markers.iconAllowsOverlap = NSExpression(forConstantValue: false)
+                    markers.minimumZoomLevel = Self.markerZoom
+                    style.addLayer(markers)
+                    pinLayerIDs.insert(markers.identifier)
+                }
 
                 // Label only the places worth naming. Fifty-six labels on a
                 // phone is noise; the icons already say what the rest are.
@@ -450,9 +472,10 @@ struct RouteMapView: UIViewRepresentable {
                 // over a shape source takes the source down with it, with no
                 // error anywhere. Constants only.
                 //
-                // Only the major kinds get names, so this is about ten extra
-                // layers, not fifty-six.
-                guard kind.isMajor else { continue }
+                // Every stop gets a name now, but not at every zoom: the
+                // major ones from trip scale, the rest only once the map is
+                // close enough that fifty-six names are not fifty-six pieces
+                // of noise over the terrain.
                 for checkpoint in checkpoints {
                     let labelFeature = MLNPointFeature()
                     labelFeature.coordinate = CLLocationCoordinate2D(
@@ -488,8 +511,44 @@ struct RouteMapView: UIViewRepresentable {
                     labels.textOffset = NSExpression(
                         forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 1.2))
                     )
+                    // Minor stops keep quiet until the map is close enough to
+                    // read them. A landmark's name is worth nothing at trip
+                    // scale and worth a lot standing at the junction.
+                    if !kind.isMajor { labels.minimumZoomLevel = Self.nameZoom }
+                    // And the name gives way to name-plus-note closer still.
+                    if !checkpoint.note.isEmpty { labels.maximumZoomLevel = Self.noteZoom }
                     // Names may collide and drop; the pin beneath never does.
                     style.addLayer(labels)
+
+                    // The note itself, once there is room for it. This is what
+                    // the stop was made for — a booking, a water carry, a
+                    // crossing that is out after rain — and it lives one tap
+                    // away everywhere else in the app.
+                    guard !checkpoint.note.isEmpty else { continue }
+                    let noteSource = MLNShapeSource(
+                        identifier: "cp-note-\(checkpoint.id)",
+                        shape: Self.point(at: checkpoint), options: nil
+                    )
+                    style.addSource(noteSource)
+
+                    let notes = MLNSymbolStyleLayer(
+                        identifier: "cp-note-\(checkpoint.id)", source: noteSource
+                    )
+                    notes.text = NSExpression(
+                        forConstantValue: "\(checkpoint.displayName)\n\(Self.gist(checkpoint.note))"
+                    )
+                    notes.textFontNames = NSExpression(forConstantValue: [OfflineStyle.labelFont])
+                    notes.textFontSize = NSExpression(forConstantValue: 11)
+                    notes.maximumTextWidth = NSExpression(forConstantValue: 11)
+                    notes.textColor = NSExpression(forConstantValue: UIColor.label)
+                    notes.textHaloColor = NSExpression(forConstantValue: UIColor.systemBackground)
+                    notes.textHaloWidth = NSExpression(forConstantValue: 1.5)
+                    notes.textAnchor = NSExpression(forConstantValue: "top")
+                    notes.textOffset = NSExpression(
+                        forConstantValue: NSValue(cgVector: CGVector(dx: 0, dy: 1.2))
+                    )
+                    notes.minimumZoomLevel = Self.noteZoom
+                    style.addLayer(notes)
                 }
             }
         }
@@ -683,6 +742,71 @@ struct RouteMapView: UIViewRepresentable {
         /// unreadable at pin size.
         private static func glyphColour(for kind: CheckpointKind) -> UIColor {
             kind == .resupply ? UIColor(white: 0.15, alpha: 1) : .white
+        }
+
+        /// Zoom levels at which the map starts saying more.
+        ///
+        /// Chosen against what the screen can hold rather than by feel: at z14
+        /// the whole visible map is about two kilometres across, which is where
+        /// a minor stop's name stops competing with the terrain; by z16 it is
+        /// a few hundred metres and there is room for a line of the note.
+        static let nameZoom: Float = 14
+        static let noteZoom: Float = 16
+        static let markerZoom: Float = 14
+
+        /// The first sentence of a note, short enough to sit on a map.
+        ///
+        /// Notes are Markdown and some run to paragraphs. What belongs here is
+        /// the reminder, not the document — the rest is a tap away.
+        static func gist(_ note: String) -> String {
+            let flat = note
+                .replacingOccurrences(of: "\n", with: " ")
+                .replacingOccurrences(of: "#", with: "")
+                .replacingOccurrences(of: "*", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard flat.count > 64 else { return flat }
+            return flat.prefix(64).trimmingCharacters(in: .whitespaces) + "…"
+        }
+
+        static func point(at checkpoint: TripPackage.Checkpoint) -> MLNPointFeature {
+            let feature = MLNPointFeature()
+            feature.coordinate = CLLocationCoordinate2D(
+                latitude: checkpoint.lat, longitude: checkpoint.lng
+            )
+            return feature
+        }
+
+        /// A teardrop whose point sits exactly on the coordinate.
+        ///
+        /// A landmark is a reference mark, so a disc centred on it hides the
+        /// very thing being referred to — the path junction, the bridge, the
+        /// spot on the map. This hangs above the position instead and touches
+        /// it with one point, which is what a map pin has always been for.
+        private static func markerImage(for kind: CheckpointKind) -> UIImage {
+            let size = CGSize(width: 30, height: 40)
+            return UIGraphicsImageRenderer(size: size).image { context in
+                let colour = tint(for: kind)
+                let head = CGRect(x: 3, y: 2, width: 24, height: 24)
+                let path = UIBezierPath(ovalIn: head)
+                // The stem, drawn as a triangle down to the tip.
+                let stem = UIBezierPath()
+                stem.move(to: CGPoint(x: 15 - 6, y: 22))
+                stem.addLine(to: CGPoint(x: 15, y: 38))
+                stem.addLine(to: CGPoint(x: 15 + 6, y: 22))
+                stem.close()
+                path.append(stem)
+
+                UIColor.white.setStroke()
+                colour.setFill()
+                path.lineWidth = 3
+                path.stroke()
+                path.fill()
+
+                // A hole through the head so the map shows through it rather
+                // than the marker reading as a solid blob.
+                context.cgContext.setBlendMode(.clear)
+                UIBezierPath(ovalIn: head.insetBy(dx: 8, dy: 8)).fill()
+            }
         }
 
         private static func pinImage(for kind: CheckpointKind) -> UIImage {

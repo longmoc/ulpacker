@@ -420,6 +420,17 @@ struct TrailMapScreen: View {
                 kindFilter = [.poi]
             case "filterNone":
                 kindFilter = []
+            case "zoomNote":
+                // A landmark that carries a note, close enough in for both the
+                // marker and the note to be showing.
+                if let poi = package.checkpoints.first(where: {
+                    $0.checkpointKind == .poi && !$0.note.isEmpty
+                }) {
+                    NotificationCenter.default.post(
+                        name: Notification.Name("ULPDebugFocus"), object: nil,
+                        userInfo: ["lat": poi.lat, "lng": poi.lng, "zoom": 16.6]
+                    )
+                }
             case "dayScope":
                 dayScope = 4
                 panelTab = .profile
