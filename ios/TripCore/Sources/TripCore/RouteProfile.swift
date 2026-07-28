@@ -116,6 +116,17 @@ public struct RouteProfile: Sendable {
         public let maxLng: Double
     }
 
+    /// The route's own points across one stretch, in order.
+    ///
+    /// For drawing a day on top of the trip rather than describing it: the
+    /// same geometry the line was built from, so the two sit exactly together
+    /// instead of a redrawn approximation shadowing the original.
+    public func coordinates(fromRouteM: Double, toRouteM: Double) -> [(lat: Double, lng: Double)] {
+        samples
+            .filter { $0.routeM >= fromRouteM && $0.routeM <= toRouteM }
+            .map { (lat: $0.lat, lng: $0.lng) }
+    }
+
     public func bounds(fromRouteM: Double, toRouteM: Double) -> Bounds? {
         var minLat = Double.greatestFiniteMagnitude, maxLat = -Double.greatestFiniteMagnitude
         var minLng = Double.greatestFiniteMagnitude, maxLng = -Double.greatestFiniteMagnitude

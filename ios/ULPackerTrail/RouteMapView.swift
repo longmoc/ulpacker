@@ -136,6 +136,7 @@ struct RouteMapView: UIViewRepresentable {
         func applyFocus(_ range: ClosedRange<Double>?) {
             guard didAddRoute, let mapView, range != lastFocus else { return }
             lastFocus = range
+            paintDay(range, on: mapView.style)
             guard let range else {
                 zoomToRoute(mapView)
                 return
@@ -155,6 +156,44 @@ struct RouteMapView: UIViewRepresentable {
                 edgePadding: UIEdgeInsets(top: 56, left: 32, bottom: 270, right: 32),
                 animated: true
             )
+        }
+
+        /// Lift the chosen day out of the trip, or put the trip back.
+        private func paintDay(_ range: ClosedRange<Double>?, on style: MLNStyle?) {
+            guard let style else { return }
+            let dayLine = style.source(withIdentifier: "route-day") as? MLNShapeSource
+            let daySpots = style.source(withIdentifier: "day-stops") as? MLNShapeSource
+
+            guard let range else {
+                dayLine?.shape = nil
+                daySpots?.shape = nil
+                setRouteDimmed(false, on: style)
+                return
+            }
+
+            let points = RouteProfiles.profile(for: parent.package)
+                .coordinates(fromRouteM: range.lowerBound, toRouteM: range.upperBound)
+                .map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) }
+            dayLine?.shape = points.count >= 2
+                ? MLNPolylineFeature(coordinates: points, count: UInt(points.count))
+                : nil
+
+            let stops = parent.package.checkpoints
+                .filter { range.contains(Double($0.routeDistanceM)) }
+                .map { Self.point(at: $0) }
+            daySpots?.shape = stops.isEmpty ? nil : MLNShapeCollectionFeature(shapes: stops)
+
+            setRouteDimmed(true, on: style)
+        }
+
+        private func setRouteDimmed(_ dimmed: Bool, on style: MLNStyle) {
+            let opacity = NSExpression(forConstantValue: dimmed ? 0.3 : 1.0)
+            (style.layer(withIdentifier: "route-line") as? MLNLineStyleLayer)?
+                .lineOpacity = opacity
+            (style.layer(withIdentifier: "route-casing") as? MLNLineStyleLayer)?
+                .lineOpacity = NSExpression(forConstantValue: dimmed ? 0.3 : 1.0)
+            (style.layer(withIdentifier: "route-arrows") as? MLNSymbolStyleLayer)?
+                .iconOpacity = NSExpression(forConstantValue: dimmed ? 0.3 : 0.95)
         }
 
         func applyHighlight(_ checkpoint: TripPackage.Checkpoint?) {
@@ -279,12 +318,19 @@ struct RouteMapView: UIViewRepresentable {
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             addRoute(to: style)
             addDirectionArrows(to: style)
-            addCheckpoints(to: style)
-            addEndpoints(to: style)
-            #if DEBUG
-            observeDebugFocus()
-            #endif
-            // Under the pins so the ring reads as a halo, not a badge.
+            let daySpotSource = MLNShapeSource(identifier: "day-stops", shape: nil, options: nil)
+            style.addSource(daySpotSource)
+            let daySpots = MLNCircleStyleLayer(identifier: "day-stops", source: daySpotSource)
+            // Wider than the largest pin at every zoom. At 15 pt the halo was
+            // smaller than a major stop's icon and vanished behind the very
+            // thing it was marking.
+            daySpots.circleRadius = Self.zoomStops([10: 24, 14: 30, 16: 38])
+            daySpots.circleColor = NSExpression(forConstantValue: UIColor.systemGreen)
+            daySpots.circleOpacity = NSExpression(forConstantValue: 0.20)
+            daySpots.circleStrokeColor = NSExpression(forConstantValue: UIColor.systemGreen)
+            daySpots.circleStrokeWidth = NSExpression(forConstantValue: 2)
+            style.addLayer(daySpots)
+
             let highlightSource = MLNShapeSource(identifier: "checkpoint-highlight", shape: nil)
             style.addSource(highlightSource)
             let ring = MLNCircleStyleLayer(identifier: "checkpoint-highlight", source: highlightSource)
@@ -295,6 +341,15 @@ struct RouteMapView: UIViewRepresentable {
             ring.circleStrokeWidth = NSExpression(forConstantValue: 2.5)
             style.addLayer(ring)
 
+            addCheckpoints(to: style)
+            addEndpoints(to: style)
+            #if DEBUG
+            observeDebugFocus()
+            #endif
+            // Added before the pins so both rings read as haloes behind the
+            // artwork. They used to go on afterwards — the comment here has
+            // always claimed otherwise — which drew a translucent green disc
+            // over every icon it marked and left the orange campsites olive.
             addPosition(to: style)
             zoomToRoute(mapView)
             didAddRoute = true
@@ -334,6 +389,9 @@ struct RouteMapView: UIViewRepresentable {
             casing.lineOpacity = NSExpression(forConstantValue: 0.9)
             style.addLayer(casing)
 
+            let daySource = MLNShapeSource(identifier: "route-day", shape: nil, options: nil)
+            style.addSource(daySource)
+
             let line = MLNLineStyleLayer(identifier: "route-line", source: source)
             line.lineColor = NSExpression(forConstantValue: UIColor.brandOnMap)
             line.lineWidth = Self.zoomStops(
@@ -342,6 +400,19 @@ struct RouteMapView: UIViewRepresentable {
             line.lineCap = NSExpression(forConstantValue: "round")
             line.lineJoin = NSExpression(forConstantValue: "round")
             style.addLayer(line)
+
+            // The chosen day, drawn over the trip in a lighter green.
+            //
+            // Framing a day answered "where", and left "which part of this
+            // line" to be worked out from the edges of the screen. Dimming the
+            // rest and lifting the day says it outright, and keeps the trip
+            // visible around it — a day with no context is a different map.
+            let dayLine = MLNLineStyleLayer(identifier: "route-day", source: daySource)
+            dayLine.lineColor = NSExpression(forConstantValue: UIColor.systemGreen)
+            dayLine.lineWidth = Self.zoomStops([10: 5, 14: 8, 16: 12])
+            dayLine.lineCap = NSExpression(forConstantValue: "round")
+            dayLine.lineJoin = NSExpression(forConstantValue: "round")
+            style.addLayer(dayLine)
         }
 
         /// Direction-of-travel arrows repeated along the line.
