@@ -497,36 +497,52 @@ struct RouteMapView: UIViewRepresentable {
                 // the pin occupies — which is why over half the checkpoints
                 // never reached the screen.
                 pins.iconPadding = NSExpression(forConstantValue: 0)
-                // Never dropped: the places the day is planned around, and
-                // anything flagged as a hazard. A washed-out footbridge
-                // vanishing because a viewpoint got there first is the one
-                // collision outcome with a real cost.
-                pins.iconAllowsOverlap = NSExpression(
-                    forConstantValue: kind.isMajor || kind == .hazard
-                )
-                // A landmark's grey dot is a mark at trip scale and a smudge
-                // close in. Past this zoom it hands over to a marker that hangs
-                // above the point instead of sitting on it.
-                if kind == .poi { pins.maximumZoomLevel = Self.markerZoom }
+                // Two rules, and which one applies depends on the zoom.
+                //
+                // Far out, a minor stop yields: fifty-six icons over 164 km is
+                // a field of overlapping discs with the route lost underneath.
+                // Close in it must not, because a name is a symbol too and it
+                // competes with the very icon it belongs to — zooming in far
+                // enough to read a landmark's name was exactly far enough to
+                // lose the landmark.
+                //
+                // So minor kinds are drawn twice: this layer, which collides,
+                // up to the zoom where names appear, and a second one below
+                // that never yields from there on. Major stops and hazards
+                // never yielded at any zoom and still do not.
+                let alwaysShown = kind.isMajor || kind == .hazard
+                pins.iconAllowsOverlap = NSExpression(forConstantValue: alwaysShown)
+                if !alwaysShown { pins.maximumZoomLevel = Self.nameZoom }
                 style.addLayer(pins)
                 pinLayerIDs.insert(pins.identifier)
 
-                if kind == .poi {
-                    style.setImage(Self.markerImage(for: kind), forName: "cp-marker-\(kind.rawValue)")
-                    let markers = MLNSymbolStyleLayer(
-                        identifier: "checkpoint-markers-\(kind.rawValue)", source: source
+                // The close-in layer for minor kinds. A landmark swaps its grey
+                // dot for a marker that hangs above the point rather than
+                // sitting on it — a dot centred on a junction hides the
+                // junction — and the rest simply keep their icon.
+                if !alwaysShown {
+                    let closeName = "cp-close-\(kind.rawValue)"
+                    let image = kind == .poi
+                        ? Self.markerImage(for: kind)
+                        : Self.pinImage(for: kind)
+                    style.setImage(image, forName: closeName)
+
+                    let close = MLNSymbolStyleLayer(
+                        identifier: "checkpoint-close-\(kind.rawValue)", source: source
                     )
-                    markers.iconImageName = NSExpression(
-                        forConstantValue: "cp-marker-\(kind.rawValue)"
-                    )
-                    markers.iconScale = Self.zoomStops([14: 0.8, 17: 1.1])
-                    // Anchored at the tip, which is the whole point of the shape.
-                    markers.iconAnchor = NSExpression(forConstantValue: "bottom")
-                    markers.iconPadding = NSExpression(forConstantValue: 0)
-                    markers.iconAllowsOverlap = NSExpression(forConstantValue: false)
-                    markers.minimumZoomLevel = Self.markerZoom
-                    style.addLayer(markers)
-                    pinLayerIDs.insert(markers.identifier)
+                    close.iconImageName = NSExpression(forConstantValue: closeName)
+                    close.iconScale = kind == .poi
+                        ? Self.zoomStops([12.5: 0.75, 17: 1.1])
+                        : Self.zoomStops([12.5: 0.8, 16: 1.15])
+                    if kind == .poi {
+                        // Anchored at the tip, which is the point of the shape.
+                        close.iconAnchor = NSExpression(forConstantValue: "bottom")
+                    }
+                    close.iconPadding = NSExpression(forConstantValue: 0)
+                    close.iconAllowsOverlap = NSExpression(forConstantValue: true)
+                    close.minimumZoomLevel = Self.nameZoom
+                    style.addLayer(close)
+                    pinLayerIDs.insert(close.identifier)
                 }
 
                 // Label only the places worth naming. Fifty-six labels on a
@@ -817,13 +833,14 @@ struct RouteMapView: UIViewRepresentable {
 
         /// Zoom levels at which the map starts saying more.
         ///
-        /// Chosen against what the screen can hold rather than by feel: at z14
-        /// the whole visible map is about two kilometres across, which is where
-        /// a minor stop's name stops competing with the terrain; by z16 it is
-        /// a few hundred metres and there is room for a line of the note.
-        static let nameZoom: Float = 14
-        static let noteZoom: Float = 16
-        static let markerZoom: Float = 14
+        /// First pick was z14 for a name and z16 for a note, reasoned from how
+        /// much ground the screen covers. On the phone that turned out to be
+        /// most of a zoom too late — the map was already closer than anyone
+        /// walking would hold it before anything appeared. Down a notch and a
+        /// half each.
+        static let nameZoom: Float = 12.5
+        static let noteZoom: Float = 15
+        static let markerZoom: Float = 12.5
 
         /// The first sentence of a note, short enough to sit on a map.
         ///
@@ -847,36 +864,56 @@ struct RouteMapView: UIViewRepresentable {
             return feature
         }
 
-        /// A teardrop whose point sits exactly on the coordinate.
+        /// The map marker everyone already reads as "here".
         ///
-        /// A landmark is a reference mark, so a disc centred on it hides the
-        /// very thing being referred to — the path junction, the bridge, the
-        /// spot on the map. This hangs above the position instead and touches
-        /// it with one point, which is what a map pin has always been for.
+        /// Two earlier attempts, both worse. A circle with a triangle stuck
+        /// under it looked hand-cut, which it was. The system's `mappin` is a
+        /// thin needle that all but disappears at map size and in grey.
+        ///
+        /// So the balloon is drawn properly: an arc over the top of the head,
+        /// then a curve down each side into a single point. The curves are
+        /// what make it a teardrop rather than a lollipop, and the point is
+        /// the whole reason for the shape — it marks the coordinate without
+        /// sitting on top of it.
         private static func markerImage(for kind: CheckpointKind) -> UIImage {
-            let size = CGSize(width: 30, height: 40)
-            return UIGraphicsImageRenderer(size: size).image { context in
-                let colour = tint(for: kind)
-                let head = CGRect(x: 3, y: 2, width: 24, height: 24)
-                let path = UIBezierPath(ovalIn: head)
-                // The stem, drawn as a triangle down to the tip.
-                let stem = UIBezierPath()
-                stem.move(to: CGPoint(x: 15 - 6, y: 22))
-                stem.addLine(to: CGPoint(x: 15, y: 38))
-                stem.addLine(to: CGPoint(x: 15 + 6, y: 22))
-                stem.close()
-                path.append(stem)
+            let head = CGPoint(x: 15, y: 15)
+            let radius: CGFloat = 11
+            let tip = CGPoint(x: 15, y: 39)
+            let size = CGSize(width: 30, height: 42)
 
+            let path = UIBezierPath()
+            // Over the top, from the lower left of the head round to the lower
+            // right, leaving the bottom open for the taper.
+            path.addArc(
+                withCenter: head, radius: radius,
+                startAngle: .pi * 0.82, endAngle: .pi * 0.18,
+                clockwise: true
+            )
+            path.addQuadCurve(
+                to: tip,
+                controlPoint: CGPoint(x: head.x + radius * 0.72, y: head.y + radius * 1.35)
+            )
+            path.addQuadCurve(
+                to: CGPoint(
+                    x: head.x + radius * cos(.pi * 0.82),
+                    y: head.y + radius * sin(.pi * 0.82)
+                ),
+                controlPoint: CGPoint(x: head.x - radius * 0.72, y: head.y + radius * 1.35)
+            )
+            path.close()
+
+            return UIGraphicsImageRenderer(size: size).image { _ in
                 UIColor.white.setStroke()
-                colour.setFill()
+                tint(for: kind).setFill()
                 path.lineWidth = 3
                 path.stroke()
                 path.fill()
-
-                // A hole through the head so the map shows through it rather
-                // than the marker reading as a solid blob.
-                context.cgContext.setBlendMode(.clear)
-                UIBezierPath(ovalIn: head.insetBy(dx: 8, dy: 8)).fill()
+                // The hole, so the marker reads as a marker and not a blob.
+                UIColor.white.setFill()
+                UIBezierPath(
+                    arcCenter: head, radius: radius * 0.42,
+                    startAngle: 0, endAngle: .pi * 2, clockwise: true
+                ).fill()
             }
         }
 
