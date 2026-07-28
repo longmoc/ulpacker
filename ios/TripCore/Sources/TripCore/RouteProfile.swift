@@ -116,6 +116,35 @@ public struct RouteProfile: Sendable {
         public let maxLng: Double
     }
 
+    /// Height above sea level at a point along the route.
+    public func elevation(atRouteM routeM: Double) -> Double? {
+        var best: (distance: Double, ele: Double)?
+        for sample in samples {
+            guard let ele = sample.ele else { continue }
+            let distance = abs(sample.routeM - routeM)
+            if best == nil || distance < best!.distance { best = (distance, ele) }
+            // Samples are in order, so once they start receding the nearest is
+            // behind us — no reason to walk the remaining eight thousand.
+            if sample.routeM > routeM, best != nil { break }
+        }
+        return best?.ele
+    }
+
+    /// How steep the route is around a point, as a percentage.
+    ///
+    /// Measured over a window rather than between two neighbouring points: at
+    /// nineteen metres apart a single pair is mostly the elevation data's own
+    /// noise, and a gradient that swings between +40% and −40% while standing
+    /// still is worse than none.
+    public func gradient(atRouteM routeM: Double, windowM: Double = 150) -> Double? {
+        let lower = max(0, routeM - windowM)
+        let upper = min(totalM, routeM + windowM)
+        guard upper > lower,
+              let low = elevation(atRouteM: lower), let high = elevation(atRouteM: upper)
+        else { return nil }
+        return (high - low) / (upper - lower) * 100
+    }
+
     /// The route's own points across one stretch, in order.
     ///
     /// For drawing a day on top of the trip rather than describing it: the

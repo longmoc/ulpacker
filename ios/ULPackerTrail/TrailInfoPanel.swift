@@ -44,6 +44,13 @@ struct TrailInfoPanel: View {
     @Binding var kindFilter: Set<CheckpointKind>
 
     @State private var dragOffset: CGFloat = 0
+    @State private var scrubbedRouteM: Double?
+    #if DEBUG
+    /// Lets a screenshot run put a finger on the chart.
+    private let debugScrub = NotificationCenter.default.publisher(
+        for: Notification.Name("ULPDebugScrub")
+    )
+    #endif
 
     var body: some View {
         GeometryReader { geometry in
@@ -67,6 +74,14 @@ struct TrailInfoPanel: View {
             .shadow(color: .black.opacity(0.12), radius: 8, y: -2)
             .frame(maxHeight: .infinity, alignment: .bottom)
             .gesture(dragGesture(total: geometry.size.height))
+            #if DEBUG
+            .onReceive(debugScrub) { note in
+                guard let fraction = note.userInfo?["fraction"] as? Double else { return }
+                let range = scopeRange ?? 0...RouteProfiles.profile(for: package).totalM
+                scrubbedRouteM = range.lowerBound
+                    + fraction * (range.upperBound - range.lowerBound)
+            }
+            #endif
         }
     }
 
@@ -194,11 +209,33 @@ struct TrailInfoPanel: View {
     @ViewBuilder private var content: some View {
         switch tab {
         case .profile:
-            ElevationProfileView(
-                package: package, routeDistanceM: routeDistanceM, range: scopeRange
-            )
+            VStack(spacing: 0) {
+                // A fixed height, not the whole panel. Pulled up to read a
+                // note, the chart used to stretch with it — 164 km of route
+                // rendered a hand tall, which is not a profile of anything.
+                // The room the panel gains goes to what is under the finger
+                // instead.
+                ElevationProfileView(
+                    package: package,
+                    routeDistanceM: routeDistanceM,
+                    scrubbedRouteM: $scrubbedRouteM,
+                    range: scopeRange
+                )
+                .frame(height: 168)
                 .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .padding(.top, 10)
+
+                ProfileReadout(
+                    package: package,
+                    routeM: scrubbedRouteM,
+                    from: routeDistanceM,
+                    onClear: { scrubbedRouteM = nil }
+                )
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+
+                Spacer(minLength: 0)
+            }
         case .stops:
             stopsList
         }
@@ -581,4 +618,83 @@ enum RouteProfiles {
     }
 
     private nonisolated(unsafe) static var cache: [String: RouteProfile] = [:]
+}
+
+/// What is at the point being touched on the profile.
+///
+/// The profile answers "how hard" for a whole stretch; this answers it for one
+/// place — the height, how steep it is there, and which stop comes next — which
+/// is the question actually being asked when a finger lands on a climb.
+private struct ProfileReadout: View {
+    let package: TripPackage
+    let routeM: Double?
+    let from: Double?
+    let onClear: () -> Void
+
+    var body: some View {
+        if let routeM {
+            let profile = RouteProfiles.profile(for: package)
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    stat(String(format: "km %.1f", routeM / 1000))
+                    if let ele = profile.elevation(atRouteM: routeM) {
+                        stat("\(Int(ele.rounded())) m")
+                    }
+                    if let grade = profile.gradient(atRouteM: routeM) {
+                        stat(String(format: "%+.0f%%", grade))
+                            .foregroundStyle(grade > 8 ? Color.orange : Color.primary)
+                    }
+                    Spacer(minLength: 4)
+                    Button("Clear", action: onClear)
+                        .font(.caption)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(Color.brand)
+                }
+
+                if let next = package.checkpoints.first(where: {
+                    Double($0.routeDistanceM) > routeM
+                }) {
+                    Text(nextLine(next, from: routeM))
+                        .font(.caption)
+                        .foregroundStyle(Color.subtle)
+                        .lineLimit(1)
+                }
+
+                if let from {
+                    let leg = profile.leg(fromRouteM: from, toRouteM: routeM)
+                    Text(reachLine(leg))
+                        .font(.caption)
+                        .foregroundStyle(Color.subtle)
+                        .lineLimit(1)
+                }
+            }
+        } else {
+            Text("Touch the profile to read a point.")
+                .font(.caption)
+                .foregroundStyle(Color.subtle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func stat(_ text: String) -> some View {
+        Text(text).font(.subheadline.weight(.semibold).monospacedDigit())
+    }
+
+    private func nextLine(_ checkpoint: TripPackage.Checkpoint, from routeM: Double) -> String {
+        let away = (Double(checkpoint.routeDistanceM) - routeM) / 1000
+        return String(format: "Next: %@ · %.1f km on", checkpoint.displayName, away)
+    }
+
+    /// What it takes to get from the walker to the point under their finger —
+    /// the same three numbers a stop's detail gives, for a place that is not a
+    /// stop at all.
+    private func reachLine(_ leg: RouteProfile.Leg) -> String {
+        var parts = [String(format: "%.1f km", leg.distanceM / 1000)]
+        if let duration = leg.duration {
+            let minutes = Int((duration / 60).rounded())
+            parts.append(minutes >= 60 ? "\(minutes / 60) h \(minutes % 60)" : "\(minutes) min")
+        }
+        if let ascent = leg.ascentM { parts.append("↑\(Int(ascent.rounded())) m") }
+        return (leg.isBehind ? "Back from here: " : "From here: ") + parts.joined(separator: " · ")
+    }
 }

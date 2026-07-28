@@ -420,6 +420,16 @@ struct TrailMapScreen: View {
                 kindFilter = [.poi]
             case "filterNone":
                 kindFilter = []
+            case "profileScrub":
+                // Expanded, day-scoped, with a point picked on the chart —
+                // the state the readout exists for.
+                dayScope = 4
+                panelTab = .profile
+                panelDetent = .expanded
+                NotificationCenter.default.post(
+                    name: Notification.Name("ULPDebugScrub"), object: nil,
+                    userInfo: ["fraction": 0.42]
+                )
             case "zoomNote":
                 // A landmark that carries a note, close enough in for both the
                 // marker and the note to be showing.

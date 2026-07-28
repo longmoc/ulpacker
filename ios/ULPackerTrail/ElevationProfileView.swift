@@ -13,6 +13,9 @@ struct ElevationProfileView: View {
     var routeDistanceM: Double?
     /// Checkpoints are marked so climbs can be read against the stops.
     var showsCheckpoints = true
+    /// Where the finger is on the chart, in route metres. The panel reads it
+    /// back to show what is at that point.
+    @Binding var scrubbedRouteM: Double?
     /// Draw only this stretch of the route.
     ///
     /// The whole trip on a phone gives a walking day about forty points of
@@ -41,8 +44,22 @@ struct ElevationProfileView: View {
                     if let routeDistanceM {
                         positionMark(at: routeDistanceM, bounds: bounds, size: size)
                     }
+                    if let scrubbedRouteM {
+                        scrubMark(at: scrubbedRouteM, bounds: bounds, size: size)
+                    }
                     axisLabels(bounds: bounds, size: size)
                 }
+                .contentShape(Rectangle())
+                // Touch anywhere on the chart to read that point, and slide
+                // along it to read the climb ahead without leaving the map.
+                // minimumDistance 0 so a tap works as well as a drag.
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { value in
+                            let fraction = min(max(0, value.location.x / size.width), 1)
+                            scrubbedRouteM = bounds.startM + Double(fraction) * bounds.spanM
+                        }
+                )
             }
         }
     }
@@ -110,6 +127,22 @@ struct ElevationProfileView: View {
             Circle()
                 .fill(Color.blue)
                 .frame(width: 9)
+                .overlay(Circle().stroke(.white, lineWidth: 2))
+                .position(x: x, y: bounds.y(elevation(at: routeM), in: size))
+        }
+    }
+
+    /// The point being read, marked so the number below has somewhere to point.
+    private func scrubMark(at routeM: Double, bounds: Bounds, size: CGSize) -> some View {
+        let x = bounds.x(routeM, in: size)
+        return ZStack(alignment: .top) {
+            Rectangle()
+                .fill(Color.brand)
+                .frame(width: 1.5, height: size.height)
+                .position(x: x, y: size.height / 2)
+            Circle()
+                .fill(Color.brand)
+                .frame(width: 10)
                 .overlay(Circle().stroke(.white, lineWidth: 2))
                 .position(x: x, y: bounds.y(elevation(at: routeM), in: size))
         }

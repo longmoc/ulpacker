@@ -219,3 +219,35 @@ struct RouteBoundsTests {
         #expect(profile.bounds(fromRouteM: profile.totalM + 1_000, toRouteM: profile.totalM + 2_000) == nil)
     }
 }
+
+/// Reading a single point off the profile.
+struct ProfilePointTests {
+    @Test func elevationFollowsTheRoute() throws {
+        let package = try RouteProfileTests.package("tmb-ccw")
+        let profile = RouteProfile(package: package)
+        let low = try #require(profile.elevation(atRouteM: 0))
+        let stats = package.plannedRoute.stats
+        #expect(low >= Double(try #require(stats.minEle)) - 1)
+        #expect(low <= Double(try #require(stats.maxEle)) + 1)
+    }
+
+    @Test func gradientIsMeasuredOverAWindowNotBetweenNeighbours() throws {
+        // Points on this route are 19 m apart, where a single pair is mostly
+        // the elevation data's own noise. Over a window the figure has to stay
+        // inside what a person can actually walk up.
+        let package = try RouteProfileTests.package("tmb-ccw")
+        let profile = RouteProfile(package: package)
+        let samples = stride(from: 1_000.0, to: 160_000.0, by: 997.0)
+        let gradients = samples.compactMap { profile.gradient(atRouteM: $0) }
+        #expect(gradients.count > 100)
+        #expect(gradients.allSatisfy { abs($0) < 70 })
+    }
+
+    @Test func aClimbReadsPositiveAndADescentNegative() throws {
+        let package = try RouteProfileTests.package("tmb-ccw")
+        let profile = RouteProfile(package: package)
+        // Day one leaves Les Houches climbing almost continuously.
+        let up = try #require(profile.gradient(atRouteM: 3_000))
+        #expect(up > 0)
+    }
+}
