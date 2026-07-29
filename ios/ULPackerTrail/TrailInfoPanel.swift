@@ -84,9 +84,16 @@ struct TrailInfoPanel: View {
                 let range = scopeRange ?? 0...RouteProfiles.profile(for: package).totalM
                 if let extra = note.userInfo?["zoom"] as? Double { profileZoom = extra }
                 if let snap = note.userInfo?["snap"] as? Bool { snapsToStops = snap }
-                pointA = range.lowerBound + fraction * (range.upperBound - range.lowerBound)
-                pointB = range.lowerBound + min(1, fraction + 0.28)
-                    * (range.upperBound - range.lowerBound)
+                let span = range.upperBound - range.lowerBound
+                let put = { (value: Double) -> Double in
+                    guard snapsToStops else { return value }
+                    return package.checkpoints
+                        .min { abs(Double($0.routeDistanceM) - value)
+                             < abs(Double($1.routeDistanceM) - value) }
+                        .map { Double($0.routeDistanceM) } ?? value
+                }
+                pointA = put(range.lowerBound + fraction * span)
+                pointB = put(range.lowerBound + min(1, fraction + 0.28) * span)
             }
             #endif
         }
@@ -658,6 +665,11 @@ private struct ProfileReadout: View {
 
     private var profile: RouteProfile { RouteProfiles.profile(for: package) }
 
+    /// The stop a point is standing on, if it is standing on one.
+    private func stop(at routeM: Double) -> TripPackage.Checkpoint? {
+        package.checkpoints.first { abs(Double($0.routeDistanceM) - routeM) < 50 }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if let pointA {
@@ -690,11 +702,38 @@ private struct ProfileReadout: View {
                 )
             }
 
+            // The stop under the point, named. Snapping puts the point exactly
+            // on one, and even without it a point within fifty metres is a
+            // point somebody meant to put there.
+            if let here = stop(at: routeM) {
+                HStack(spacing: 6) {
+                    Image(systemName: here.checkpointKind.symbolName)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 17, height: 17)
+                        .background(Circle().fill(ElevationProfileView.tint(for: here.checkpointKind)))
+                    Text(here.displayName)
+                        .font(.caption.weight(.medium))
+                        .lineLimit(1)
+                }
+            }
+
             if let next = package.checkpoints.first(where: { Double($0.routeDistanceM) > routeM }) {
-                caption(String(
-                    format: "Next: %@ · %.1f km on",
-                    next.displayName, (Double(next.routeDistanceM) - routeM) / 1000
-                ))
+                HStack(spacing: 6) {
+                    Text("NEXT")
+                        .font(.system(size: 9, weight: .heavy))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color.subtle))
+                    Text(String(
+                        format: "%@ · %.1f km on",
+                        next.displayName, (Double(next.routeDistanceM) - routeM) / 1000
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(Color.subtle)
+                    .lineLimit(1)
+                }
             }
 
             // Only while recording, because "from here" needs a here.

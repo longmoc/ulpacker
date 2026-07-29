@@ -35,8 +35,14 @@ struct ElevationProfileView: View {
     var snapsToCheckpoints = false
 
     @State private var zoomAtGestureStart: Double = 1
-    /// The window as it was when the finger went down, held until it lifts.
+    /// The window as it was when the finger went down, held until it lifts —
+    /// except that the edges scroll it, below.
     @State private var draggingWindow: ClosedRange<Double>?
+    /// Where the window sits along the route, once it has been moved by hand.
+    /// Nil means it still follows the point being read.
+    @State private var windowCentre: Double?
+    /// A two-finger pan is under way, so the one-finger drag stands aside.
+    @State private var panning = false
     /// Draw only this stretch of the route.
     ///
     /// The whole trip on a phone gives a walking day about forty points of
@@ -95,6 +101,7 @@ struct ElevationProfileView: View {
                             // gesture back into its own coordinate system: the
                             // point shifts the window, the window remaps the
                             // finger, and the point runs away under it.
+                            guard !panning else { return }
                             if draggingWindow == nil { draggingWindow = window }
                             let frame = draggingWindow ?? window
                             let fraction = min(max(0, value.location.x / size.width), 1)
@@ -105,12 +112,37 @@ struct ElevationProfileView: View {
                             case .a: pointA = routeM
                             case .b: pointB = routeM
                             }
+                            scrollIfAtEdge(raw, frame: frame)
                         }
                         .onEnded { _ in draggingWindow = nil }
+                )
+                .overlay(
+                    TwoFingerPan(
+                        onBegan: { panning = true },
+                        onChange: { translation in
+                            let frame = draggingWindow ?? window
+                            let span = frame.upperBound - frame.lowerBound
+                            // Drag right, route goes left: the chart moves with
+                            // the fingers, the way a map does.
+                            let shift = -Double(translation / size.width) * span
+                            let centre = (frame.lowerBound + frame.upperBound) / 2 + shift
+                            windowCentre = centre
+                            draggingWindow = Self.centred(
+                                centre, span: span, inside: fullRange
+                            )
+                        },
+                        onEnded: {
+                            panning = false
+                            draggingWindow = nil
+                        }
+                    )
                 )
                 .simultaneousGesture(
                     MagnifyGesture()
                         .onChanged { value in
+                            if windowCentre == nil {
+                                windowCentre = (window.lowerBound + window.upperBound) / 2
+                            }
                             zoom = min(40, max(1, zoomAtGestureStart * value.magnification))
                         }
                         .onEnded { _ in zoomAtGestureStart = zoom }
@@ -265,13 +297,52 @@ struct ElevationProfileView: View {
     /// window along with it, and the finger can never push the point off the
     /// edge of the chart.
     private func visibleWindow() -> ClosedRange<Double> {
-        let full = range ?? 0...(Self.allSamples(for: package).last?.routeM ?? 1)
+        let full = fullRange
         guard zoom > 1.01 else { return full }
         let span = (full.upperBound - full.lowerBound) / zoom
-        let focus = (moving == .b ? pointB : pointA)
-            ?? pointA ?? (full.lowerBound + (full.upperBound - full.lowerBound) / 2)
+        let focus = windowCentre
+            ?? (moving == .b ? pointB : pointA)
+            ?? pointA
+            ?? (full.lowerBound + (full.upperBound - full.lowerBound) / 2)
+        return Self.centred(focus, span: span, inside: full)
+    }
+
+    private var fullRange: ClosedRange<Double> {
+        range ?? 0...(Self.allSamples(for: package).last?.routeM ?? 1)
+    }
+
+    /// A window of `span` around `focus`, kept inside `full`.
+    private static func centred(
+        _ focus: Double, span: Double, inside full: ClosedRange<Double>
+    ) -> ClosedRange<Double> {
+        guard full.upperBound - full.lowerBound > span else { return full }
         let clamped = min(max(focus, full.lowerBound + span / 2), full.upperBound - span / 2)
         return (clamped - span / 2)...(clamped + span / 2)
+    }
+
+    /// Creep the window along when a dragged point reaches its edge.
+    ///
+    /// A fixed step rather than a recentre on the point: recentring feeds the
+    /// gesture back into its own coordinate system and the point runs away
+    /// under the finger. This moves at a constant rate for as long as the
+    /// finger is held near the edge, which is how every text selection on this
+    /// phone already behaves.
+    private func scrollIfAtEdge(_ routeM: Double, frame: ClosedRange<Double>) {
+        let span = frame.upperBound - frame.lowerBound
+        let margin = span * 0.12
+        let step: Double
+        if routeM < frame.lowerBound + margin {
+            step = -span * 0.05
+        } else if routeM > frame.upperBound - margin {
+            step = span * 0.05
+        } else {
+            return
+        }
+        let centre = (frame.lowerBound + frame.upperBound) / 2 + step
+        let moved = Self.centred(centre, span: span, inside: fullRange)
+        guard moved != frame else { return }
+        draggingWindow = moved
+        windowCentre = (moved.lowerBound + moved.upperBound) / 2
     }
 
     /// The nearest stop, for the mode that measures between places rather than
