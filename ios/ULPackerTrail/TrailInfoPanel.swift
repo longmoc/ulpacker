@@ -44,7 +44,9 @@ struct TrailInfoPanel: View {
     @Binding var kindFilter: Set<CheckpointKind>
 
     @State private var dragOffset: CGFloat = 0
-    @State private var scrubbedRouteM: Double?
+    @State private var pointA: Double?
+    @State private var pointB: Double?
+    @State private var movingPoint: ProfilePoint = .a
     #if DEBUG
     /// Lets a screenshot run put a finger on the chart.
     private let debugScrub = NotificationCenter.default.publisher(
@@ -78,8 +80,9 @@ struct TrailInfoPanel: View {
             .onReceive(debugScrub) { note in
                 guard let fraction = note.userInfo?["fraction"] as? Double else { return }
                 let range = scopeRange ?? 0...RouteProfiles.profile(for: package).totalM
-                scrubbedRouteM = range.lowerBound
-                    + fraction * (range.upperBound - range.lowerBound)
+                pointA = range.lowerBound + fraction * (range.upperBound - range.lowerBound)
+                pointB = range.lowerBound + min(1, fraction + 0.28)
+                    * (range.upperBound - range.lowerBound)
             }
             #endif
         }
@@ -218,7 +221,9 @@ struct TrailInfoPanel: View {
                 ElevationProfileView(
                     package: package,
                     routeDistanceM: routeDistanceM,
-                    scrubbedRouteM: $scrubbedRouteM,
+                    pointA: $pointA,
+                    pointB: $pointB,
+                    moving: $movingPoint,
                     range: scopeRange
                 )
                 .frame(height: 168)
@@ -227,9 +232,15 @@ struct TrailInfoPanel: View {
 
                 ProfileReadout(
                     package: package,
-                    routeM: scrubbedRouteM,
+                    pointA: pointA,
+                    pointB: pointB,
+                    moving: $movingPoint,
                     from: routeDistanceM,
-                    onClear: { scrubbedRouteM = nil }
+                    onClear: {
+                        pointA = nil
+                        pointB = nil
+                        movingPoint = .a
+                    }
                 )
                 .padding(.horizontal, 12)
                 .padding(.top, 10)
@@ -620,81 +631,139 @@ enum RouteProfiles {
     private nonisolated(unsafe) static var cache: [String: RouteProfile] = [:]
 }
 
-/// What is at the point being touched on the profile.
+/// What is at the point being touched, and what lies between two of them.
 ///
-/// The profile answers "how hard" for a whole stretch; this answers it for one
-/// place — the height, how steep it is there, and which stop comes next — which
-/// is the question actually being asked when a finger lands on a climb.
+/// The profile answers "how hard" for a whole stretch. One point answers it for
+/// one place; two answer it for the stretch between them, which is the question
+/// behind most decisions on a walk — whether to push on to the next col before
+/// dark, whether the climb after lunch is the one that hurts.
 private struct ProfileReadout: View {
     let package: TripPackage
-    let routeM: Double?
+    let pointA: Double?
+    let pointB: Double?
+    @Binding var moving: ProfilePoint
     let from: Double?
     let onClear: () -> Void
 
+    private var profile: RouteProfile { RouteProfiles.profile(for: package) }
+
     var body: some View {
-        if let routeM {
-            let profile = RouteProfiles.profile(for: package)
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    stat(String(format: "km %.1f", routeM / 1000))
-                    if let ele = profile.elevation(atRouteM: routeM) {
-                        stat("\(Int(ele.rounded())) m")
-                    }
-                    if let grade = profile.gradient(atRouteM: routeM) {
-                        stat(String(format: "%+.0f%%", grade))
-                            .foregroundStyle(grade > 8 ? Color.orange : Color.primary)
-                    }
-                    Spacer(minLength: 4)
-                    Button("Clear", action: onClear)
-                        .font(.caption)
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color.brand)
-                }
-
-                if let next = package.checkpoints.first(where: {
-                    Double($0.routeDistanceM) > routeM
-                }) {
-                    Text(nextLine(next, from: routeM))
-                        .font(.caption)
-                        .foregroundStyle(Color.subtle)
-                        .lineLimit(1)
-                }
-
-                if let from {
-                    let leg = profile.leg(fromRouteM: from, toRouteM: routeM)
-                    Text(reachLine(leg))
-                        .font(.caption)
-                        .foregroundStyle(Color.subtle)
-                        .lineLimit(1)
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            if let pointA {
+                point(pointA)
+                if let pointB { between(pointA, pointB) }
+                controls
+            } else {
+                Text("Touch the profile to read a point.")
+                    .font(.caption)
+                    .foregroundStyle(Color.subtle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-        } else {
-            Text("Touch the profile to read a point.")
-                .font(.caption)
-                .foregroundStyle(Color.subtle)
-                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    private func stat(_ text: String) -> some View {
-        Text(text).font(.subheadline.weight(.semibold).monospacedDigit())
+    // MARK: - One point
+
+    private func point(_ routeM: Double) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 0) {
+                // Labelled, because "−22%" on its own is a number nobody can
+                // name. It is the slope at that spot, and it reads as a
+                // question until it says so.
+                stat("From start", String(format: "%.1f km", routeM / 1000))
+                stat("Height", profile.elevation(atRouteM: routeM).map { "\(Int($0.rounded())) m" } ?? "—")
+                stat(
+                    "Gradient",
+                    profile.gradient(atRouteM: routeM).map { String(format: "%+.0f%%", $0) } ?? "—",
+                    warn: (profile.gradient(atRouteM: routeM) ?? 0) > 8
+                )
+            }
+
+            if let next = package.checkpoints.first(where: { Double($0.routeDistanceM) > routeM }) {
+                caption(String(
+                    format: "Next: %@ · %.1f km on",
+                    next.displayName, (Double(next.routeDistanceM) - routeM) / 1000
+                ))
+            }
+
+            // Only while recording, because "from here" needs a here.
+            if let from {
+                caption(leg("From you", profile.leg(fromRouteM: from, toRouteM: routeM)))
+            }
+        }
     }
 
-    private func nextLine(_ checkpoint: TripPackage.Checkpoint, from routeM: Double) -> String {
-        let away = (Double(checkpoint.routeDistanceM) - routeM) / 1000
-        return String(format: "Next: %@ · %.1f km on", checkpoint.displayName, away)
+    // MARK: - Two points
+
+    private func between(_ a: Double, _ b: Double) -> some View {
+        // Always earlier point to later one, whichever was placed first: a
+        // stretch of route has a direction and the walker is going one way
+        // along it, so a negative climb here would be a different walk.
+        let leg = profile.leg(fromRouteM: min(a, b), toRouteM: max(a, b))
+        return caption(self.leg("A → B", leg))
+            .font(.caption.weight(.medium))
+            .foregroundStyle(Color.primary)
     }
 
-    /// What it takes to get from the walker to the point under their finger —
-    /// the same three numbers a stop's detail gives, for a place that is not a
-    /// stop at all.
-    private func reachLine(_ leg: RouteProfile.Leg) -> String {
+    private func leg(_ prefix: String, _ leg: RouteProfile.Leg) -> String {
         var parts = [String(format: "%.1f km", leg.distanceM / 1000)]
+        if let ascent = leg.ascentM, let descent = leg.descentM {
+            parts.append("↑\(Int(ascent.rounded())) ↓\(Int(descent.rounded())) m")
+        }
         if let duration = leg.duration {
             let minutes = Int((duration / 60).rounded())
             parts.append(minutes >= 60 ? "\(minutes / 60) h \(minutes % 60)" : "\(minutes) min")
         }
-        if let ascent = leg.ascentM { parts.append("↑\(Int(ascent.rounded())) m") }
-        return (leg.isBehind ? "Back from here: " : "From here: ") + parts.joined(separator: " · ")
+        let direction = leg.isBehind ? " (back)" : ""
+        return "\(prefix)\(direction): " + parts.joined(separator: " · ")
+    }
+
+    // MARK: - Controls
+
+    private var controls: some View {
+        HStack(spacing: 8) {
+            chip("A", active: moving == .a) { moving = .a }
+            chip(pointB == nil ? "Add B" : "B", active: moving == .b) { moving = .b }
+            Spacer(minLength: 4)
+            Button("Clear", action: onClear)
+                .font(.caption)
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.brand)
+        }
+    }
+
+    /// Which point the next drag moves. Two taps to measure a stretch: pick B,
+    /// then drag — rather than a mode nobody would find.
+    private func chip(_ title: String, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(
+                    Capsule().fill(active ? Color.brand : Color.primary.opacity(0.07))
+                )
+                .foregroundStyle(active ? .white : Color.primary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func stat(_ title: String, _ value: String, warn: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title).font(.caption2).foregroundStyle(Color.subtle)
+            Text(value)
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundStyle(warn ? Color.orange : Color.primary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(Color.subtle)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

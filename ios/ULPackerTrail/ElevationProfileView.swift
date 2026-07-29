@@ -1,6 +1,12 @@
 import SwiftUI
 import TripCore
 
+/// Which end of a measurement a drag is moving.
+enum ProfilePoint {
+    case a
+    case b
+}
+
 /// The route's elevation profile, with the walker's position on it.
 ///
 /// On a mountain route this is not decoration: 4 km with 900 m of climb is a
@@ -13,9 +19,16 @@ struct ElevationProfileView: View {
     var routeDistanceM: Double?
     /// Checkpoints are marked so climbs can be read against the stops.
     var showsCheckpoints = true
-    /// Where the finger is on the chart, in route metres. The panel reads it
-    /// back to show what is at that point.
-    @Binding var scrubbedRouteM: Double?
+    /// The two points a finger can put on the chart, in route metres.
+    ///
+    /// One answers "what is here". Two answer "what is between here and
+    /// there", which is the question behind every decision on a walk: whether
+    /// to push on to the next col before dark, whether the climb after lunch is
+    /// the one that hurts.
+    @Binding var pointA: Double?
+    @Binding var pointB: Double?
+    /// Which of the two the next drag moves.
+    @Binding var moving: ProfilePoint
     /// Draw only this stretch of the route.
     ///
     /// The whole trip on a phone gives a walking day about forty points of
@@ -44,8 +57,14 @@ struct ElevationProfileView: View {
                     if let routeDistanceM {
                         positionMark(at: routeDistanceM, bounds: bounds, size: size)
                     }
-                    if let scrubbedRouteM {
-                        scrubMark(at: scrubbedRouteM, bounds: bounds, size: size)
+                    if let pointA, let pointB {
+                        span(from: pointA, to: pointB, bounds: bounds, size: size)
+                    }
+                    if let pointA {
+                        scrubMark(at: pointA, bounds: bounds, size: size, label: "A")
+                    }
+                    if let pointB {
+                        scrubMark(at: pointB, bounds: bounds, size: size, label: "B")
                     }
                     axisLabels(bounds: bounds, size: size)
                 }
@@ -57,7 +76,11 @@ struct ElevationProfileView: View {
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
                             let fraction = min(max(0, value.location.x / size.width), 1)
-                            scrubbedRouteM = bounds.startM + Double(fraction) * bounds.spanM
+                            let routeM = bounds.startM + Double(fraction) * bounds.spanM
+                            switch moving {
+                            case .a: pointA = routeM
+                            case .b: pointB = routeM
+                            }
                         }
                 )
             }
@@ -132,20 +155,36 @@ struct ElevationProfileView: View {
         }
     }
 
-    /// The point being read, marked so the number below has somewhere to point.
-    private func scrubMark(at routeM: Double, bounds: Bounds, size: CGSize) -> some View {
+    /// A point being read, marked so the numbers below have somewhere to point.
+    private func scrubMark(
+        at routeM: Double, bounds: Bounds, size: CGSize, label: String
+    ) -> some View {
         let x = bounds.x(routeM, in: size)
         return ZStack(alignment: .top) {
             Rectangle()
                 .fill(Color.brand)
                 .frame(width: 1.5, height: size.height)
                 .position(x: x, y: size.height / 2)
-            Circle()
-                .fill(Color.brand)
-                .frame(width: 10)
-                .overlay(Circle().stroke(.white, lineWidth: 2))
+            Text(label)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white)
+                .padding(3)
+                .background(Circle().fill(Color.brand))
                 .position(x: x, y: bounds.y(elevation(at: routeM), in: size))
         }
+    }
+
+    /// The stretch between the two points, so the measurement is visible on the
+    /// chart and not only in the figures underneath it.
+    private func span(
+        from: Double, to: Double, bounds: Bounds, size: CGSize
+    ) -> some View {
+        let left = min(bounds.x(from, in: size), bounds.x(to, in: size))
+        let right = max(bounds.x(from, in: size), bounds.x(to, in: size))
+        return Rectangle()
+            .fill(Color.brand.opacity(0.14))
+            .frame(width: max(0, right - left), height: size.height)
+            .position(x: (left + right) / 2, y: size.height / 2)
     }
 
     private func axisLabels(bounds: Bounds, size: CGSize) -> some View {
