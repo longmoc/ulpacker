@@ -1,11 +1,10 @@
 import SwiftUI
 import TripCore
 
-/// M1's whole UI: prove a real TripPackage decodes, verifies and reads sensibly
-/// on the device. Deliberately plain — the navigation screen that matters comes
-/// after Core Location is known to work, not before.
+/// The trips on this phone, and the way to add one.
 struct TripListView: View {
     let library: TripLibrary
+    @State private var choosingFile = false
 
     var body: some View {
         Group {
@@ -13,10 +12,16 @@ struct TripListView: View {
             case .loading:
                 ProgressView()
             case .failed(let message):
+                // An empty phone is the normal first run, not a failure. The
+                // wording used to report that no trip was bundled with the
+                // build, which was true and useless: nothing the person
+                // holding it could act on.
                 ContentUnavailableView {
-                    Label("Could not load a trip", systemImage: "exclamationmark.triangle")
+                    Label("No trips yet", systemImage: "map")
                 } description: {
                     Text(message)
+                } actions: {
+                    Button("Add a trip") { choosingFile = true }
                 }
             case .loaded(let packages):
                 List(packages, id: \.tripId) { package in
@@ -29,6 +34,47 @@ struct TripListView: View {
             }
         }
         .navigationTitle("Trips")
+        .toolbar {
+            Button { choosingFile = true } label: {
+                Label("Add trip", systemImage: "plus")
+            }
+        }
+        // Two ways in, because a trip arrives two ways: opened into the app
+        // from Files or AirDrop, or fetched from here. Neither covers the
+        // other — a file someone sends lands in Files with nothing to open it,
+        // and a file already on the phone needs asking for.
+        .fileImporter(
+            isPresented: $choosingFile,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                if let url = urls.first { library.receive(url) }
+            case .failure(let error):
+                library.lastImport = .failed(error.localizedDescription)
+            }
+        }
+        .alert(item: importAlert) { outcome in
+            switch outcome {
+            case .added(let name):
+                Alert(
+                    title: Text("Trip added"),
+                    message: Text(name),
+                    dismissButton: .default(Text("OK"))
+                )
+            case .failed(let message):
+                Alert(
+                    title: Text("Could not add that trip"),
+                    message: Text(message),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
+        }
+    }
+
+    private var importAlert: Binding<TripLibrary.ImportResult?> {
+        Binding(get: { library.lastImport }, set: { library.lastImport = $0 })
     }
 }
 

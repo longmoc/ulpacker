@@ -20,6 +20,40 @@ final class TripLibrary {
     }
 
     private(set) var state: LoadState = .loading
+    /// The outcome of the last import, for the screen to report.
+    var lastImport: ImportResult?
+
+    enum ImportResult: Identifiable {
+        case added(String)
+        case failed(String)
+
+        var id: String {
+            switch self {
+            case .added(let name): "added-\(name)"
+            case .failed(let message): "failed-\(message)"
+            }
+        }
+    }
+
+    /// Import and remember what happened, for callers that have nowhere to
+    /// throw to — a file arriving from AirDrop has no call site to catch it.
+    func receive(_ url: URL) {
+        do {
+            let package = try importTrip(from: url)
+            lastImport = .added(package.trip.name)
+        } catch {
+            lastImport = .failed(Self.explain(error))
+        }
+    }
+
+    /// A message a walker can act on, rather than a decoding error dump.
+    private static func explain(_ error: Error) -> String {
+        if let error = error as? TripPackageError { return error.description }
+        if error is DecodingError {
+            return "That file is not a trip package the app understands."
+        }
+        return error.localizedDescription
+    }
 
     init() {
         load()
@@ -44,6 +78,40 @@ final class TripLibrary {
     /// AirDrop or iTunes file sharing is picked up on next launch.
     static var tripsDirectory: URL {
         URL.documentsDirectory.appendingPathComponent("trips", isDirectory: true)
+    }
+
+    /// Take a trip package from somewhere else on the phone and keep it.
+    ///
+    /// The one thing the app could not do. A trip reached this device by cable
+    /// and a `devicectl` command, which is fine for the person with the cable
+    /// and leaves everybody else holding an app with nothing in it.
+    ///
+    /// Verified before it is kept, not after. A file that fails is reported and
+    /// discarded — half-importing a route someone then follows up a mountain is
+    /// the one outcome worth being strict about.
+    @discardableResult
+    func importTrip(from url: URL) throws -> TripPackage {
+        // Files handed over by another app arrive security-scoped, and reading
+        // without asking fails with a permission error that looks like a
+        // missing file.
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        let data = try Data(contentsOf: url)
+        let package = try TripPackage.decode(from: data)
+
+        try FileManager.default.createDirectory(
+            at: Self.tripsDirectory, withIntermediateDirectories: true
+        )
+        // Named by trip id, so importing a corrected export replaces the trip
+        // it corrects instead of sitting beside it under whatever the file was
+        // called this time.
+        let destination = Self.tripsDirectory
+            .appendingPathComponent("\(package.tripId).trippackage.json")
+        try data.write(to: destination, options: .atomic)
+
+        load()
+        return package
     }
 
     private static func bundledPackages() throws -> [TripPackage] {

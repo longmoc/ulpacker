@@ -13,6 +13,24 @@ struct ULPackerTrailApp: App {
 
     var body: some Scene {
         WindowGroup {
+            content
+                // AirDrop, Files, a mail attachment: all of them arrive here.
+                .onOpenURL { library.receive($0) }
+                #if DEBUG
+                .task {
+                    // Stands in for a file arriving from elsewhere, which a
+                    // headless run has no way to hand over.
+                    guard ProcessInfo.processInfo.arguments.contains("-uiTestImport") else { return }
+                    library.receive(
+                        URL.documentsDirectory.appendingPathComponent("incoming.json")
+                    )
+                }
+                #endif
+        }
+    }
+
+    @ViewBuilder private var content: some View {
+        Group {
             #if DEBUG
             // Automated-test hook, compiled out of release builds. The trail
             // screen is otherwise two taps deep, and driving those taps needs
