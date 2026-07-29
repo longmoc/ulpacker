@@ -1,0 +1,17 @@
+{
+  "manifestVersion": 1,
+  "tripId": "trip_f21127b6-6199-4102-bd43-8142b4496d97",
+  "tripRevision": 1,
+  "bbox": [
+    6.5130951187168575,
+    45.56034332375135,
+    7.321864881283143,
+    46.19321667624865
+  ],
+  "minZoom": 0,
+  "maxZoom": 14,
+  "byteCount": 27844567,
+  "contentHash": "fbef95491eecf9ad",
+  "source": "https://build.protomaps.com/20260725.pmtiles",
+  "createdAt": "2026-07-26T04:05:57.803Z"
+}

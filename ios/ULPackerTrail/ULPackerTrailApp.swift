@@ -16,6 +16,7 @@ struct ULPackerTrailApp: App {
             content
                 // AirDrop, Files, a mail attachment: all of them arrive here.
                 .onOpenURL { library.receive($0) }
+                .task { BundledPacks.install() }
                 #if DEBUG
                 .task {
                     // Stands in for a file arriving from elsewhere, which a
