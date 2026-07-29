@@ -65,7 +65,13 @@ struct ULPackerTrailApp: App {
     }
 
     @ViewBuilder private var debugDestination: some View {
-        if case .loaded(let packages) = library.state, let first = packages.first {
+        if case .loaded(let packages) = library.state, !packages.isEmpty {
+            // Which trip a screenshot run opens. The list is sorted, so this
+            // is stable between runs.
+            let index = ProcessInfo.processInfo.arguments.firstIndex(of: "-uiTestTrip")
+                .flatMap { $0 + 1 < ProcessInfo.processInfo.arguments.count
+                    ? Int(ProcessInfo.processInfo.arguments[$0 + 1]) : nil } ?? 0
+            let first = packages[min(index, packages.count - 1)]
             switch debugArgument {
             case "-uiTestAutoStartTrail": TrailMapScreen(package: first, autoStart: true)
             case "-uiTestOpenDetail": TripDetailView(package: first)

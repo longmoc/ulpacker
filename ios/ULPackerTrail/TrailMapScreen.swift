@@ -465,6 +465,13 @@ struct TrailMapScreen: View {
                         userInfo: ["lat": stop.lat, "lng": stop.lng, "zoom": 13.5]
                     )
                 }
+            case "zoomOut":
+                if let point = package.plannedRoute.segments.first?.points.first {
+                    NotificationCenter.default.post(
+                        name: Notification.Name("ULPDebugFocus"), object: nil,
+                        userInfo: ["lat": point.lat, "lng": point.lng, "zoom": 13.0]
+                    )
+                }
             case "zoomStart":
                 // Close in on the first point of the route, where the loop's
                 // start/finish badge sits.
