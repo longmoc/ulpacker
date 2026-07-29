@@ -35,6 +35,8 @@ struct ElevationProfileView: View {
     var snapsToCheckpoints = false
 
     @State private var zoomAtGestureStart: Double = 1
+    /// The window as it was when the finger went down, held until it lifts.
+    @State private var draggingWindow: ClosedRange<Double>?
     /// Draw only this stretch of the route.
     ///
     /// The whole trip on a phone gives a walking day about forty points of
@@ -46,7 +48,7 @@ struct ElevationProfileView: View {
     var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
-            let window = window()
+            let window = draggingWindow ?? visibleWindow()
             let samples = Self.samples(for: package, in: window)
 
             if samples.count < 2 {
@@ -79,24 +81,39 @@ struct ElevationProfileView: View {
                 // Touch anywhere on the chart to read that point, and slide
                 // along it to read the climb ahead without leaving the map.
                 // minimumDistance 0 so a tap works as well as a drag.
-                .gesture(
-                    MagnifyGesture()
-                        .onChanged { value in
-                            zoom = min(40, max(1, zoomAtGestureStart * value.magnification))
-                        }
-                        .onEnded { _ in zoomAtGestureStart = zoom }
-                )
+                // The drag keeps `.gesture`, the pinch is simultaneous.
+                //
+                // Two plain `.gesture` modifiers made SwiftUI wait to work out
+                // which one a touch belonged to, so a finger sliding along the
+                // chart changed nothing until it lifted and the point jumped.
+                // Only the pinch has to share.
                 .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
+                            // The window is pinned for the length of the drag.
+                            // Letting it follow the point being moved feeds the
+                            // gesture back into its own coordinate system: the
+                            // point shifts the window, the window remaps the
+                            // finger, and the point runs away under it.
+                            if draggingWindow == nil { draggingWindow = window }
+                            let frame = draggingWindow ?? window
                             let fraction = min(max(0, value.location.x / size.width), 1)
-                            let raw = bounds.startM + Double(fraction) * bounds.spanM
+                            let raw = frame.lowerBound
+                                + Double(fraction) * (frame.upperBound - frame.lowerBound)
                             let routeM = snapsToCheckpoints ? snapped(raw) : raw
                             switch moving {
                             case .a: pointA = routeM
                             case .b: pointB = routeM
                             }
                         }
+                        .onEnded { _ in draggingWindow = nil }
+                )
+                .simultaneousGesture(
+                    MagnifyGesture()
+                        .onChanged { value in
+                            zoom = min(40, max(1, zoomAtGestureStart * value.magnification))
+                        }
+                        .onEnded { _ in zoomAtGestureStart = zoom }
                 )
             }
         }
@@ -247,7 +264,7 @@ struct ElevationProfileView: View {
     /// pan gesture of its own: the drag that places a point also carries the
     /// window along with it, and the finger can never push the point off the
     /// edge of the chart.
-    private func window() -> ClosedRange<Double> {
+    private func visibleWindow() -> ClosedRange<Double> {
         let full = range ?? 0...(Self.allSamples(for: package).last?.routeM ?? 1)
         guard zoom > 1.01 else { return full }
         let span = (full.upperBound - full.lowerBound) / zoom
