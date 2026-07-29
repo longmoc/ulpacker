@@ -41,8 +41,9 @@ struct ElevationProfileView: View {
     /// Where the window sits along the route, once it has been moved by hand.
     /// Nil means it still follows the point being read.
     @State private var windowCentre: Double?
-    /// A two-finger pan is under way, so the one-finger drag stands aside.
-    @State private var panning = false
+    /// Where the point sat when the finger went down, so a pinch that began
+    /// with one finger can put it back.
+    @State private var pointBeforeTouch: Double?
     /// Draw only this stretch of the route.
     ///
     /// The whole trip on a phone gives a walking day about forty points of
@@ -84,68 +85,58 @@ struct ElevationProfileView: View {
                     axisLabels(bounds: bounds, size: size)
                 }
                 .contentShape(Rectangle())
-                // Touch anywhere on the chart to read that point, and slide
-                // along it to read the climb ahead without leaving the map.
-                // minimumDistance 0 so a tap works as well as a drag.
-                // The drag keeps `.gesture`, the pinch is simultaneous.
-                //
-                // Two plain `.gesture` modifiers made SwiftUI wait to work out
-                // which one a touch belonged to, so a finger sliding along the
-                // chart changed nothing until it lifted and the point jumped.
-                // Only the pinch has to share.
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            // The window is pinned for the length of the drag.
-                            // Letting it follow the point being moved feeds the
-                            // gesture back into its own coordinate system: the
-                            // point shifts the window, the window remaps the
-                            // finger, and the point runs away under it.
-                            guard !panning else { return }
+                // Every touch is arbitrated by UIKit — see ProfileGestures for
+                // why SwiftUI could not hold all three at once.
+                .overlay(
+                    ProfileGestures(
+                        onPoint: { fraction in
                             if draggingWindow == nil { draggingWindow = window }
                             let frame = draggingWindow ?? window
-                            let fraction = min(max(0, value.location.x / size.width), 1)
                             let raw = frame.lowerBound
                                 + Double(fraction) * (frame.upperBound - frame.lowerBound)
+                            if pointBeforeTouch == nil {
+                                pointBeforeTouch = moving == .b ? pointB : pointA
+                            }
                             let routeM = snapsToCheckpoints ? snapped(raw) : raw
                             switch moving {
                             case .a: pointA = routeM
                             case .b: pointB = routeM
                             }
                             scrollIfAtEdge(raw, frame: frame)
-                        }
-                        .onEnded { _ in draggingWindow = nil }
-                )
-                .overlay(
-                    TwoFingerPan(
-                        onBegan: { panning = true },
-                        onChange: { translation in
-                            let frame = draggingWindow ?? window
-                            let span = frame.upperBound - frame.lowerBound
-                            // Drag right, route goes left: the chart moves with
-                            // the fingers, the way a map does.
-                            let shift = -Double(translation / size.width) * span
-                            let centre = (frame.lowerBound + frame.upperBound) / 2 + shift
-                            windowCentre = centre
-                            draggingWindow = Self.centred(
-                                centre, span: span, inside: fullRange
-                            )
                         },
-                        onEnded: {
-                            panning = false
+                        onPointEnded: {
                             draggingWindow = nil
-                        }
-                    )
-                )
-                .simultaneousGesture(
-                    MagnifyGesture()
-                        .onChanged { value in
+                            pointBeforeTouch = nil
+                        },
+                        onZoom: { scale in
                             if windowCentre == nil {
                                 windowCentre = (window.lowerBound + window.upperBound) / 2
                             }
-                            zoom = min(40, max(1, zoomAtGestureStart * value.magnification))
+                            zoom = min(40, max(1, zoomAtGestureStart * Double(scale)))
+                        },
+                        onZoomEnded: { zoomAtGestureStart = zoom },
+                        onPan: { translation in
+                            let frame = draggingWindow ?? window
+                            let span = frame.upperBound - frame.lowerBound
+                            // Fingers right, route left: the chart moves with
+                            // the hand, the way a map does.
+                            let shift = -Double(translation / size.width) * span
+                            let centre = (frame.lowerBound + frame.upperBound) / 2 + shift
+                            windowCentre = centre
+                            draggingWindow = Self.centred(centre, span: span, inside: fullRange)
+                        },
+                        onPanEnded: { draggingWindow = nil },
+                        onMultiTouchBegan: {
+                            // Undo whatever the first finger of the pinch did.
+                            if let before = pointBeforeTouch {
+                                switch moving {
+                                case .a: pointA = before
+                                case .b: pointB = before
+                                }
+                            }
+                            pointBeforeTouch = nil
                         }
-                        .onEnded { _ in zoomAtGestureStart = zoom }
+                    )
                 )
             }
         }
