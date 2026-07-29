@@ -430,6 +430,14 @@ struct TrailMapScreen: View {
                     name: Notification.Name("ULPDebugScrub"), object: nil,
                     userInfo: ["fraction": 0.42]
                 )
+            case "profileZoom":
+                dayScope = 4
+                panelTab = .profile
+                panelDetent = .expanded
+                NotificationCenter.default.post(
+                    name: Notification.Name("ULPDebugScrub"), object: nil,
+                    userInfo: ["fraction": 0.42, "zoom": 6.0, "snap": true]
+                )
             case "zoomNote":
                 // A landmark that carries a note, close enough in for both the
                 // marker and the note to be showing.

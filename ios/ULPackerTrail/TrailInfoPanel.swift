@@ -47,6 +47,8 @@ struct TrailInfoPanel: View {
     @State private var pointA: Double?
     @State private var pointB: Double?
     @State private var movingPoint: ProfilePoint = .a
+    @State private var profileZoom: Double = 1
+    @State private var snapsToStops = false
     #if DEBUG
     /// Lets a screenshot run put a finger on the chart.
     private let debugScrub = NotificationCenter.default.publisher(
@@ -80,6 +82,8 @@ struct TrailInfoPanel: View {
             .onReceive(debugScrub) { note in
                 guard let fraction = note.userInfo?["fraction"] as? Double else { return }
                 let range = scopeRange ?? 0...RouteProfiles.profile(for: package).totalM
+                if let extra = note.userInfo?["zoom"] as? Double { profileZoom = extra }
+                if let snap = note.userInfo?["snap"] as? Bool { snapsToStops = snap }
                 pointA = range.lowerBound + fraction * (range.upperBound - range.lowerBound)
                 pointB = range.lowerBound + min(1, fraction + 0.28)
                     * (range.upperBound - range.lowerBound)
@@ -224,6 +228,8 @@ struct TrailInfoPanel: View {
                     pointA: $pointA,
                     pointB: $pointB,
                     moving: $movingPoint,
+                    zoom: $profileZoom,
+                    snapsToCheckpoints: snapsToStops,
                     range: scopeRange
                 )
                 .frame(height: 168)
@@ -235,11 +241,14 @@ struct TrailInfoPanel: View {
                     pointA: pointA,
                     pointB: pointB,
                     moving: $movingPoint,
+                    snapsToStops: $snapsToStops,
+                    zoom: $profileZoom,
                     from: routeDistanceM,
                     onClear: {
                         pointA = nil
                         pointB = nil
                         movingPoint = .a
+                        profileZoom = 1
                     }
                 )
                 .padding(.horizontal, 12)
@@ -642,6 +651,8 @@ private struct ProfileReadout: View {
     let pointA: Double?
     let pointB: Double?
     @Binding var moving: ProfilePoint
+    @Binding var snapsToStops: Bool
+    @Binding var zoom: Double
     let from: Double?
     let onClear: () -> Void
 
@@ -722,9 +733,19 @@ private struct ProfileReadout: View {
 
     private var controls: some View {
         HStack(spacing: 8) {
-            chip("A", active: moving == .a) { moving = .a }
-            chip(pointB == nil ? "Add B" : "B", active: moving == .b) { moving = .b }
+            chip("A", active: moving == .a, tint: .brand) { moving = .a }
+            chip(pointB == nil ? "Add B" : "B", active: moving == .b, tint: .red) { moving = .b }
+            // Next to the points it governs, because that is the only place
+            // anyone would look for it. On, a point lands on the nearest stop:
+            // a leg between two places is a number worth quoting, while one
+            // between wherever two fingers landed is different every time.
+            chip("Stops", active: snapsToStops, tint: .brand) { snapsToStops.toggle() }
             Spacer(minLength: 4)
+            if zoom > 1.01 {
+                Text(String(format: "%.0f×", zoom))
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(Color.subtle)
+            }
             Button("Clear", action: onClear)
                 .font(.caption)
                 .buttonStyle(.plain)
@@ -734,15 +755,15 @@ private struct ProfileReadout: View {
 
     /// Which point the next drag moves. Two taps to measure a stretch: pick B,
     /// then drag — rather than a mode nobody would find.
-    private func chip(_ title: String, active: Bool, action: @escaping () -> Void) -> some View {
+    private func chip(
+        _ title: String, active: Bool, tint: Color, action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.caption.weight(.semibold))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
-                .background(
-                    Capsule().fill(active ? Color.brand : Color.primary.opacity(0.07))
-                )
+                .background(Capsule().fill(active ? tint : Color.primary.opacity(0.07)))
                 .foregroundStyle(active ? .white : Color.primary)
         }
         .buttonStyle(.plain)

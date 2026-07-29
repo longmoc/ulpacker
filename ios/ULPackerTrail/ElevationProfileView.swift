@@ -29,6 +29,12 @@ struct ElevationProfileView: View {
     @Binding var pointB: Double?
     /// Which of the two the next drag moves.
     @Binding var moving: ProfilePoint
+    /// How far in the chart is magnified. 1 shows the whole stretch.
+    @Binding var zoom: Double
+    /// Put a point on the nearest stop rather than wherever the finger landed.
+    var snapsToCheckpoints = false
+
+    @State private var zoomAtGestureStart: Double = 1
     /// Draw only this stretch of the route.
     ///
     /// The whole trip on a phone gives a walking day about forty points of
@@ -40,7 +46,8 @@ struct ElevationProfileView: View {
     var body: some View {
         GeometryReader { geometry in
             let size = geometry.size
-            let samples = Self.samples(for: package, in: range)
+            let window = window()
+            let samples = Self.samples(for: package, in: window)
 
             if samples.count < 2 {
                 Text("No elevation data in this route.")
@@ -48,7 +55,7 @@ struct ElevationProfileView: View {
                     .foregroundStyle(Color.subtle)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                let bounds = Self.bounds(samples, range: range)
+                let bounds = Self.bounds(samples, range: window)
                 ZStack(alignment: .topLeading) {
                     profileShape(samples: samples, bounds: bounds, size: size)
                     if showsCheckpoints {
@@ -73,10 +80,18 @@ struct ElevationProfileView: View {
                 // along it to read the climb ahead without leaving the map.
                 // minimumDistance 0 so a tap works as well as a drag.
                 .gesture(
+                    MagnifyGesture()
+                        .onChanged { value in
+                            zoom = min(40, max(1, zoomAtGestureStart * value.magnification))
+                        }
+                        .onEnded { _ in zoomAtGestureStart = zoom }
+                )
+                .gesture(
                     DragGesture(minimumDistance: 0)
                         .onChanged { value in
                             let fraction = min(max(0, value.location.x / size.width), 1)
-                            let routeM = bounds.startM + Double(fraction) * bounds.spanM
+                            let raw = bounds.startM + Double(fraction) * bounds.spanM
+                            let routeM = snapsToCheckpoints ? snapped(raw) : raw
                             switch moving {
                             case .a: pointA = routeM
                             case .b: pointB = routeM
@@ -127,16 +142,34 @@ struct ElevationProfileView: View {
 
     private func checkpointMarks(bounds: Bounds, size: CGSize) -> some View {
         let visible = package.checkpoints.filter {
-            $0.ele != nil && (range?.contains(Double($0.routeDistanceM)) ?? true)
+            $0.ele != nil && (bounds.startM...bounds.endM).contains(Double($0.routeDistanceM))
         }
+        // Icons once there is room for them. A dot says a stop is here; the
+        // icon says what it is, which is the difference between "something at
+        // km 71" and "water at km 71" — and at trip scale there is no room to
+        // say the second thing without saying it fifty-six times over.
+        let roomForIcons = visible.count <= 10
         return ForEach(visible, id: \.id) { checkpoint in
             let x = bounds.x(Double(checkpoint.routeDistanceM), in: size)
             let y = bounds.y(Double(checkpoint.ele ?? 0), in: size)
-            Circle()
-                .fill(Self.tint(for: checkpoint.checkpointKind))
-                .frame(width: checkpoint.checkpointKind.isMajor ? 7 : 4.5)
-                .overlay(Circle().stroke(.white, lineWidth: 1))
-                .position(x: x, y: y)
+            Group {
+                if roomForIcons {
+                    Image(systemName: checkpoint.checkpointKind.symbolName)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 18, height: 18)
+                        .background(
+                            Circle().fill(Self.tint(for: checkpoint.checkpointKind))
+                        )
+                        .overlay(Circle().stroke(.white, lineWidth: 1.5))
+                } else {
+                    Circle()
+                        .fill(Self.tint(for: checkpoint.checkpointKind))
+                        .frame(width: checkpoint.checkpointKind.isMajor ? 7 : 4.5)
+                        .overlay(Circle().stroke(.white, lineWidth: 1))
+                }
+            }
+            .position(x: x, y: y)
         }
     }
 
@@ -160,16 +193,17 @@ struct ElevationProfileView: View {
         at routeM: Double, bounds: Bounds, size: CGSize, label: String
     ) -> some View {
         let x = bounds.x(routeM, in: size)
+        let colour = label == "A" ? Color.brand : Color.red
         return ZStack(alignment: .top) {
             Rectangle()
-                .fill(Color.brand)
+                .fill(colour)
                 .frame(width: 1.5, height: size.height)
                 .position(x: x, y: size.height / 2)
             Text(label)
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(.white)
                 .padding(3)
-                .background(Circle().fill(Color.brand))
+                .background(Circle().fill(colour))
                 .position(x: x, y: bounds.y(elevation(at: routeM), in: size))
         }
     }
@@ -182,7 +216,7 @@ struct ElevationProfileView: View {
         let left = min(bounds.x(from, in: size), bounds.x(to, in: size))
         let right = max(bounds.x(from, in: size), bounds.x(to, in: size))
         return Rectangle()
-            .fill(Color.brand.opacity(0.14))
+            .fill(Self.spanTint)
             .frame(width: max(0, right - left), height: size.height)
             .position(x: (left + right) / 2, y: size.height / 2)
     }
@@ -205,10 +239,42 @@ struct ElevationProfileView: View {
         .padding(.horizontal, 2)
     }
 
+    // MARK: - Zoom
+
+    /// The stretch actually on screen.
+    ///
+    /// Centred on whichever point is being moved, so magnifying does not need a
+    /// pan gesture of its own: the drag that places a point also carries the
+    /// window along with it, and the finger can never push the point off the
+    /// edge of the chart.
+    private func window() -> ClosedRange<Double> {
+        let full = range ?? 0...(Self.allSamples(for: package).last?.routeM ?? 1)
+        guard zoom > 1.01 else { return full }
+        let span = (full.upperBound - full.lowerBound) / zoom
+        let focus = (moving == .b ? pointB : pointA)
+            ?? pointA ?? (full.lowerBound + (full.upperBound - full.lowerBound) / 2)
+        let clamped = min(max(focus, full.lowerBound + span / 2), full.upperBound - span / 2)
+        return (clamped - span / 2)...(clamped + span / 2)
+    }
+
+    /// The nearest stop, for the mode that measures between places rather than
+    /// between wherever two fingers landed. A leg from "about here" to "about
+    /// there" is a different number every time it is asked for.
+    private func snapped(_ routeM: Double) -> Double {
+        guard let nearest = package.checkpoints.min(by: {
+            abs(Double($0.routeDistanceM) - routeM) < abs(Double($1.routeDistanceM) - routeM)
+        }) else { return routeM }
+        return Double(nearest.routeDistanceM)
+    }
+
+    /// Fire orange, so the measured stretch is not another shade of the green
+    /// everything else on this screen is already wearing.
+    static let spanTint = Color(red: 1.0, green: 0.45, blue: 0.1).opacity(0.22)
+
     // MARK: - Geometry
 
     private func elevation(at routeM: Double) -> Double {
-        let samples = Self.samples(for: package)
+        let samples = Self.allSamples(for: package)
         guard let nearest = samples.min(by: { abs($0.routeM - routeM) < abs($1.routeM - routeM) })
         else { return 0 }
         return nearest.ele
@@ -255,22 +321,20 @@ struct ElevationProfileView: View {
     /// 8561 points is far more than a 390-point-wide phone screen can show, and
     /// drawing them all would rebuild a path of thousands of segments on every
     /// position update. Cached per trip so the cost is paid once.
-    static func samples(
-        for package: TripPackage, in range: ClosedRange<Double>? = nil
-    ) -> [(routeM: Double, ele: Double)] {
-        // Decimated per range, not once for the trip: 400 samples spread over
-        // 164 km leave a single day with about forty, which is a sketch of a
-        // day rather than a profile of one.
-        let key = range.map { "\(package.tripId)#\(Int($0.lowerBound))-\(Int($0.upperBound))" }
-            ?? package.tripId
-        if let cached = cache[key] { return cached }
+    /// Every point of the route with a height, walked once and kept.
+    ///
+    /// 8,561 entries for this trip, which is nothing to hold and everything to
+    /// avoid recomputing: the window below is sliced out of it on every drag
+    /// frame, and rebuilding the whole route each time would make zooming
+    /// stutter.
+    static func allSamples(for package: TripPackage) -> [(routeM: Double, ele: Double)] {
+        if let cached = cache[package.tripId] { return cached }
 
         var result: [(routeM: Double, ele: Double)] = []
         var routeM = 0.0
         var previous: TrackPoint?
-        var raw: [(Double, Double)] = []
-
         for segment in package.plannedRoute.segments {
+            previous = nil
             for point in segment.points {
                 if let previous {
                     routeM += ActivityJournal.haversine(
@@ -278,20 +342,34 @@ struct ElevationProfileView: View {
                     )
                 }
                 previous = point
-                guard range?.contains(routeM) ?? true else { continue }
-                if let ele = point.ele { raw.append((routeM, Double(ele))) }
+                if let ele = point.ele { result.append((routeM, Double(ele))) }
             }
         }
-        guard !raw.isEmpty else { return [] }
+        cache[package.tripId] = result
+        return result
+    }
 
-        // ~400 samples: one per pixel of a phone-width chart.
-        let stride = max(1, raw.count / 400)
-        for index in Swift.stride(from: 0, to: raw.count, by: stride) {
-            result.append((routeM: raw[index].0, ele: raw[index].1))
-        }
-        if let last = raw.last { result.append((routeM: last.0, ele: last.1)) }
+    /// The visible window, decimated to about one sample per point of width.
+    ///
+    /// Decimating per window rather than once for the trip is what makes zoom
+    /// worth having: 400 samples spread over 164 km leave a kilometre of path
+    /// as two points, and no amount of magnification puts the detail back.
+    static func samples(
+        for package: TripPackage, in window: ClosedRange<Double>? = nil
+    ) -> [(routeM: Double, ele: Double)] {
+        let all = allSamples(for: package)
+        guard let window else { return decimate(all) }
+        let slice = all.filter { window.contains($0.routeM) }
+        return decimate(slice)
+    }
 
-        cache[key] = result
+    private static func decimate(
+        _ samples: [(routeM: Double, ele: Double)]
+    ) -> [(routeM: Double, ele: Double)] {
+        guard samples.count > 400 else { return samples }
+        let step = samples.count / 400
+        var result = stride(from: 0, to: samples.count, by: step).map { samples[$0] }
+        if let last = samples.last, result.last?.routeM != last.routeM { result.append(last) }
         return result
     }
 
