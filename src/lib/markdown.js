@@ -4,11 +4,41 @@
 //
 // Supported: # / ## / ### headings, - * + bullet lists, 1. 1) ordered lists,
 // > quotes, --- dividers, **bold**, __bold__, *italic*, _italic_, `code`,
-// blank-line paragraphs.
+// [text](url) and bare http(s) links, blank-line paragraphs.
 
-const INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n]+_|`[^`\n]+`)/g;
+// A link is the one construct here that carries something executable, so its
+// scheme is allow-listed rather than sanitised: anything that isn't plain web
+// or mail (javascript:, data:, vbscript:, protocol-relative //host) is left as
+// literal text instead of becoming an <a>.
+const SAFE_SCHEME = /^(?:https?:|mailto:)/i;
 
-// -> [{ t: "text" | "b" | "i" | "code", v }]
+export function safeHref(raw) {
+  const url = String(raw ?? "").trim();
+  if (!url) return null;
+  // Control characters can hide a scheme from the test above ("java\nscript:").
+  if (/[\u0000-\u001f\u007f]/.test(url)) return null;
+  return SAFE_SCHEME.test(url) ? url : null;
+}
+
+// Order matters: the bracket form is tried before emphasis so a link's URL is
+// consumed whole, and the bare-URL form comes last so `https://x` in backticks
+// stays code.
+const INLINE_RE = new RegExp(
+  [
+    /\[[^\]\n]+\]\([^()\s]*\)/.source, // [text](url)
+    /\*\*[^*\n]+\*\*/.source,
+    /__[^_\n]+__/.source,
+    /\*[^*\n]+\*/.source,
+    /_[^_\n]+_/.source,
+    /`[^`\n]+`/.source,
+    /https?:\/\/[^\s<>[\]()]+/.source // bare URL
+  ].join("|"),
+  "g"
+);
+
+const BRACKET_LINK = /^\[([^\]\n]+)\]\(\s*([^()\s]*)\s*\)$/;
+
+// -> [{ t: "text" | "b" | "i" | "code", v } | { t: "a", v, href }]
 export function parseInline(text) {
   const src = String(text ?? "");
   const out = [];
@@ -18,7 +48,22 @@ export function parseInline(text) {
   while ((m = INLINE_RE.exec(src)) !== null) {
     if (m.index > last) out.push({ t: "text", v: src.slice(last, m.index) });
     const s = m[0];
-    if (s.startsWith("**") || s.startsWith("__")) out.push({ t: "b", v: s.slice(2, -2) });
+    const bracket = BRACKET_LINK.exec(s);
+    if (bracket) {
+      const href = safeHref(bracket[2]);
+      out.push(href ? { t: "a", v: bracket[1], href } : { t: "text", v: s });
+    } else if (/^https?:\/\//i.test(s)) {
+      // Sentence punctuation runs into a bare URL; keep it out of the target.
+      const trail = (/[.,;:!?]+$/.exec(s) || [""])[0];
+      const url = trail ? s.slice(0, -trail.length) : s;
+      const href = safeHref(url);
+      if (href) {
+        out.push({ t: "a", v: url, href });
+        if (trail) out.push({ t: "text", v: trail });
+      } else {
+        out.push({ t: "text", v: s });
+      }
+    } else if (s.startsWith("**") || s.startsWith("__")) out.push({ t: "b", v: s.slice(2, -2) });
     else if (s.startsWith("`")) out.push({ t: "code", v: s.slice(1, -1) });
     else out.push({ t: "i", v: s.slice(1, -1) });
     last = m.index + s.length;

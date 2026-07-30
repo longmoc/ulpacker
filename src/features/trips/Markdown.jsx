@@ -8,6 +8,13 @@ function Inline({ tokens }) {
         if (tk.t === "b") return <strong key={i}>{tk.v}</strong>;
         if (tk.t === "i") return <em key={i}>{tk.v}</em>;
         if (tk.t === "code") return <code key={i}>{tk.v}</code>;
+        // noopener/noreferrer: a new tab must not get a handle on this one.
+        if (tk.t === "a")
+          return (
+            <a key={i} href={tk.href} target="_blank" rel="noopener noreferrer nofollow">
+              {tk.v}
+            </a>
+          );
         return <React.Fragment key={i}>{tk.v}</React.Fragment>;
       })}
     </>

@@ -19,7 +19,7 @@ function NoteBlock({ isEditing, draft, setDraft, onSave, onCancel, note, onAdd }
           placeholder={
             "Description for this day…\n\n" +
             "Supports **bold**, *italic*, `code`, - bullet lists, 1. numbered lists,\n" +
-            "> quotes and --- dividers."
+            "> quotes, --- dividers and [links](https://example.com)."
           }
           onChange={(e) => setDraft(e.target.value)}
         />
