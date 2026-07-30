@@ -16,7 +16,11 @@ function NoteBlock({ isEditing, draft, setDraft, onSave, onCancel, note, onAdd }
           value={draft}
           autoFocus
           rows={6}
-          placeholder={"Description for this day…\n\nSupports **bold**, *italic*, `code`, - bullet lists and 1. numbered lists."}
+          placeholder={
+            "Description for this day…\n\n" +
+            "Supports **bold**, *italic*, `code`, - bullet lists, 1. numbered lists,\n" +
+            "> quotes and --- dividers."
+          }
           onChange={(e) => setDraft(e.target.value)}
         />
         <div className="day-note-actions">

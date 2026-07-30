@@ -28,6 +28,19 @@ export default function Markdown({ text }) {
             </Tag>
           );
         }
+        if (b.type === "hr") return <hr key={i} />;
+        if (b.type === "quote") {
+          return (
+            <blockquote key={i}>
+              {b.lines.map((ln, j) => (
+                <React.Fragment key={j}>
+                  {j > 0 && <br />}
+                  <Inline tokens={ln} />
+                </React.Fragment>
+              ))}
+            </blockquote>
+          );
+        }
         if (b.type === "ul" || b.type === "ol") {
           const Tag = b.type;
           return (

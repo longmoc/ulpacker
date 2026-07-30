@@ -69,4 +69,52 @@ describe("parseMarkdown", () => {
     expect(parseMarkdown("")).toEqual([]);
     expect(parseMarkdown(null)).toEqual([]);
   });
+
+  describe("dividers", () => {
+    it("reads a run of -, * or _ as a rule", () => {
+      for (const src of ["---", "***", "___", "-----", "  ---  "]) {
+        expect(parseMarkdown(src)).toEqual([{ type: "hr" }]);
+      }
+    });
+
+    it("does not mistake a bullet for a rule, or the reverse", () => {
+      // A bullet needs whitespace after its marker; a rule must stand alone.
+      expect(parseMarkdown("- item").map((b) => b.type)).toEqual(["ul"]);
+      expect(parseMarkdown("-- not a rule").map((b) => b.type)).toEqual(["p"]);
+      expect(parseMarkdown("--- trailing text").map((b) => b.type)).toEqual(["p"]);
+    });
+
+    it("closes the paragraph it follows", () => {
+      const blocks = parseMarkdown("Leave early.\n---\nCol is exposed.");
+      expect(blocks.map((b) => b.type)).toEqual(["p", "hr", "p"]);
+      expect(blocks[0].lines[0][0].v).toBe("Leave early.");
+      expect(blocks[2].lines[0][0].v).toBe("Col is exposed.");
+    });
+  });
+
+  describe("quotes", () => {
+    it("gathers consecutive > lines into one quote, keeping inline marks", () => {
+      const blocks = parseMarkdown("> Refuge is **full** in August.\n> Book ahead.");
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0].type).toBe("quote");
+      expect(blocks[0].lines).toHaveLength(2);
+      expect(blocks[0].lines[0][1]).toEqual({ t: "b", v: "full" });
+    });
+
+    it("works with or without the space after >", () => {
+      expect(parseMarkdown(">tight").map((b) => b.type)).toEqual(["quote"]);
+      expect(parseMarkdown("> loose")[0].lines[0][0].v).toBe("loose");
+      expect(parseMarkdown(">tight")[0].lines[0][0].v).toBe("tight");
+    });
+
+    it("a blank line ends the quote", () => {
+      const blocks = parseMarkdown("> quoted\n\nplain again");
+      expect(blocks.map((b) => b.type)).toEqual(["quote", "p"]);
+    });
+
+    it("closes the paragraph it follows", () => {
+      const blocks = parseMarkdown("Note this.\n> warning\nback to prose");
+      expect(blocks.map((b) => b.type)).toEqual(["p", "quote", "p"]);
+    });
+  });
 });

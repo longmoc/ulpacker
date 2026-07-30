@@ -3,7 +3,8 @@
 // React elements — user text can therefore never inject markup.
 //
 // Supported: # / ## / ### headings, - * + bullet lists, 1. 1) ordered lists,
-// **bold**, __bold__, *italic*, _italic_, `code`, blank-line paragraphs.
+// > quotes, --- dividers, **bold**, __bold__, *italic*, _italic_, `code`,
+// blank-line paragraphs.
 
 const INLINE_RE = /(\*\*[^*\n]+\*\*|__[^_\n]+__|\*[^*\n]+\*|_[^_\n]+_|`[^`\n]+`)/g;
 
@@ -29,8 +30,13 @@ export function parseInline(text) {
 const BULLET = /^\s*[-*+]\s+/;
 const ORDERED = /^\s*\d+[.)]\s+/;
 const HEADING = /^\s*(#{1,3})\s+(.*)$/;
+const QUOTE = /^\s*>\s?/;
+// A run of three or more, alone on the line. No conflict with BULLET, which
+// requires whitespace after its marker ("- item"), so "---" can't be a list.
+const RULE = /^\s*(-{3,}|\*{3,}|_{3,})\s*$/;
 
-// -> [{ type: "h", level, inline } | { type: "ul" | "ol", items } | { type: "p", lines }]
+// -> [{ type: "h", level, inline } | { type: "ul" | "ol", items }
+//     | { type: "quote", lines } | { type: "hr" } | { type: "p", lines }]
 export function parseMarkdown(text) {
   const lines = String(text ?? "").replace(/\r\n?/g, "\n").split("\n");
   const blocks = [];
@@ -38,6 +44,21 @@ export function parseMarkdown(text) {
   while (i < lines.length) {
     if (!lines[i].trim()) {
       i += 1;
+      continue;
+    }
+    // Before BULLET: a divider is not a one-item list.
+    if (RULE.test(lines[i])) {
+      blocks.push({ type: "hr" });
+      i += 1;
+      continue;
+    }
+    if (QUOTE.test(lines[i])) {
+      const quoted = [];
+      while (i < lines.length && QUOTE.test(lines[i])) {
+        quoted.push(parseInline(lines[i].replace(QUOTE, "")));
+        i += 1;
+      }
+      blocks.push({ type: "quote", lines: quoted });
       continue;
     }
     const h = HEADING.exec(lines[i]);
@@ -70,7 +91,9 @@ export function parseMarkdown(text) {
       lines[i].trim() &&
       !BULLET.test(lines[i]) &&
       !ORDERED.test(lines[i]) &&
-      !HEADING.test(lines[i])
+      !HEADING.test(lines[i]) &&
+      !QUOTE.test(lines[i]) &&
+      !RULE.test(lines[i])
     ) {
       para.push(parseInline(lines[i]));
       i += 1;
