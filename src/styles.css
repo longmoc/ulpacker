@@ -4556,6 +4556,42 @@ button[type="submit"]:active {
 .md ul { list-style: disc; }
 .md ol { list-style: decimal; }
 .md li { margin: 2px 0; }
+/* A single minmax(0, 1fr) column: it makes the note's own minimum width 0, so a
+   wide table no longer feeds into the min-content width of the day card (and
+   from there the whole workspace column, which was stretching past the
+   viewport). The table then has a bounded box to scroll inside. */
+.md {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Tables scroll sideways inside their own box rather than widening the card. */
+.md-table {
+  margin: 0 0 6px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius);
+}
+.md-table:last-child { margin-bottom: 0; }
+.md-table table {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-size: 0.84rem;
+  font-variant-numeric: tabular-nums;
+}
+.md-table th,
+.md-table td {
+  border: 1px solid var(--border);
+  padding: 4px 9px;
+  text-align: left;
+  white-space: nowrap;
+}
+.md-table th {
+  background: var(--surface-2);
+  font-weight: 600;
+  color: var(--text);
+}
+
 .md a {
   color: var(--accent);
   text-decoration: underline;

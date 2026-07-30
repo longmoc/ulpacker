@@ -36,6 +36,37 @@ export default function Markdown({ text }) {
           );
         }
         if (b.type === "hr") return <hr key={i} />;
+        if (b.type === "table") {
+          const cellStyle = (c) => (b.align[c] ? { textAlign: b.align[c] } : undefined);
+          return (
+            // The wrapper scrolls, not the card: a timing table with four
+            // columns is wider than a phone and must not stretch the layout.
+            <div className="md-table" key={i}>
+              <table>
+                <thead>
+                  <tr>
+                    {b.head.map((cell, c) => (
+                      <th key={c} style={cellStyle(c)}>
+                        <Inline tokens={cell} />
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {b.rows.map((row, r) => (
+                    <tr key={r}>
+                      {row.map((cell, c) => (
+                        <td key={c} style={cellStyle(c)}>
+                          <Inline tokens={cell} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
         if (b.type === "quote") {
           return (
             <blockquote key={i}>

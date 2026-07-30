@@ -3,8 +3,8 @@
 // React elements — user text can therefore never inject markup.
 //
 // Supported: # / ## / ### headings, - * + bullet lists, 1. 1) ordered lists,
-// > quotes, --- dividers, **bold**, __bold__, *italic*, _italic_, `code`,
-// [text](url) and bare http(s) links, blank-line paragraphs.
+// > quotes, --- dividers, | tables |, **bold**, __bold__, *italic*, _italic_,
+// `code`, [text](url) and bare http(s) links, blank-line paragraphs.
 
 // A link is the one construct here that carries something executable, so its
 // scheme is allow-listed rather than sanitised: anything that isn't plain web
@@ -72,6 +72,26 @@ export function parseInline(text) {
   return out.length ? out : [{ t: "text", v: "" }];
 }
 
+// Tables, minimal GFM: a header row, a separator row that sets alignment, then
+// body rows. Both outer pipes are required — without them any prose containing
+// a "|" would start looking like a table. No merged cells, no escaped pipes.
+const TABLE_ROW = /^\s*\|.*\|\s*$/;
+const TABLE_SEP = /^\s*\|(?:\s*:?-+:?\s*\|)+\s*$/;
+
+const isTableStart = (lines, i) => TABLE_ROW.test(lines[i] || "") && TABLE_SEP.test(lines[i + 1] || "");
+
+function tableCells(line) {
+  return line.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim());
+}
+
+function cellAlign(sep) {
+  const left = sep.startsWith(":");
+  const right = sep.endsWith(":");
+  if (left && right) return "center";
+  if (right) return "right";
+  return null; // default (left) — no inline style needed
+}
+
 const BULLET = /^\s*[-*+]\s+/;
 const ORDERED = /^\s*\d+[.)]\s+/;
 const HEADING = /^\s*(#{1,3})\s+(.*)$/;
@@ -81,7 +101,8 @@ const QUOTE = /^\s*>\s?/;
 const RULE = /^\s*(-{3,}|\*{3,}|_{3,})\s*$/;
 
 // -> [{ type: "h", level, inline } | { type: "ul" | "ol", items }
-//     | { type: "quote", lines } | { type: "hr" } | { type: "p", lines }]
+//     | { type: "quote", lines } | { type: "hr" } | { type: "p", lines }
+//     | { type: "table", head, align, rows }]
 export function parseMarkdown(text) {
   const lines = String(text ?? "").replace(/\r\n?/g, "\n").split("\n");
   const blocks = [];
@@ -89,6 +110,20 @@ export function parseMarkdown(text) {
   while (i < lines.length) {
     if (!lines[i].trim()) {
       i += 1;
+      continue;
+    }
+    if (isTableStart(lines, i)) {
+      const head = tableCells(lines[i]);
+      const align = tableCells(lines[i + 1]).map(cellAlign);
+      i += 2;
+      const rows = [];
+      while (i < lines.length && TABLE_ROW.test(lines[i])) {
+        // Square off ragged rows against the header so the grid can't tear.
+        const raw = tableCells(lines[i]);
+        rows.push(Array.from({ length: head.length }, (_, c) => parseInline(raw[c] ?? "")));
+        i += 1;
+      }
+      blocks.push({ type: "table", head: head.map(parseInline), align, rows });
       continue;
     }
     // Before BULLET: a divider is not a one-item list.
@@ -138,7 +173,8 @@ export function parseMarkdown(text) {
       !ORDERED.test(lines[i]) &&
       !HEADING.test(lines[i]) &&
       !QUOTE.test(lines[i]) &&
-      !RULE.test(lines[i])
+      !RULE.test(lines[i]) &&
+      !isTableStart(lines, i)
     ) {
       para.push(parseInline(lines[i]));
       i += 1;
