@@ -5075,23 +5075,27 @@ button[type="submit"]:active {
   .cp-delete { opacity: 1; }
 }
 @media (max-width: 640px) {
+  /* Two lines instead of a wrapping row: the text stacks on the left (name over
+     its note) and the numbers on the right (distance over elevation), so the
+     eye reads two columns rather than hunting across a wrapped line. Still a
+     grid, so the tick cell spans both lines and the 2-tick rail + arrow work
+     here as they do on the desktop layout. */
   .checkpoint-row {
-    display: flex;
-    flex-wrap: wrap;
+    grid-template-columns: 22px 30px minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "tick kind name dist actions"
+      "tick kind note ele  actions";
+    gap: 1px 10px;
     align-items: center;
-    gap: 3px 10px;
     padding: 7px 2px;
   }
-  .checkpoint-row .cp-tick { order: 1; align-self: center; }
-  .checkpoint-row .kind-picker { order: 2; }
-  .checkpoint-row .cp-name { order: 3; flex: 1 1 40%; min-width: 90px; }
-  .checkpoint-row .cp-actions { order: 4; margin-left: auto; }
-  .checkpoint-row .cp-dist { order: 5; }
-  .checkpoint-row .cp-ele { order: 6; }
-  .checkpoint-row .cp-note { order: 7; flex: 1 1 100%; }
-  /* The 2-tick rail relies on stretched grid cells; skip it on the flex layout. */
-  .checkpoint-row .cp-tick.rail-top::before,
-  .checkpoint-row .cp-tick.rail-bottom::after { display: none; }
+  .checkpoint-row .cp-tick { grid-area: tick; }
+  .checkpoint-row .kind-picker { grid-area: kind; }
+  .checkpoint-row .cp-name { grid-area: name; min-width: 0; }
+  .checkpoint-row .cp-note { grid-area: note; min-width: 0; }
+  .checkpoint-row .cp-dist { grid-area: dist; justify-self: end; }
+  .checkpoint-row .cp-ele { grid-area: ele; justify-self: end; }
+  .checkpoint-row .cp-actions { grid-area: actions; }
 
   /* Filter chips wrap onto their own full-width row under the heading. */
   .trip-section-head { flex-wrap: wrap; }
