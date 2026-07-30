@@ -84,10 +84,11 @@ struct CheckpointCallout: View {
             }
 
             if !checkpoint.note.isEmpty {
-                Text(note)
-                    .font(.caption)
-                    .foregroundStyle(.primary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // Two blocks at most: the bubble is meant to be glanced at, and
+                // "Details" is right there for the rest. Rendered as blocks all
+                // the same, so a note that starts with a heading does not open
+                // with a couple of hash marks.
+                MarkdownNote(text: checkpoint.note, font: .caption, blockLimit: 2)
             }
 
             Button(action: onOpenDetails) {
@@ -124,12 +125,4 @@ struct CheckpointCallout: View {
         return parts.joined(separator: " · ")
     }
 
-    /// Notes are Markdown in the planner; inline-only keeps the author's line
-    /// breaks without pulling in block layout the bubble has no room for.
-    private var note: AttributedString {
-        (try? AttributedString(
-            markdown: checkpoint.note,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        )) ?? AttributedString(checkpoint.note)
-    }
 }

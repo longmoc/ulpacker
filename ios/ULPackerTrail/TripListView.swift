@@ -179,7 +179,7 @@ struct TripDetailView: View {
 /// to be present, in the right place, with the right number.
 private struct ItineraryRow: View {
     let entry: Itinerary.Entry
-    @State private var expanded = false
+    @State private var expanded = ProcessInfo.processInfo.arguments.contains("-uiTestExpandNotes")
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -201,14 +201,19 @@ private struct ItineraryRow: View {
                 }
 
                 if let note {
-                    Text(note)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        // Planning notes run to several paragraphs. In a list
-                        // they are context, not the content — one day's note
-                        // should not push the rest of the trip off the screen.
-                        .lineLimit(expanded ? nil : 2)
-                        .onTapGesture { expanded.toggle() }
+                    // Planning notes run to several paragraphs. In a list they
+                    // are context, not the content — one day's note should not
+                    // push the rest of the trip off the screen — so collapsed
+                    // shows the first block and a tap opens the rest.
+                    MarkdownNote(
+                        text: note,
+                        font: .caption,
+                        blockLimit: expanded ? nil : 1
+                    )
+                    .foregroundStyle(Color.subtle)
+                    .lineLimit(expanded ? nil : 2)
+                    .contentShape(Rectangle())
+                    .onTapGesture { withAnimation(.easeOut(duration: 0.18)) { expanded.toggle() } }
                 }
             }
         }
@@ -231,15 +236,13 @@ private struct ItineraryRow: View {
     /// would show literal `**` in the middle of a sentence. Inline-only
     /// interpretation keeps the line breaks the author wrote, which matters
     /// for a note that is really a checklist.
-    private var note: AttributedString? {
+    /// The raw Markdown. Interpreting it is `MarkdownNote`'s job now — doing it
+    /// here produced one flat run with `##` and `---` left in as characters.
+    private var note: String? {
         let raw: String = switch entry {
         case .walking(let day, _): day.note
         case .offRoute(let day, _): day.note
         }
-        guard !raw.isEmpty else { return nil }
-        return (try? AttributedString(
-            markdown: raw,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        )) ?? AttributedString(raw)
+        return raw.isEmpty ? nil : raw
     }
 }

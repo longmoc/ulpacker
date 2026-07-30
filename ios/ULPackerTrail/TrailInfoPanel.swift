@@ -525,15 +525,11 @@ private struct CheckpointDetail: View {
                     .font(.footnote)
                     .foregroundStyle(Color.subtle)
             } else {
-                // Notes are Markdown in the planner. Inline-only interpretation
-                // keeps the author's line breaks, which matters when the note
-                // is really a checklist — booking details, water carry, a
-                // crossing that is out after rain.
-                Text(note)
-                    .font(.subheadline)
+                // Rendered as Markdown blocks, not as one run of text: these
+                // notes use headings, quotes and lists, and a checklist that
+                // arrives as a paragraph is a checklist nobody can read.
+                MarkdownNote(text: checkpoint.note)
                     .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.horizontal, 16)
@@ -622,12 +618,6 @@ private struct CheckpointDetail: View {
     }
 
 
-    private var note: AttributedString {
-        (try? AttributedString(
-            markdown: checkpoint.note,
-            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-        )) ?? AttributedString(checkpoint.note)
-    }
 }
 
 /// One `RouteProfile` per trip, kept alive between views.
