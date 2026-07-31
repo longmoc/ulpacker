@@ -70,12 +70,92 @@ struct MarkdownNote: View {
                 }
             }
 
+        case .table(let table):
+            // Scrolls sideways rather than squeezing. A day's timing table has
+            // four columns and a phone that shrinks them to fit turns the one
+            // thing worth reading at a glance into something nobody can.
+            //
+            // A Grid, not a stack of rows: rows laid out independently size
+            // their own cells, so "Aiguille Noire" widened one row's second
+            // column and "Dolonne" narrowed the next, and the dividers came out
+            // ragged. Grid gives every row the same columns.
+            ScrollView(.horizontal, showsIndicators: false) {
+                Grid(alignment: .leading, horizontalSpacing: 0, verticalSpacing: 0) {
+                    GridRow {
+                        ForEach(Array(table.header.enumerated()), id: \.offset) { index, cell in
+                            cellView(cell, table: table, index: index, isHeader: true)
+                                .gridColumnAlignment(columnAlignment(table.alignment(at: index)))
+                        }
+                    }
+                    .background(Color.primary.opacity(0.05))
+
+                    ForEach(Array(table.rows.enumerated()), id: \.offset) { _, cells in
+                        Divider().gridCellColumns(max(1, table.header.count))
+                        GridRow {
+                            ForEach(Array(cells.enumerated()), id: \.offset) { index, cell in
+                                cellView(cell, table: table, index: index, isHeader: false)
+                            }
+                        }
+                    }
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.primary.opacity(0.12), lineWidth: 1)
+                )
+                .padding(.vertical, 2)
+                .padding(.trailing, 2)
+            }
+
         case .numbered(let items):
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                     marker("\(index + 1).", item)
                 }
             }
+        }
+    }
+
+    private func cellView(
+        _ text: String, table: Table, index: Int, isHeader: Bool
+    ) -> some View {
+        Text(inline(text))
+            .font(isHeader ? font.weight(.semibold) : font)
+            .foregroundStyle(isHeader ? Color.primary : Color.subtle)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: frameAlignment(table.alignment(at: index)))
+            // The column rule hangs off the cell rather than being a column of
+            // its own, so the Grid still has one column per column of data.
+            .overlay(alignment: .leading) {
+                if index > 0 {
+                    Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1)
+                }
+            }
+    }
+
+    private func textAlignment(_ alignment: Table.Alignment) -> TextAlignment {
+        switch alignment {
+        case .leading: .leading
+        case .center: .center
+        case .trailing: .trailing
+        }
+    }
+
+    private func columnAlignment(_ alignment: Table.Alignment) -> HorizontalAlignment {
+        switch alignment {
+        case .leading: .leading
+        case .center: .center
+        case .trailing: .trailing
+        }
+    }
+
+    private func frameAlignment(_ alignment: Table.Alignment) -> Alignment {
+        switch alignment {
+        case .leading: .leading
+        case .center: .center
+        case .trailing: .trailing
         }
     }
 
@@ -117,6 +197,22 @@ struct MarkdownNote: View {
         case rule
         case bullet([String])
         case numbered([String])
+        case table(Table)
+    }
+
+    /// A pipe table, kept as rows of cells with the alignment the author wrote.
+    struct Table: Equatable {
+        var header: [String]
+        var rows: [[String]]
+        var alignments: [Alignment]
+
+        enum Alignment: Equatable { case leading, center, trailing }
+
+        /// Rows are sometimes short of the header; treat the missing ones as
+        /// left-aligned rather than losing the cell.
+        func alignment(at index: Int) -> Alignment {
+            index < alignments.count ? alignments[index] : .leading
+        }
     }
 
     /// Split a note into blocks.
@@ -124,12 +220,46 @@ struct MarkdownNote: View {
     /// Deliberately small: these notes are written by hand in a planner, not
     /// generated, and they use a handful of constructs. Anything unrecognised
     /// stays a paragraph, which is the one failure mode that cannot lose text.
+    /// A header row, a separator that says how each column is aligned, and the
+    /// body. Anything that does not have those first two is not a table.
+    static func table(from lines: [String]) -> Table? {
+        guard lines.count >= 2 else { return nil }
+        let rows = lines.map(cells)
+        let separator = rows[1]
+        guard separator.allSatisfy({ cell in
+            let trimmed = cell.trimmingCharacters(in: .whitespaces)
+            return trimmed.count >= 3
+                && trimmed.allSatisfy { $0 == "-" || $0 == ":" }
+        }) else { return nil }
+
+        let alignments = separator.map { cell -> Table.Alignment in
+            let trimmed = cell.trimmingCharacters(in: .whitespaces)
+            let left = trimmed.hasPrefix(":")
+            let right = trimmed.hasSuffix(":")
+            if left && right { return .center }
+            return right ? .trailing : .leading
+        }
+        return Table(header: rows[0], rows: Array(rows.dropFirst(2)), alignments: alignments)
+    }
+
+    /// Split one `| a | b |` line. Leading and trailing pipes are optional in
+    /// the format and present in every note here, so both are dropped.
+    private static func cells(_ line: String) -> [String] {
+        var body = line
+        if body.hasPrefix("|") { body.removeFirst() }
+        if body.hasSuffix("|") { body.removeLast() }
+        return body.components(separatedBy: "|").map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }
+    }
+
     static func parse(_ text: String) -> [Block] {
         var blocks: [Block] = []
         var paragraph: [String] = []
         var quote: [String] = []
         var bullets: [String] = []
         var numbers: [String] = []
+        var tableLines: [String] = []
 
         func flush() {
             if !paragraph.isEmpty {
@@ -142,6 +272,16 @@ struct MarkdownNote: View {
             }
             if !bullets.isEmpty { blocks.append(.bullet(bullets)); bullets = [] }
             if !numbers.isEmpty { blocks.append(.numbered(numbers)); numbers = [] }
+            if !tableLines.isEmpty {
+                if let table = Self.table(from: tableLines) {
+                    blocks.append(.table(table))
+                } else {
+                    // Not a table after all — pipes in ordinary prose. Better a
+                    // paragraph with pipes in it than text that vanishes.
+                    blocks.append(.paragraph(tableLines.joined(separator: " ")))
+                }
+                tableLines = []
+            }
         }
 
         for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
@@ -168,6 +308,15 @@ struct MarkdownNote: View {
                 ))
                 continue
             }
+
+            if line.hasPrefix("|") {
+                if !paragraph.isEmpty || !quote.isEmpty || !bullets.isEmpty || !numbers.isEmpty {
+                    flush()
+                }
+                tableLines.append(line)
+                continue
+            }
+            if !tableLines.isEmpty { flush() }
 
             if line.hasPrefix("> ") || line == ">" {
                 if !paragraph.isEmpty || !bullets.isEmpty || !numbers.isEmpty { flush() }
