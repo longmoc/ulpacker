@@ -12,6 +12,7 @@ import TripCore
 /// because "no GPS fix" must never look like "on route".
 struct TrailMapScreen: View {
     let package: TripPackage
+    @Environment(\.scenePhase) private var scenePhase
     @State private var recorder: TrailRecorder
     @State private var recovery: ActivityJournal?
     @State private var followMode: RouteMapView.FollowMode = .northUp
@@ -39,6 +40,17 @@ struct TrailMapScreen: View {
         }
         .navigationTitle(package.trip.name)
         .navigationBarTitleDisplayMode(.inline)
+        // The recorder buffers fixes and flushes every ten of them or every
+        // minute — proportional to walking, which is what the battery needs.
+        // Leaving the foreground is the one moment that schedule is not enough:
+        // iOS may never hand control back, and whatever is buffered is what a
+        // kill would cost. The hook for this existed from the first recording
+        // commit; nothing ever called it.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background || phase == .inactive {
+                recorder.flushForBackgrounding()
+            }
+        }
         .onAppear {
             recovery = recorder.pendingRecovery()
             if autoStart, recovery == nil { recorder.start() }
