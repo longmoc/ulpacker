@@ -18,6 +18,12 @@ struct RouteMapView: UIViewRepresentable {
     var position: CLLocationCoordinate2D?
     /// Where along the route the walker is, used to colour progress.
     var routeDistanceM: Double?
+    /// The direction the walker is actually moving, when the receiver knows it.
+    /// Falls back to the direction the route runs.
+    var courseDegrees: Double?
+    /// The point on the route the position matched to, when it is far enough
+    /// away to be worth drawing the gap.
+    var snappedTo: CLLocationCoordinate2D?
     /// Frame this stretch of the route instead of the whole thing.
     var focusRange: ClosedRange<Double>?
     /// How the camera behaves while recording.
@@ -1043,6 +1049,17 @@ struct RouteMapView: UIViewRepresentable {
         }
 
         private func addPosition(to style: MLNStyle) {
+            // Under the marker, so the tether reads as a leader line rather
+            // than something crossing it.
+            let tetherSource = MLNShapeSource(identifier: "position-tether", shape: nil)
+            style.addSource(tetherSource)
+            let tether = MLNLineStyleLayer(identifier: "position-tether", source: tetherSource)
+            tether.lineColor = NSExpression(forConstantValue: UIColor.systemBlue)
+            tether.lineWidth = NSExpression(forConstantValue: 2)
+            tether.lineOpacity = NSExpression(forConstantValue: 0.55)
+            tether.lineDashPattern = NSExpression(forConstantValue: [2, 2])
+            style.addLayer(tether)
+
             let source = MLNShapeSource(identifier: Self.positionSourceID, shape: nil)
             style.addSource(source)
 
@@ -1102,7 +1119,11 @@ struct RouteMapView: UIViewRepresentable {
             }
             let feature = MLNPointFeature()
             feature.coordinate = coordinate
-            let bearing = parent.routeDistanceM.flatMap { bearingAlongRoute(at: $0) }
+            // The walker's own heading first. The route's direction is a
+            // reasonable guess only while standing on the route; a step off it
+            // and an arrow aligned to a line you are not on points at nothing.
+            let bearing = parent.courseDegrees
+                ?? parent.routeDistanceM.flatMap { bearingAlongRoute(at: $0) }
             feature.attributes = ["bearing": bearing ?? 0]
             source.shape = feature
 
@@ -1111,6 +1132,20 @@ struct RouteMapView: UIViewRepresentable {
             // and neither is clearer for it.
             style.layer(withIdentifier: "position-dot")?.isVisible = bearing == nil
             style.layer(withIdentifier: "position-heading")?.isVisible = bearing != nil
+
+            // A tether to the matched point. Now that the marker sits where the
+            // receiver says, "Off line 17 m" is a gap you can see; without the
+            // line it is a marker floating in a field for no stated reason.
+            if let tether = style.source(withIdentifier: "position-tether") as? MLNShapeSource {
+                if let snapped = parent.snappedTo {
+                    let points = [coordinate, snapped]
+                    tether.shape = MLNPolylineFeature(
+                        coordinates: points, count: UInt(points.count)
+                    )
+                } else {
+                    tether.shape = nil
+                }
+            }
 
             guard mode != .free, let mapView else { return }
             // Hands off while the walker is looking somewhere on purpose.

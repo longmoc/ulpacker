@@ -89,6 +89,8 @@ struct TrailMapScreen: View {
                 // the route cannot say which way the walker faces when it does
                 // not know where they are on it.
                 routeDistanceM: isOnRoute ? recorder.progress?.routeDistanceM : nil,
+                courseDegrees: recorder.progress?.courseDegrees,
+                snappedTo: snappedCoordinate,
                 focusRange: scopeRange,
                 followMode: followMode,
                 kindFilter: kindFilter,
@@ -197,10 +199,11 @@ struct TrailMapScreen: View {
     private var readouts: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                // Withheld rather than guessed while off the route entirely:
-                // "28.26 km done" for someone who has not started walking is
-                // worse than a dash.
-                readout("Done", km(isOnRoute ? recorder.progress?.routeDistanceM : nil))
+                // Distance walked, not progress along the line. They are
+                // different numbers — cut a corner and the projection races
+                // ahead of the legs — and this one is always knowable, on the
+                // route or off it, so it is never withheld.
+                readout("Walked", km(recorder.progress?.walkedM))
                 Divider().frame(height: 44)
                 readout("Left", km(isOnRoute ? recorder.progress?.remainingM : nil))
                 Divider().frame(height: 44)
@@ -312,16 +315,20 @@ struct TrailMapScreen: View {
 
     // MARK: - Derived
 
+    /// Where the receiver says the walker is. Never the projection.
     private var currentCoordinate: CLLocationCoordinate2D? {
-        // Snapped when the match is real, raw when it is not — and `Progress`
-        // carries whichever one applies, so this only has to pass it through.
-        //
-        // Snapping exists because drawing the raw observation puts the walker
-        // beside the line whenever GPS is noisy, which reads as a bug rather
-        // than as noise. It stops being a correction and starts being a
-        // fabrication once the fix is nowhere near the route, which the matcher
-        // now refuses to project at all.
         guard let progress = recorder.progress else { return nil }
+        return CLLocationCoordinate2D(latitude: progress.fixLat, longitude: progress.fixLng)
+    }
+
+    /// The matched point, drawn only when the gap is wide enough to explain.
+    ///
+    /// Below this the marker and the line are touching anyway and a tether
+    /// would be a scribble; above it the walker deserves to see what the "off
+    /// line" figure is measuring.
+    private var snappedCoordinate: CLLocationCoordinate2D? {
+        guard isOnRoute, let progress = recorder.progress, progress.offsetM > 25
+        else { return nil }
         return CLLocationCoordinate2D(latitude: progress.lat, longitude: progress.lng)
     }
 

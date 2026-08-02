@@ -43,14 +43,34 @@ public final class RecordingSession {
         public let routeDistanceM: Double
         public let remainingM: Double
         public let offsetM: Double
-        /// Position snapped onto the route, not the raw fix.
+        /// How far the walker has actually walked, summed from the fixes.
         ///
-        /// This is what a map should show: drawing the raw observation puts the
-        /// walker beside the line whenever GPS is noisy, which reads as a bug
-        /// in the app rather than as noise in the receiver. `offsetM` already
-        /// carries how far the raw fix actually was.
+        /// Not the same as `routeDistanceM`, and the difference is the whole
+        /// point: cut a corner and rejoin near the finish and the projection
+        /// sits near the finish, so progress along the line reads almost
+        /// complete while the legs know otherwise.
+        public let walkedM: Double
+        /// Position snapped onto the route.
+        ///
+        /// What the route-derived numbers are measured from. It is *not* what
+        /// the map should draw — see `fixLat`.
         public let lat: Double
         public let lng: Double
+        /// Where the receiver actually says the walker is.
+        ///
+        /// The map draws this. It used to draw the snapped position, on the
+        /// reasoning that a marker jittering beside the line reads as a bug
+        /// rather than as noise. That holds for the five metres a good fix
+        /// wanders; it is a lie at seventeen and a serious one at two hundred,
+        /// and a map that draws somebody where they are not is the exact
+        /// failure the accuracy priority forbids.
+        public let fixLat: Double
+        public let fixLng: Double
+        /// The direction the walker is moving, when the receiver knows it.
+        ///
+        /// Nil while stationary or before the receiver has settled, in which
+        /// case the arrow falls back to the direction the route runs.
+        public let courseDegrees: Double?
         public let confidence: RouteMatcher.Confidence
         public let offRouteState: OffRouteMonitor.State
         /// Set on the transition into off-route — the one moment to notify.
@@ -79,6 +99,8 @@ public final class RecordingSession {
 
     private var buffer: [ActivityPackage.Fix] = []
     private var powerBuffer: [Power.Sample] = []
+    private var walkedM: Double = 0
+    private var lastUsableFix: ActivityPackage.Fix?
     private var lastFlushAt: Date
     private var nextSequence: Int
     private var totalFixes: Int
@@ -205,12 +227,29 @@ public final class RecordingSession {
         // Every fix is buffered, including poor ones — a rejected fix is
         // evidence about the conditions and must survive to the diagnostics.
         buffer.append(fix)
-        if !fix.isUsable(maxAccuracyM: configuration.matcher.maxAccuracyM) { rejectedFixes += 1 }
+        if fix.isUsable(maxAccuracyM: configuration.matcher.maxAccuracyM) {
+            // Accumulated as the walk happens, by the same rule the finished
+            // activity is summed with, so the number on the screen and the
+            // number in the saved walk cannot disagree.
+            if let last = lastUsableFix {
+                walkedM += WalkedDistance.step(from: last, to: fix)
+            }
+            lastUsableFix = fix
+        } else {
+            rejectedFixes += 1
+        }
 
         if buffer.count >= configuration.flushEveryFixes
             || time.timeIntervalSince(lastFlushAt) >= configuration.flushInterval {
             try flush(at: time)
         }
+
+        // The receiver reports a course only once it is confident of the
+        // direction, and reports it as negative when it is not. Standing still
+        // it is meaningless whatever the sign says, so the same speed threshold
+        // that keeps the distance honest decides whether the arrow may use it.
+        let moving = (speed ?? 0) >= WalkedDistance.stationarySpeedMPS
+            && (bearing ?? -1) >= 0
 
         let match = matcher.match(fix)
         let update = monitor.update(match: match, accuracyM: horizontalAccuracyM, at: time)
@@ -220,8 +259,12 @@ public final class RecordingSession {
             routeDistanceM: match.routeDistanceM,
             remainingM: max(0, index.totalM - match.routeDistanceM),
             offsetM: match.offsetM,
+            walkedM: walkedM,
             lat: match.lat,
             lng: match.lng,
+            fixLat: fix.lat,
+            fixLng: fix.lng,
+            courseDegrees: moving ? bearing : nil,
             confidence: match.confidence,
             offRouteState: update.state,
             shouldAlertOffRoute: update.didEnterOffRoute,

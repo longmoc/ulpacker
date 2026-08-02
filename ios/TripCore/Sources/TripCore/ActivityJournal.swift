@@ -250,14 +250,19 @@ public struct ActivityJournal: Sendable {
         let fixes = try readFixes()
         let usable = fixes.filter { $0.isUsable(maxAccuracyM: maxAccuracyM) }
 
-        // Distance follows the usable fixes only: including rejected ones would
-        // add GPS noise as real walked metres, inflating every summary.
-        var distance = 0.0
+        // Distance follows the usable fixes only, through the same rule the
+        // live readout uses — a walk cannot be one length while it happens and
+        // another once it is saved.
+        let distance = WalkedDistance.total(
+            of: fixes, maxAccuracyM: maxAccuracyM
+        )
         var maxGapS = 0.0
         var maxGapM = 0.0
         for (previous, next) in zip(usable, usable.dropFirst()) {
+            // Gaps still count every step, including the ones the distance
+            // rule discards: a jump that was not walked is exactly the kind of
+            // thing the diagnostics exist to show.
             let step = Self.haversine(previous.lat, previous.lng, next.lat, next.lng)
-            distance += step
             maxGapM = max(maxGapM, step)
             maxGapS = max(maxGapS, next.t.timeIntervalSince(previous.t))
         }
