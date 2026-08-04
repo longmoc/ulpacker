@@ -26,7 +26,9 @@ struct TrailInfoPanel: View {
             switch self {
             case .collapsed: 26
             case .medium: min(320, total * 0.42)
-            case .expanded: total * 0.82
+            // All of it. The map is still a swipe away, and a note or a table
+            // that needs the screen should get the screen.
+            case .expanded: total
             }
         }
     }
@@ -427,7 +429,14 @@ struct TrailInfoPanel: View {
     // MARK: - Drag
 
     private func dragGesture(total: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 8)
+        // Measured against the screen, not against the view being dragged.
+        //
+        // In local space the translation is read inside a view whose height is
+        // `height - dragOffset` — so growing the panel moves the chrome up
+        // under the finger, which changes the translation, which grows the
+        // panel again. The result was a shudder around the 8 pt threshold as
+        // the drag repeatedly crossed and uncrossed it.
+        DragGesture(minimumDistance: 8, coordinateSpace: .global)
             .onChanged { value in dragOffset = value.translation.height }
             .onEnded { value in
                 let velocity = value.predictedEndTranslation.height

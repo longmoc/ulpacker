@@ -144,6 +144,15 @@ struct ElevationProfileView: View {
                                 }
                             }
                             pointBeforeTouch = nil
+                            // And release the window the point drag pinned.
+                            //
+                            // Every pinch starts with one finger, so the point
+                            // gesture had already frozen the window before the
+                            // second arrived — and a frozen window is a window
+                            // that ignores zoom. Nothing appeared to happen
+                            // until the fingers came off and the pin was
+                            // released, which is exactly what it looked like.
+                            draggingWindow = nil
                         }
                     )
                 )
