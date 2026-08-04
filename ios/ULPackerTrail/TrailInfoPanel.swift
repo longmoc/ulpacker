@@ -61,12 +61,28 @@ struct TrailInfoPanel: View {
             let height = detent.height(in: geometry.size.height)
 
             VStack(spacing: 0) {
-                handle
+                // The panel is dragged by its chrome, never by its content.
+                //
+                // The drag used to sit on the whole panel, so every touch meant
+                // for the chart was also a touch on the panel: placing a point
+                // or pinching to zoom hauled the panel up and down at the same
+                // time, and a pinch that lost the argument never delivered its
+                // end — which left the zoom baseline stale and made the next
+                // pinch jump. Sheets are dragged by their grabber; this one is
+                // too now.
+                Group {
+                    handle
+                    if detent != .collapsed {
+                        dayBar
+                        Divider()
+                        tabBar
+                        Divider()
+                    }
+                }
+                .contentShape(Rectangle())
+                .gesture(dragGesture(total: geometry.size.height))
+
                 if detent != .collapsed {
-                    dayBar
-                    Divider()
-                    tabBar
-                    Divider()
                     content
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
@@ -77,7 +93,6 @@ struct TrailInfoPanel: View {
             .clipShape(UnevenRoundedRectangle(topLeadingRadius: 16, topTrailingRadius: 16))
             .shadow(color: .black.opacity(0.12), radius: 8, y: -2)
             .frame(maxHeight: .infinity, alignment: .bottom)
-            .gesture(dragGesture(total: geometry.size.height))
             #if DEBUG
             .onReceive(debugScrub) { note in
                 guard let fraction = note.userInfo?["fraction"] as? Double else { return }

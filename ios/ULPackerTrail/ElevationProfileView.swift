@@ -108,10 +108,19 @@ struct ElevationProfileView: View {
                             draggingWindow = nil
                             pointBeforeTouch = nil
                         },
-                        onZoom: { scale in
+                        onZoomBegan: {
+                            // Read the baseline here, not when the last pinch
+                            // ended. Anything else can move the zoom in between
+                            // — Clear resets it to 1 — and a pinch that was
+                            // cancelled never delivered an end at all, so the
+                            // next one multiplied from a number that had not
+                            // been true for some time.
+                            zoomAtGestureStart = zoom
                             if windowCentre == nil {
                                 windowCentre = (window.lowerBound + window.upperBound) / 2
                             }
+                        },
+                        onZoom: { scale in
                             zoom = min(40, max(1, zoomAtGestureStart * Double(scale)))
                         },
                         onZoomEnded: { zoomAtGestureStart = zoom },

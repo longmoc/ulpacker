@@ -27,6 +27,9 @@ struct ProfileGestures: UIViewRepresentable {
     /// Fraction across the view, 0…1.
     var onPoint: (CGFloat) -> Void
     var onPointEnded: () -> Void
+    /// The pinch has started; whatever the zoom is now is what its scale
+    /// multiplies from.
+    var onZoomBegan: () -> Void
     /// Multiplier since the pinch began.
     var onZoom: (CGFloat) -> Void
     var onZoomEnded: () -> Void
@@ -95,6 +98,7 @@ struct ProfileGestures: UIViewRepresentable {
             switch recogniser.state {
             case .began:
                 beginMultiTouch()
+                owner.onZoomBegan()
             case .changed:
                 owner.onZoom(recogniser.scale)
             case .ended, .cancelled, .failed:
