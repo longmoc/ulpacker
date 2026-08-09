@@ -5,9 +5,11 @@ import TripCore
 /// The planned route on a map, with checkpoints and the walker's position.
 ///
 /// MapLibre Native rather than MapKit: the point of this app is offline, and
-/// MapLibre reads a local PMTiles file straight from disk. The style is a
-/// remote demo one for now — swapping it for a bundled offline pack is M5 and
-/// touches only `styleURL`, not the layers built here.
+/// MapLibre reads a local PMTiles file straight from disk. The style is always
+/// local — an installed pack for this trip and revision, or, failing that, a
+/// tile-free canvas the route still draws on. It is never a remote URL: on a
+/// trail there is no signal, and reaching for one during a walk wakes the radio
+/// for nothing, against the battery priority that ranks above everything.
 ///
 /// The route is added once as a GeoJSON source and then left alone. Everything
 /// that changes per fix — the position dot — updates its own tiny source, so a
@@ -101,16 +103,38 @@ struct RouteMapView: UIViewRepresentable {
         URL.documentsDirectory.appendingPathComponent("packs", isDirectory: true)
     }
 
-    /// The installed pack for this trip, if there is a usable one.
-    static func installedPack(for package: TripPackage) -> OfflinePack? {
-        OfflinePack.installed(in: packsRoot, tripId: package.tripId).first
+    /// The pack that may actually be used for this trip: right trip, right
+    /// revision, and passing the cheap integrity check. Revision matters because
+    /// a re-exported trip can move the line, and a pack cut for the old revision
+    /// would draw a basemap that no longer lines up with the route on top of it.
+    static func usablePack(for package: TripPackage) -> OfflinePack? {
+        OfflinePack.installed(in: packsRoot, tripId: package.tripId)
+            .first { pack in
+                pack.manifest.tripRevision == package.revision
+                    && ((try? pack.quickCheck()) != nil)
+            }
+    }
+
+    /// Whether a real basemap will be shown, so the screen can say so when one
+    /// will not. Computed once by the caller, not per redraw — even the cheap
+    /// check touches the filesystem.
+    static func hasUsablePack(for package: TripPackage) -> Bool {
+        usablePack(for: package) != nil
+    }
+
+    /// Where the tile-free fallback style is written.
+    private static var fallbackStyleDirectory: URL {
+        URL.cachesDirectory.appendingPathComponent("style", isDirectory: true)
     }
 
     private static func styleURL(for package: TripPackage) -> URL? {
-        if let pack = installedPack(for: package), let style = try? pack.makeStyle() {
+        if let pack = usablePack(for: package), let style = try? pack.makeStyle() {
             return style
         }
-        return URL(string: "https://demotiles.maplibre.org/style.json")
+        // No usable pack: a blank canvas, drawn locally, never the network. The
+        // planned route and checkpoints still render on top; the screen tells
+        // the walker the basemap is missing rather than pretending to fetch it.
+        return try? OfflineStyle.writeEmptyStyle(to: fallbackStyleDirectory)
     }
 
     final class Coordinator: NSObject, MLNMapViewDelegate {

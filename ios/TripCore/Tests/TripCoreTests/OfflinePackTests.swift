@@ -54,6 +54,30 @@ struct OfflinePackTests {
         try reopened.verify()
     }
 
+    // MARK: - Quick check (the cheap on-open integrity test)
+
+    @Test func quickCheckPassesForAWholePack() throws {
+        let root = try Self.makeRoot()
+        let tiles = Self.fakeTiles()
+        let pack = try OfflinePack.install(tiles: tiles, manifest: Self.manifest(for: tiles), in: root)
+        // No throw, and — the point of it — no full-file hash on the hot path.
+        try OfflinePack.open(directory: pack.directory).quickCheck()
+    }
+
+    @Test func quickCheckCatchesTilesTruncatedAfterInstall() throws {
+        let root = try Self.makeRoot()
+        let tiles = Self.fakeTiles()
+        let pack = try OfflinePack.install(tiles: tiles, manifest: Self.manifest(for: tiles), in: root)
+
+        // A full disk or a half-finished sync leaves the manifest intact beside
+        // a shortened tiles file — the "almost right" pack the checks exist for.
+        try Data(tiles.prefix(16)).write(to: pack.tilesURL, options: .atomic)
+
+        #expect(throws: OfflinePack.PackError.self) {
+            try OfflinePack.open(directory: pack.directory).quickCheck()
+        }
+    }
+
     @Test func leavesNoPartialDirectoryBehindOnSuccess() throws {
         let root = try Self.makeRoot()
         let tiles = Self.fakeTiles()

@@ -50,6 +50,39 @@ public enum OfflineStyle {
     /// place names render can render the trip's stops too.
     public static let labelFont = "Noto Sans Regular"
 
+    /// A basemap of nothing: one background fill, no sources, no network.
+    ///
+    /// The fallback when a trip has no usable offline pack. The alternative the
+    /// app used to take — a remote demo style — quietly broke two of the
+    /// project's own rules at once: it did nothing without a signal, on ground
+    /// chosen for having none, and it woke the radio during an active walk,
+    /// which the battery priority forbids outright. A blank canvas the planned
+    /// route still draws on is worse to look at and correct to ship; the screen
+    /// says the basemap is missing rather than pretending to fetch one.
+    public static func emptyJSON() throws -> Data {
+        let style: [String: Any] = [
+            "version": 8,
+            "name": "ULPacker Offline (no basemap)",
+            "sources": [String: Any](),
+            "layers": [[
+                "id": "background", "type": "background",
+                "paint": ["background-color": Palette.earth]
+            ]]
+        ]
+        return try JSONSerialization.data(withJSONObject: style, options: [.sortedKeys])
+    }
+
+    /// Write the tile-free style to `directory` and return its URL. Rewritten
+    /// each call so a container path change (iOS moves the data directory) never
+    /// leaves a stale absolute URL behind — the same reason the pack rewrites
+    /// its own style.
+    public static func writeEmptyStyle(to directory: URL) throws -> URL {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("empty-style.json")
+        try emptyJSON().write(to: url, options: .atomic)
+        return url
+    }
+
     public static func json(tilesURL: URL, glyphsDirectory: URL) throws -> Data {
         let style: [String: Any] = [
             "version": 8,

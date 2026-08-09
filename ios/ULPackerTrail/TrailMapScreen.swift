@@ -13,8 +13,19 @@ import TripCore
 struct TrailMapScreen: View {
     let package: TripPackage
     @Environment(\.scenePhase) private var scenePhase
-    @State private var recorder: TrailRecorder
-    @State private var recovery: ActivityJournal?
+    @Environment(\.dismiss) private var dismiss
+    @Environment(ActiveSessionCoordinator.self) private var coordinator
+    /// Resolved from the coordinator on appear, so the walk this screen drives
+    /// is the app-owned one — the same object whether the screen is opened fresh,
+    /// re-opened over a walk already running, or pushed to continue a recovery.
+    @State private var recorder: TrailRecorder?
+    /// Shown when the back button is pressed mid-walk: the recording keeps going
+    /// in the background, and leaving is a decision worth making on purpose.
+    @State private var confirmingLeave = false
+    /// Whether a real basemap is available for this trip. Resolved once on
+    /// appear — even the cheap pack check touches disk — so the screen can say
+    /// the map is route-only rather than leave the blank canvas unexplained.
+    @State private var basemapMissing = false
     @State private var followMode: RouteMapView.FollowMode = .northUp
     @State private var panelDetent: TrailInfoPanel.Detent = .collapsed
     @State private var panelTab: TrailInfoPanel.Tab = .profile
@@ -29,68 +40,96 @@ struct TrailMapScreen: View {
     init(package: TripPackage, autoStart: Bool = false) {
         self.package = package
         self.autoStart = autoStart
-        _recorder = State(initialValue: TrailRecorder(package: package))
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            mapSection
-            readouts
-            controls
-        }
-        .navigationTitle(package.trip.name)
-        .navigationBarTitleDisplayMode(.inline)
-        // The recorder buffers fixes and flushes every ten of them or every
-        // minute — proportional to walking, which is what the battery needs.
-        // Leaving the foreground is the one moment that schedule is not enough:
-        // iOS may never hand control back, and whatever is buffered is what a
-        // kill would cost. The hook for this existed from the first recording
-        // commit; nothing ever called it.
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .background || phase == .inactive {
-                recorder.flushForBackgrounding()
+        Group {
+            if let recorder {
+                content(recorder)
+            } else {
+                // The one frame before onAppear resolves the recorder. The map
+                // is what takes time to draw anyway, so a plain wait here is
+                // invisible in practice.
+                Color(.systemBackground)
             }
         }
         .onAppear {
-            recovery = recorder.pendingRecovery()
-            if autoStart, recovery == nil { recorder.start() }
+            if recorder == nil {
+                let resolved = coordinator.recorder(for: package)
+                recorder = resolved
+                if autoStart, !resolved.isActive { resolved.start() }
+            }
+            basemapMissing = !RouteMapView.hasUsablePack(for: package)
             #if DEBUG
             applyScriptedAction()
             #endif
         }
-        .alert("Off route", isPresented: offRouteBinding) {
+    }
+
+    private func content(_ recorder: TrailRecorder) -> some View {
+        VStack(spacing: 0) {
+            mapSection(recorder)
+            readouts(recorder)
+            controls(recorder)
+        }
+        .navigationTitle(package.trip.name)
+        .navigationBarTitleDisplayMode(.inline)
+        // While a walk is live the screen owns the back button, so leaving is a
+        // deliberate choice rather than a reflex that looks like it stopped the
+        // recording. It does not stop it — the app keeps recording — but the
+        // walker should know that, not assume the opposite.
+        .navigationBarBackButtonHidden(recorder.isActive)
+        .toolbar {
+            if recorder.isActive {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button { confirmingLeave = true } label: {
+                        Label("Back", systemImage: "chevron.backward")
+                    }
+                }
+            }
+        }
+        .confirmationDialog(
+            "Leave while recording?",
+            isPresented: $confirmingLeave,
+            titleVisibility: .visible
+        ) {
+            Button("Leave — keep recording") { dismiss() }
+            Button("Stay", role: .cancel) {}
+        } message: {
+            Text("The walk keeps recording in the background. You can come back to it from the trip.")
+        }
+        // The recorder buffers fixes and flushes every ten of them or every
+        // minute — proportional to walking, which is what the battery needs.
+        // Leaving the foreground is the one moment that schedule is not enough:
+        // iOS may never hand control back, and whatever is buffered is what a
+        // kill would cost. Routed through the coordinator so it fires for the
+        // app-owned walk regardless of which screen is showing.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background || phase == .inactive {
+                coordinator.flushForBackgrounding()
+            }
+        }
+        .alert("Off route", isPresented: offRouteBinding(recorder)) {
             Button("OK") { recorder.clearOffRouteAlert() }
         } message: {
             Text("You seem to have left the planned route.")
-        }
-        .alert("Continue the interrupted walk?", isPresented: recoveryBinding) {
-            Button("Continue") {
-                if let recovery { recorder.resumeCrashedSession(recovery) }
-                recovery = nil
-            }
-            Button("Discard", role: .destructive) {
-                try? recovery?.delete()
-                recovery = nil
-            }
-        } message: {
-            Text("A recording was left unfinished. Everything already saved is intact.")
         }
     }
 
     // MARK: - Map
 
-    private var mapSection: some View {
+    private func mapSection(_ recorder: TrailRecorder) -> some View {
         ZStack(alignment: .topTrailing) {
             RouteMapView(
                 package: package,
-                position: currentCoordinate,
+                position: currentCoordinate(recorder),
                 // No route distance while off the route, which is also what
                 // turns the marker from a direction arrow into a plain dot:
                 // the route cannot say which way the walker faces when it does
                 // not know where they are on it.
-                routeDistanceM: isOnRoute ? recorder.progress?.routeDistanceM : nil,
+                routeDistanceM: isOnRoute(recorder) ? recorder.progress?.routeDistanceM : nil,
                 courseDegrees: recorder.progress?.courseDegrees,
-                snappedTo: snappedCoordinate,
+                snappedTo: snappedCoordinate(recorder),
                 focusRange: scopeRange,
                 followMode: followMode,
                 kindFilter: kindFilter,
@@ -171,7 +210,23 @@ struct TrailMapScreen: View {
                 if scope != nil { followMode = .free }
             }
 
-            if let banner = statusBanner {
+            if basemapMissing {
+                // The route still draws; the ground under it does not. Said
+                // plainly so the blank canvas reads as "no map installed" rather
+                // than "the map is broken". Bottom-leading, clear of the
+                // centred status badge and the top-right compass.
+                Label("Offline basemap unavailable", systemImage: "square.dashed")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(Color.subtle)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.regularMaterial, in: Capsule())
+                    .padding(.leading, 12)
+                    .padding(.bottom, 92)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            }
+
+            if let banner = statusBanner(recorder) {
                 // A badge, not a bar. Full width it spanned the map edge to
                 // edge and swallowed the compass with it, so the moment the
                 // walker most needs to know which way north is, the app hid it.
@@ -196,7 +251,7 @@ struct TrailMapScreen: View {
 
     // MARK: - Readouts
 
-    private var readouts: some View {
+    private func readouts(_ recorder: TrailRecorder) -> some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 // Distance walked, not progress along the line. They are
@@ -205,7 +260,7 @@ struct TrailMapScreen: View {
                 // route or off it, so it is never withheld.
                 readout("Walked", km(recorder.progress?.walkedM))
                 Divider().frame(height: 44)
-                readout("Left", km(isOnRoute ? recorder.progress?.remainingM : nil))
+                readout("Left", km(isOnRoute(recorder) ? recorder.progress?.remainingM : nil))
                 Divider().frame(height: 44)
                 readout("Off line", metres(recorder.progress?.offsetM))
             }
@@ -249,11 +304,43 @@ struct TrailMapScreen: View {
 
     // MARK: - Controls
 
-    private var controls: some View {
-        Group {
+    private func controls(_ recorder: TrailRecorder) -> some View {
+        VStack(spacing: 8) {
+            // A save problem rides above the transport controls rather than
+            // replacing them: the walk is still going, Pause and Finish still
+            // work, and Retry is offered instead of a dead end. It used to
+            // collapse the whole screen to a single Reset that deleted the walk.
+            if let writeError = recorder.writeError {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(writeError)
+                        .font(.caption)
+                        .foregroundStyle(Color.subtle)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 8)
+                    Button("Retry") { recorder.retrySave() }
+                        .font(.caption.weight(.semibold))
+                        .buttonStyle(.bordered)
+                }
+                .padding(10)
+                .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+            }
+
             switch recorder.status {
             case .idle, .needsPermission:
-                bigButton("Start trail", tint: .brand) { recorder.start() }
+                if coordinator.isBlocked(for: package) {
+                    // Another trip is recording. Starting a second walk would
+                    // mean two sessions competing for one slot; say why instead.
+                    Text("A walk is already recording on another trip. Finish it first.")
+                        .font(.footnote)
+                        .foregroundStyle(Color.subtle)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                } else {
+                    bigButton("Start trail", tint: .brand) { recorder.start() }
+                }
             case .recording:
                 HStack(spacing: 12) {
                     bigButton("Pause", tint: .secondary) { recorder.pause() }
@@ -270,12 +357,21 @@ struct TrailMapScreen: View {
                         .font(.subheadline)
                         .foregroundStyle(Color.subtle)
                         .multilineTextAlignment(.center)
-                    bigButton("Done", tint: .brand) { recorder.clearFinished() }
+                    bigButton("Done", tint: .brand) {
+                        recorder.clearFinished()
+                        coordinator.release(recorder)
+                    }
                 }
             case .failed(let message):
+                // Only a start or resume that produced no session lands here —
+                // there is nothing recording and nothing to lose. Dismiss
+                // returns to idle; any journal on disk is left for another try.
                 VStack(spacing: 8) {
                     Text(message).font(.caption).foregroundStyle(.red).lineLimit(3)
-                    bigButton("Reset", tint: .secondary) { recorder.discard() }
+                    bigButton("Dismiss", tint: .secondary) {
+                        recorder.dismissFailure()
+                        coordinator.release(recorder)
+                    }
                 }
             }
         }
@@ -316,7 +412,7 @@ struct TrailMapScreen: View {
     // MARK: - Derived
 
     /// Where the receiver says the walker is. Never the projection.
-    private var currentCoordinate: CLLocationCoordinate2D? {
+    private func currentCoordinate(_ recorder: TrailRecorder) -> CLLocationCoordinate2D? {
         guard let progress = recorder.progress else { return nil }
         return CLLocationCoordinate2D(latitude: progress.fixLat, longitude: progress.fixLng)
     }
@@ -326,8 +422,8 @@ struct TrailMapScreen: View {
     /// Below this the marker and the line are touching anyway and a tether
     /// would be a scribble; above it the walker deserves to see what the "off
     /// line" figure is measuring.
-    private var snappedCoordinate: CLLocationCoordinate2D? {
-        guard isOnRoute, let progress = recorder.progress, progress.offsetM > 25
+    private func snappedCoordinate(_ recorder: TrailRecorder) -> CLLocationCoordinate2D? {
+        guard isOnRoute(recorder), let progress = recorder.progress, progress.offsetM > 25
         else { return nil }
         return CLLocationCoordinate2D(latitude: progress.lat, longitude: progress.lng)
     }
@@ -340,12 +436,12 @@ struct TrailMapScreen: View {
     }
 
     /// Whether the position on screen is a place on this route.
-    private var isOnRoute: Bool {
+    private func isOnRoute(_ recorder: TrailRecorder) -> Bool {
         recorder.progress?.confidence != .lost
     }
 
-    private var statusBanner: (text: String, colour: Color)? {
-        if let offRouteText { return (offRouteText, .red) }
+    private func statusBanner(_ recorder: TrailRecorder) -> (text: String, colour: Color)? {
+        if let offRouteText = offRouteText(recorder) { return (offRouteText, .red) }
 
         // The matcher knows when it might be wrong, and until now the app threw
         // that away and showed a confident number anyway. On a loop the first
@@ -372,8 +468,8 @@ struct TrailMapScreen: View {
 
     /// The state as the walker should read it. A match the route refused to
     /// make is not "possibly off route" — it is not this route at all.
-    private var offRouteText: String? {
-        guard !isOnRoute else { return nil }
+    private func offRouteText(_ recorder: TrailRecorder) -> String? {
+        guard !isOnRoute(recorder) else { return nil }
         return "Not on this route"
     }
 
@@ -401,12 +497,8 @@ struct TrailMapScreen: View {
         return String(format: "%.0f m", value)
     }
 
-    private var offRouteBinding: Binding<Bool> {
+    private func offRouteBinding(_ recorder: TrailRecorder) -> Binding<Bool> {
         Binding(get: { recorder.pendingOffRouteAlert }, set: { if !$0 { recorder.clearOffRouteAlert() } })
-    }
-
-    private var recoveryBinding: Binding<Bool> {
-        Binding(get: { recovery != nil }, set: { if !$0 { recovery = nil } })
     }
 
     #if DEBUG
@@ -427,8 +519,8 @@ struct TrailMapScreen: View {
 
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
             switch action {
-            case "pause": recorder.pause()
-            case "finish": recorder.finish()
+            case "pause": recorder?.pause()
+            case "finish": recorder?.finish()
             case "panelProfile":
                 panelTab = .profile
                 panelDetent = .medium

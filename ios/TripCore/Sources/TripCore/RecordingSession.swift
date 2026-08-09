@@ -87,6 +87,19 @@ public final class RecordingSession {
         case finished
     }
 
+    /// Why a crashed session could not be reopened against the trip on screen.
+    public enum ResumeError: Error, Equatable {
+        /// The journal belongs to a different trip, or a different revision of
+        /// the same trip, than the package handed in. Resuming anyway would run
+        /// the walk against the wrong line: progress, checkpoints and off-route
+        /// would all be computed on route B while the saved activity still
+        /// claimed route A. This is a navigation-safety stop, not a warning.
+        case tripMismatch(
+            journalTripId: String, journalRevision: Int,
+            packageTripId: String, packageRevision: Int
+        )
+    }
+
     public private(set) var state: State = .recording
     public private(set) var progress: Progress?
 
@@ -138,25 +151,45 @@ public final class RecordingSession {
             index: index,
             configuration: configuration,
             resumedFixes: [],
+            cursor: nil,
             recoveredFromCrash: false
         )
     }
 
     /// Reopen a session left behind by a crash, replaying what reached the disk
     /// so the matcher and the off-route state are not starting from nothing.
+    ///
+    /// The journal must belong to exactly this package — same `tripId`, same
+    /// `revision`. The header carries both for this reason: a journal recorded
+    /// on one route must never be resumed against another, because every number
+    /// the walk then produces would be measured on the wrong line. If they do
+    /// not match this throws `ResumeError.tripMismatch` and records nothing; the
+    /// caller's job is to resolve the correct package first, or to keep the
+    /// journal for export rather than force it onto a route it was not walked on.
     public static func resume(
         journal: ActivityJournal,
         package: TripPackage,
         index: RouteIndex,
         configuration: Configuration = .init()
     ) throws -> RecordingSession {
+        guard journal.session.tripId == package.tripId,
+              journal.session.tripRevision == package.revision else {
+            throw ResumeError.tripMismatch(
+                journalTripId: journal.session.tripId,
+                journalRevision: journal.session.tripRevision,
+                packageTripId: package.tripId,
+                packageRevision: package.revision
+            )
+        }
         let existing = try journal.readFixes()
+        let cursor = try? journal.readCursor()
         return RecordingSession(
             journal: journal,
             package: package,
             index: index,
             configuration: configuration,
             resumedFixes: existing,
+            cursor: cursor,
             recoveredFromCrash: true
         )
     }
@@ -167,6 +200,7 @@ public final class RecordingSession {
         index: RouteIndex,
         configuration: Configuration,
         resumedFixes: [ActivityPackage.Fix],
+        cursor: ActivityJournal.Cursor?,
         recoveredFromCrash: Bool
     ) {
         self.journal = journal
@@ -180,15 +214,40 @@ public final class RecordingSession {
         self.totalFixes = resumedFixes.count
         self.recoveredFromCrash = recoveredFromCrash
 
-        // Replay only the last accepted position rather than every fix: the
-        // matcher needs somewhere to start, not the whole history, and walking
-        // thousands of stale fixes through the off-route monitor would raise
-        // alerts about a deviation that happened hours ago.
-        if let last = resumedFixes.last(where: { $0.isUsable(maxAccuracyM: configuration.matcher.maxAccuracyM) }),
+        let maxAccuracyM = configuration.matcher.maxAccuracyM
+        rejectedFixes = resumedFixes.filter { !$0.isUsable(maxAccuracyM: maxAccuracyM) }.count
+
+        // Prefer the cursor written alongside the last flush. It carries the
+        // three things a nearest-point guess cannot recover:
+        //
+        //   * the accepted route distance — on a loop or an out-and-back the
+        //     nearest point is ambiguous by construction, and seeding at the
+        //     wrong one of two branches metres apart on the ground is how a
+        //     recovered walk jumps to the far side of the route;
+        //   * the walked distance so far, so the live readout does not reset to
+        //     zero and then disagree with the number the finished package sums
+        //     from the whole journal;
+        //   * the last usable fix, so the very next step is measured from where
+        //     the walker actually was, not from nothing.
+        if let cursor {
+            walkedM = cursor.walkedM
+            lastUsableFix = cursor.lastUsableFix
+            if let routeM = cursor.acceptedRouteM, let at = cursor.lastUsableFix?.t {
+                matcher.seed(routeDistanceM: routeM, at: at)
+            }
+            return
+        }
+
+        // No cursor — an older journal, or a crash before the first flush. Fall
+        // back to the last accepted position: the matcher needs somewhere to
+        // start, and replaying thousands of stale fixes through the off-route
+        // monitor would raise alerts about a deviation from hours ago. Walked
+        // distance cannot be recovered here and stays at zero.
+        if let last = resumedFixes.last(where: { $0.isUsable(maxAccuracyM: maxAccuracyM) }),
            let projection = index.nearestExhaustive(lat: last.lat, lng: last.lng) {
             matcher.seed(routeDistanceM: projection.routeDistanceM, at: last.t)
+            lastUsableFix = last
         }
-        rejectedFixes = resumedFixes.filter { !$0.isUsable(maxAccuracyM: configuration.matcher.maxAccuracyM) }.count
     }
 
     // MARK: - Recording
@@ -298,6 +357,18 @@ public final class RecordingSession {
         try journal.append(contentsOf: buffer)
         buffer.removeAll(keepingCapacity: true)
         lastFlushAt = time
+
+        // Written after the fixes it summarises, so the cursor never points past
+        // what is on disk. Best-effort: a failed cursor write must not fail the
+        // flush that already saved the fixes — recovery falls back to the
+        // nearest-point guess, which is strictly worse but still safe.
+        try? journal.writeCursor(
+            .init(
+                walkedM: walkedM,
+                acceptedRouteM: matcher.currentRouteDistanceM,
+                lastUsableFix: lastUsableFix
+            )
+        )
     }
 
     /// Stop consuming fixes without ending the session. The buffer is committed

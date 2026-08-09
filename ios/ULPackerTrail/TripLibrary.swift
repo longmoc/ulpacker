@@ -35,6 +35,16 @@ final class TripLibrary {
         }
     }
 
+    /// The loaded package matching a trip id and revision exactly, or nil.
+    ///
+    /// Recovery uses this: an unfinished walk may only be reopened against the
+    /// precise route it was recorded on, and the revision is part of that
+    /// identity — a re-export can move the line under the same id.
+    func package(tripId: String, revision: Int) -> TripPackage? {
+        guard case .loaded(let packages) = state else { return nil }
+        return packages.first { $0.tripId == tripId && $0.revision == revision }
+    }
+
     /// Import and remember what happened, for callers that have nowhere to
     /// throw to — a file arriving from AirDrop has no call site to catch it.
     func receive(_ url: URL) {

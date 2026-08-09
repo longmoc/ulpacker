@@ -3,20 +3,29 @@ import SwiftUI
 @main
 struct ULPackerTrailApp: App {
     @State private var library = TripLibrary()
-    #if DEBUG
-    /// Starts pushed, but is a real binding, so the back button pops it. A
-    /// debug launch that *replaced* the list left the app with no way back —
-    /// which is exactly what it looked like from the outside when the app was
-    /// resumed from the switcher after one of those launches.
-    @State private var debugPushed = true
-    #endif
+    /// Owns the one recording that may be in progress. Held here, at the app,
+    /// so a walk outlives the screen showing it — the whole point of moving the
+    /// recorder off `TrailMapScreen`.
+    @State private var coordinator = ActiveSessionCoordinator()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
-            content
+            RootView(library: library, coordinator: coordinator)
+                .environment(coordinator)
                 // AirDrop, Files, a mail attachment: all of them arrive here.
                 .onOpenURL { library.receive($0) }
                 .task { BundledPacks.install() }
+                // An unfinished walk is resolved once the trips are known, so it
+                // can be matched to its exact route and revision.
+                .task { coordinator.detectRecovery(in: library) }
+                // Backgrounding is the last chance to shrink what a kill costs,
+                // and it must fire regardless of which screen is up.
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .background || phase == .inactive {
+                        coordinator.flushForBackgrounding()
+                    }
+                }
                 #if DEBUG
                 .task {
                     // Stands in for a file arriving from elsewhere, which a
@@ -29,24 +38,73 @@ struct ULPackerTrailApp: App {
                 #endif
         }
     }
+}
 
-    @ViewBuilder private var content: some View {
-        Group {
-            #if DEBUG
-            // Automated-test hook, compiled out of release builds. The trail
-            // screen is otherwise two taps deep, and driving those taps needs
-            // accessibility permissions that CI and a headless simulator run do
-            // not have. Launch with `-uiTestAutoStartTrail` to land on it.
-            NavigationStack {
-                TripListView(library: library)
-                    .navigationDestination(isPresented: debugDestinationBinding) {
-                        debugDestination
+/// The navigation root: the trip list, the recovery prompt, and the programmatic
+/// push that continuing a recovered walk performs.
+private struct RootView: View {
+    let library: TripLibrary
+    @Bindable var coordinator: ActiveSessionCoordinator
+    #if DEBUG
+    /// Starts pushed, but is a real binding, so the back button pops it. A debug
+    /// launch that *replaced* the list left the app with no way back.
+    @State private var debugPushed = true
+    #endif
+
+    var body: some View {
+        NavigationStack {
+            TripListView(library: library)
+                // Continuing a recovered walk resumes it in the background and
+                // then opens its screen, which attaches to the now-running walk.
+                .navigationDestination(item: $coordinator.openTarget) { _ in
+                    if let package = coordinator.recorder?.package {
+                        TrailMapScreen(package: package)
                     }
-            }
-            #else
-            NavigationStack { TripListView(library: library) }
-            #endif
+                }
+                #if DEBUG
+                .navigationDestination(isPresented: debugDestinationBinding) {
+                    debugDestination
+                }
+                #endif
         }
+        .alert(
+            recoveryTitle,
+            isPresented: recoveryPresented,
+            presenting: coordinator.recovery
+        ) { recovery in
+            switch recovery {
+            case .resumable(let journal, let package):
+                Button("Continue") { coordinator.continueRecovery(journal, package: package) }
+                Button("Discard", role: .destructive) { coordinator.discardRecovery(journal) }
+                Button("Not now", role: .cancel) { coordinator.recovery = nil }
+            case .orphaned(let journal):
+                // No route to resume onto — never force it onto another. Keep it
+                // for now (a matching trip could be imported) or discard it.
+                Button("Keep", role: .cancel) { coordinator.recovery = nil }
+                Button("Discard", role: .destructive) { coordinator.discardRecovery(journal) }
+            }
+        } message: { recovery in
+            switch recovery {
+            case .resumable:
+                Text("A walk was left unfinished. Everything already saved is intact — continue where it stopped, or discard it.")
+            case .orphaned:
+                Text("A walk was left unfinished, but its trip is no longer on this phone. Import that trip to continue it, or discard the recording.")
+            }
+        }
+    }
+
+    private var recoveryTitle: String {
+        switch coordinator.recovery {
+        case .orphaned: "Unfinished walk"
+        default: "Continue the interrupted walk?"
+        }
+    }
+
+    private var recoveryPresented: Binding<Bool> {
+        Binding(
+            get: { coordinator.recovery != nil },
+            set: { if !$0 { coordinator.recovery = nil } }
+        )
     }
 
     #if DEBUG
@@ -66,8 +124,8 @@ struct ULPackerTrailApp: App {
 
     @ViewBuilder private var debugDestination: some View {
         if case .loaded(let packages) = library.state, !packages.isEmpty {
-            // Which trip a screenshot run opens. The list is sorted, so this
-            // is stable between runs.
+            // Which trip a screenshot run opens. The list is sorted, so this is
+            // stable between runs.
             let index = ProcessInfo.processInfo.arguments.firstIndex(of: "-uiTestTrip")
                 .flatMap { $0 + 1 < ProcessInfo.processInfo.arguments.count
                     ? Int(ProcessInfo.processInfo.arguments[$0 + 1]) : nil } ?? 0

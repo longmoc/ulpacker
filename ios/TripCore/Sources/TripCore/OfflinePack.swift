@@ -113,11 +113,31 @@ public struct OfflinePack: Sendable, Equatable {
             .sorted { $0.manifest.createdAt > $1.manifest.createdAt }
     }
 
-    /// Re-check a pack already on disk. Cheap enough to run when a trip opens;
-    /// catches a file truncated by a full disk or a botched sync.
+    /// Re-check a pack already on disk in full, hashing every byte. Correct but
+    /// not cheap: on a 27 MB pack it reads and hashes the lot, so it belongs at
+    /// install time and behind an explicit "re-verify", never on the hot path of
+    /// opening a trip during an active walk.
     public func verify() throws {
         let data = try Data(contentsOf: tilesURL, options: .mappedIfSafe)
         try Self.validate(data: data, against: manifest)
+    }
+
+    /// A cheap integrity check for the moment a trip opens: the tiles file is
+    /// present, is the size the manifest claims, and starts with the PMTiles
+    /// magic. It deliberately does *not* hash the file — hashing tens of
+    /// megabytes every time a map appears is exactly the wakeful, battery-hungry
+    /// work an offline map exists to avoid. It still catches the case the review
+    /// flagged: a manifest that reads fine sitting beside tiles that were
+    /// truncated by a full disk or a half-finished sync.
+    public func quickCheck() throws {
+        let size = (try FileManager.default
+            .attributesOfItem(atPath: tilesURL.path)[.size] as? Int) ?? -1
+        guard size == manifest.byteCount else {
+            throw PackError.sizeMismatch(expected: manifest.byteCount, actual: size)
+        }
+        let handle = try FileHandle(forReadingFrom: tilesURL)
+        defer { try? handle.close() }
+        try Self.validatePMTilesHeader((try handle.read(upToCount: 8)) ?? Data())
     }
 
     // MARK: - Installing

@@ -43,6 +43,31 @@ public struct ActivityJournal: Sendable {
         }
     }
 
+    /// A small snapshot of algorithm state, rewritten atomically on every flush.
+    ///
+    /// The fixes are the record of the walk; this is the record of where the
+    /// matcher and the distance counter had got to, which the fixes alone cannot
+    /// reconstruct after a crash — the accepted branch on a loop is ambiguous
+    /// from position, and walked distance is a running sum, not a property of any
+    /// single point. Unlike the journal it *is* rewritten each time: it describes
+    /// "now", so only the latest matters, and a torn write is tolerated because
+    /// recovery treats a missing or unreadable cursor as simply absent.
+    public struct Cursor: Codable, Sendable, Equatable {
+        public let walkedM: Double
+        /// The route distance the matcher had accepted, or nil before any fix
+        /// was matched. This is what disambiguates the branch on resume.
+        public let acceptedRouteM: Double?
+        /// The last fix good enough to measure distance from, carried so the
+        /// next step after a resume is measured from the right place.
+        public let lastUsableFix: ActivityPackage.Fix?
+
+        public init(walkedM: Double, acceptedRouteM: Double?, lastUsableFix: ActivityPackage.Fix?) {
+            self.walkedM = walkedM
+            self.acceptedRouteM = acceptedRouteM
+            self.lastUsableFix = lastUsableFix
+        }
+    }
+
     public enum JournalError: Error, Equatable {
         case sessionMissing
         case sessionAlreadyExists(String)
@@ -54,6 +79,8 @@ public struct ActivityJournal: Sendable {
     private var sessionURL: URL { directory.appendingPathComponent("session.json") }
     private var fixesURL: URL { directory.appendingPathComponent("fixes.ndjson") }
     private var powerURL: URL { directory.appendingPathComponent("power.ndjson") }
+    /// The latest algorithm-state snapshot. Rewritten, not appended.
+    private var cursorURL: URL { directory.appendingPathComponent("cursor.json") }
     /// Written when the walk is closed out. Its presence is what separates a
     /// finished walk from one the app died in the middle of — the difference
     /// between "here is your day" and "shall I carry on?".
@@ -232,6 +259,20 @@ public struct ActivityJournal: Sendable {
     /// Recording resumes from here so a recovered session never reuses a `seq`.
     public func lastCommittedSequence() throws -> Int? {
         try readFixes().last?.seq
+    }
+
+    /// Overwrite the algorithm-state snapshot. Atomic, so a crash mid-write
+    /// leaves the previous cursor intact rather than a half-written one.
+    public func writeCursor(_ cursor: Cursor) throws {
+        try encoder().encode(cursor).write(to: cursorURL, options: .atomic)
+    }
+
+    /// The last snapshot, or nil if none was written or it cannot be read. A
+    /// missing cursor is not an error: recovery simply falls back to guessing
+    /// the position from the last fix.
+    public func readCursor() throws -> Cursor? {
+        guard FileManager.default.fileExists(atPath: cursorURL.path) else { return nil }
+        return try? decoder().decode(Cursor.self, from: Data(contentsOf: cursorURL))
     }
 
     public func delete() throws {

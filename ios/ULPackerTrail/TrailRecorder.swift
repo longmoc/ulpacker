@@ -18,6 +18,10 @@ final class TrailRecorder {
         case recording
         case paused
         case finished(ActivityPackage)
+        /// A start or resume that produced no session — there is nothing
+        /// recording and nothing buffered to lose. Distinct from a write
+        /// problem during a live walk, which is `writeError` below and never
+        /// takes the transport controls away.
         case failed(String)
     }
 
@@ -25,14 +29,30 @@ final class TrailRecorder {
     private(set) var progress: RecordingSession.Progress?
     /// Set when the walker crosses into off-route; the UI clears it once shown.
     private(set) var pendingOffRouteAlert = false
+    /// A save that failed while a walk was in progress — a full disk, a
+    /// momentary I/O error. The walk keeps going and the fixes stay buffered in
+    /// memory; this is a retryable warning, not the end of the session, and it
+    /// must never be the only thing on screen. Nil when the last save succeeded.
+    private(set) var writeError: String?
 
     let location = LocationProvider()
 
-    private let package: TripPackage
+    let package: TripPackage
     private let index: RouteIndex
     private var session: RecordingSession?
 
-    private static var activitiesRoot: URL {
+    /// Which trip this recorder walks. The coordinator uses it to keep exactly
+    /// one walk alive and to refuse a second on a different trip.
+    var tripId: String { package.tripId }
+
+    /// A live session exists — recording, paused, or holding buffered fixes
+    /// after a write hiccup. This is what must survive leaving the screen and
+    /// what blocks starting a different walk.
+    var isActive: Bool { session != nil }
+
+    /// Where every session directory lives. Internal so the coordinator can scan
+    /// it for an unfinished walk at launch.
+    static var activitiesRoot: URL {
         URL.documentsDirectory.appendingPathComponent("activities", isDirectory: true)
     }
 
@@ -45,12 +65,6 @@ final class TrailRecorder {
     }
 
     var authorization: LocationProvider.Authorization { location.authorization }
-
-    /// A session left behind by a crash, if there is one. Checked at launch so
-    /// an interrupted walk can be continued rather than silently lost.
-    func pendingRecovery() -> ActivityJournal? {
-        try? ActivityJournal.pendingSessions(in: Self.activitiesRoot).first
-    }
 
     // MARK: - Control
 
@@ -87,6 +101,10 @@ final class TrailRecorder {
         }
     }
 
+    /// Reopen a crashed session against this trip. The package must match the
+    /// journal's — the coordinator guarantees that before calling — but the
+    /// guard in TripCore is the real safety net, and if it ever fires the walk
+    /// is left on disk untouched, never forced onto the wrong route.
     func resumeCrashedSession(_ journal: ActivityJournal) {
         do {
             session = try RecordingSession.resume(journal: journal, package: package, index: index)
@@ -95,6 +113,9 @@ final class TrailRecorder {
             location.startUpdates()
             status = .recording
         } catch {
+            // Nothing was consumed and the journal is intact on disk. Surface it
+            // as a start failure the user can dismiss; the walk stays put for
+            // another attempt or an export.
             status = .failed(String(describing: error))
         }
     }
@@ -104,9 +125,13 @@ final class TrailRecorder {
         do {
             try session.pause()
             location.stopUpdates()
+            writeError = nil
             status = .paused
         } catch {
-            status = .failed(String(describing: error))
+            // The flush that a pause performs failed. Keep recording rather than
+            // half-pausing: the fixes are still buffered and Finish will try to
+            // save them again.
+            writeError = Self.describe(error)
         }
     }
 
@@ -124,12 +149,35 @@ final class TrailRecorder {
             // One last reading before the session closes, so the final stretch
             // is inside the measurement rather than after it.
             recordPower(force: true)
-            status = .finished(try session.finish())
+            let activity = try session.finish()
             PowerMonitor.shared.stop()
             self.session = nil
+            writeError = nil
+            status = .finished(activity)
         } catch {
-            status = .failed(String(describing: error))
+            // The save failed but the journal is intact and the session is still
+            // held. Keep the transport controls — Finish stays retryable — and
+            // show the problem rather than collapsing to a delete-only screen.
+            writeError = Self.describe(error)
         }
+    }
+
+    /// Try the save again after a `writeError`, without ending the walk.
+    func retrySave() {
+        guard let session else { return }
+        do {
+            try session.flush()
+            writeError = nil
+        } catch {
+            writeError = Self.describe(error)
+        }
+    }
+
+    /// Dismiss a start/resume failure and return to idle. The on-disk journal,
+    /// if any, is left alone — this never deletes a walk.
+    func dismissFailure() {
+        guard case .failed = status else { return }
+        status = .idle
     }
 
     /// Throw the walk away — an accidental start, not a finished day.
@@ -143,6 +191,7 @@ final class TrailRecorder {
         try? session?.discard()
         session = nil
         progress = nil
+        writeError = nil
         status = .idle
     }
 
@@ -151,6 +200,7 @@ final class TrailRecorder {
         guard case .finished = status else { return }
         session = nil
         progress = nil
+        writeError = nil
         status = .idle
     }
 
@@ -191,11 +241,20 @@ final class TrailRecorder {
             progress = update
             recordPower()
             if update?.shouldAlertOffRoute == true { pendingOffRouteAlert = true }
+            // A fix arrived and saved: any earlier write warning has cleared
+            // itself, so stop showing it.
+            if writeError != nil { writeError = nil }
         } catch {
-            // A write failure mid-walk is worth surfacing, but not worth
-            // tearing down the session for: fixes stay buffered in memory and
-            // the next flush may well succeed.
-            status = .failed(String(describing: error))
+            // A write failure mid-walk is worth surfacing, but not worth tearing
+            // the session down for: the fix is buffered in memory and the next
+            // flush may well succeed. Keep recording, show a retryable warning.
+            writeError = Self.describe(error)
         }
+    }
+
+    /// A short, human line for an error banner. The raw `Error` description is
+    /// for the log; this is what a cold, tired walker reads.
+    private static func describe(_ error: Error) -> String {
+        "Couldn't save the last stretch. It's still held in memory — tap Retry, or Finish to try saving everything."
     }
 }
