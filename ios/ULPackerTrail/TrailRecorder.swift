@@ -39,7 +39,20 @@ final class TrailRecorder {
 
     let package: TripPackage
     private let index: RouteIndex
+    private let notifier: TrailNotifier
     private var session: RecordingSession?
+    /// Re-checks GPS freshness while nothing is arriving. Core Location can fall
+    /// silent for minutes; without a nudge the last state would stand and the
+    /// screen would keep claiming "on route". Foreground only — a suspended app
+    /// runs no timers, which is the one gap that cannot be closed from here.
+    private var freshnessTimer: Timer?
+
+    /// Off-route thresholds come from the trip, so a broad waymarked path and a
+    /// faint traverse can be judged differently. Invalid values in the package
+    /// fall back to defaults inside the monitor's initialiser.
+    private var configuration: RecordingSession.Configuration {
+        .init(offRoute: .init(navigationDefaults: package.navigationDefaults))
+    }
 
     /// Which trip this recorder walks. The coordinator uses it to keep exactly
     /// one walk alive and to refuse a second on a different trip.
@@ -56,11 +69,12 @@ final class TrailRecorder {
         URL.documentsDirectory.appendingPathComponent("activities", isDirectory: true)
     }
 
-    init(package: TripPackage) {
+    init(package: TripPackage, notifier: TrailNotifier = SystemNotifier()) {
         self.package = package
         // Built once here rather than per fix: ~8560 edges, tens of
         // milliseconds, and then every query is essentially free.
         self.index = RouteIndex(segments: package.plannedRoute.segments)
+        self.notifier = notifier
         location.onFix = { [weak self] fix in self?.handle(fix) }
     }
 
@@ -90,11 +104,17 @@ final class TrailRecorder {
                     activityType: config.activityType,
                     pausesAutomatically: config.pausesAutomatically,
                     allowsBackgroundUpdates: config.allowsBackgroundUpdates
-                )
+                ),
+                configuration: configuration
             )
+            // Asked for now, at the start of the walk, so a later off-route alert
+            // has permission to fire rather than raising a sheet at the worst
+            // possible moment.
+            notifier.requestAuthorization()
             PowerMonitor.shared.start()
             recordPower(force: true)
             location.startUpdates()
+            startFreshnessTimer()
             status = .recording
         } catch {
             status = .failed(String(describing: error))
@@ -107,10 +127,14 @@ final class TrailRecorder {
     /// is left on disk untouched, never forced onto the wrong route.
     func resumeCrashedSession(_ journal: ActivityJournal) {
         do {
-            session = try RecordingSession.resume(journal: journal, package: package, index: index)
+            session = try RecordingSession.resume(
+                journal: journal, package: package, index: index, configuration: configuration
+            )
+            notifier.requestAuthorization()
             PowerMonitor.shared.start()
             recordPower(force: true)
             location.startUpdates()
+            startFreshnessTimer()
             status = .recording
         } catch {
             // Nothing was consumed and the journal is intact on disk. Surface it
@@ -125,6 +149,7 @@ final class TrailRecorder {
         do {
             try session.pause()
             location.stopUpdates()
+            stopFreshnessTimer()
             writeError = nil
             status = .paused
         } catch {
@@ -139,6 +164,7 @@ final class TrailRecorder {
         guard let session else { return }
         session.resumeRecording()
         location.startUpdates()
+        startFreshnessTimer()
         status = .recording
     }
 
@@ -146,6 +172,7 @@ final class TrailRecorder {
         guard let session else { return }
         do {
             location.stopUpdates()
+            stopFreshnessTimer()
             // One last reading before the session closes, so the final stretch
             // is inside the measurement rather than after it.
             recordPower(force: true)
@@ -187,6 +214,7 @@ final class TrailRecorder {
     /// walk it was summarising.
     func discard() {
         location.stopUpdates()
+        stopFreshnessTimer()
         PowerMonitor.shared.stop()
         try? session?.discard()
         session = nil
@@ -240,7 +268,7 @@ final class TrailRecorder {
             )
             progress = update
             recordPower()
-            if update?.shouldAlertOffRoute == true { pendingOffRouteAlert = true }
+            if let update { fireAlerts(for: update) }
             // A fix arrived and saved: any earlier write warning has cleared
             // itself, so stop showing it.
             if writeError != nil { writeError = nil }
@@ -250,6 +278,44 @@ final class TrailRecorder {
             // flush may well succeed. Keep recording, show a retryable warning.
             writeError = Self.describe(error)
         }
+    }
+
+    /// Raise the alerts a fix (or a freshness tick) has just decided are due.
+    ///
+    /// Off-route sets the in-app flag *and* posts a notification: the flag shows
+    /// an alert if the screen is on, the notification carries it when it is not.
+    /// No-fix only posts — its status is on the screen already, and the value of
+    /// the notification is entirely in the pocket case.
+    private func fireAlerts(for progress: RecordingSession.Progress) {
+        if progress.shouldAlertOffRoute {
+            pendingOffRouteAlert = true
+            notifier.notifyOffRoute()
+        }
+        if progress.shouldAlertNoFix {
+            notifier.notifyNoFix()
+        }
+    }
+
+    // MARK: - Freshness
+
+    private func startFreshnessTimer() {
+        freshnessTimer?.invalidate()
+        // A slow tick: the no-fix threshold is minutes, so checking every twenty
+        // seconds catches it promptly without waking anything of consequence.
+        freshnessTimer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.checkFreshness() }
+        }
+    }
+
+    private func stopFreshnessTimer() {
+        freshnessTimer?.invalidate()
+        freshnessTimer = nil
+    }
+
+    private func checkFreshness() {
+        guard let session, let update = session.evaluate(at: Date()) else { return }
+        progress = update
+        fireAlerts(for: update)
     }
 
     /// A short, human line for an error banner. The raw `Error` description is

@@ -75,6 +75,9 @@ public final class RecordingSession {
         public let offRouteState: OffRouteMonitor.State
         /// Set on the transition into off-route — the one moment to notify.
         public let shouldAlertOffRoute: Bool
+        /// Set on the transition into no-fix — the one moment to say the GPS is
+        /// gone, from either a fix too poor to use or a run of no fixes at all.
+        public let shouldAlertNoFix: Bool
         public let nextCheckpoint: TripPackage.Checkpoint?
         public let distanceToNextCheckpointM: Double?
         public let fixCount: Int
@@ -327,6 +330,7 @@ public final class RecordingSession {
             confidence: match.confidence,
             offRouteState: update.state,
             shouldAlertOffRoute: update.didEnterOffRoute,
+            shouldAlertNoFix: update.didEnterNoFix,
             nextCheckpoint: next,
             distanceToNextCheckpointM: next.map { Double($0.routeDistanceM) - match.routeDistanceM },
             fixCount: totalFixes,
@@ -334,6 +338,39 @@ public final class RecordingSession {
         )
         self.progress = progress
         return progress
+    }
+
+    /// Re-judge the GPS state when no new fix has arrived. Core Location can go
+    /// silent for minutes, during which `receive` is never called; without this
+    /// the last progress would keep asserting "on route" about a stale position.
+    /// Returns a refreshed progress only when the state actually changed, so the
+    /// caller can drive it from a timer without churning the UI every tick.
+    @discardableResult
+    public func evaluate(at time: Date) -> Progress? {
+        guard state == .recording, let last = progress else { return nil }
+        let update = monitor.evaluate(at: time)
+        guard update.state != last.offRouteState || update.didEnterNoFix else { return nil }
+        let refreshed = Progress(
+            routeDistanceM: last.routeDistanceM,
+            remainingM: last.remainingM,
+            offsetM: last.offsetM,
+            walkedM: last.walkedM,
+            lat: last.lat,
+            lng: last.lng,
+            fixLat: last.fixLat,
+            fixLng: last.fixLng,
+            courseDegrees: last.courseDegrees,
+            confidence: last.confidence,
+            offRouteState: update.state,
+            shouldAlertOffRoute: false,
+            shouldAlertNoFix: update.didEnterNoFix,
+            nextCheckpoint: last.nextCheckpoint,
+            distanceToNextCheckpointM: last.distanceToNextCheckpointM,
+            fixCount: last.fixCount,
+            rejectedFixCount: last.rejectedFixCount
+        )
+        self.progress = refreshed
+        return refreshed
     }
 
     /// Record a battery reading.

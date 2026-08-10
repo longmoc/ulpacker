@@ -62,10 +62,20 @@ public struct OffRouteMonitor: Sendable {
         /// Thresholds published with the trip; the planner picks them per route
         /// because a broad waymarked path and a faint traverse do not deserve
         /// the same sensitivity.
+        ///
+        /// Validated, not trusted: an exit at or above the enter threshold would
+        /// erase the hysteresis and make the alert flap, and a non-positive
+        /// threshold is meaningless. Any of those and the trip's values are
+        /// dropped for the defaults — a malformed package must not be able to
+        /// break the one alert that matters on a mountain.
         public init(navigationDefaults: TripPackage.NavigationDefaults) {
+            let enter = Double(navigationDefaults.offRouteEnterM)
+            let exit = Double(navigationDefaults.offRouteExitM)
+            let usable = enter > 0 && exit > 0 && exit < enter
+            let defaults = Configuration()
             self.init(
-                enterM: Double(navigationDefaults.offRouteEnterM),
-                exitM: Double(navigationDefaults.offRouteExitM)
+                enterM: usable ? enter : defaults.enterM,
+                exitM: usable ? exit : defaults.exitM
             )
         }
     }
@@ -90,6 +100,22 @@ public struct OffRouteMonitor: Sendable {
         public let didEnterOffRoute: Bool
         /// True on the transition back to `onRoute` from `offRoute`.
         public let didReturnToRoute: Bool
+        /// True on the transition into `noFix` — the moment to say the GPS is
+        /// lost, once, whether that transition came from a fix too poor to use
+        /// or from `evaluate` finding no fix has arrived in too long.
+        public let didEnterNoFix: Bool
+
+        init(
+            state: State,
+            didEnterOffRoute: Bool = false,
+            didReturnToRoute: Bool = false,
+            didEnterNoFix: Bool = false
+        ) {
+            self.state = state
+            self.didEnterOffRoute = didEnterOffRoute
+            self.didReturnToRoute = didReturnToRoute
+            self.didEnterNoFix = didEnterNoFix
+        }
     }
 
     public var configuration: Configuration
@@ -99,6 +125,12 @@ public struct OffRouteMonitor: Sendable {
     private var suspectSince: Date?
     private var suspectAtRouteM: Double?
     private var lastUsableFixAt: Date?
+    /// The first time the monitor saw anything at all. Before a single usable
+    /// fix has arrived there is no `lastUsableFixAt` to measure silence from,
+    /// and the honest baseline is when recording began — otherwise the very
+    /// first fix, if poor, reads as infinitely-long silence and jumps straight
+    /// to `noFix` instead of `acquiring`.
+    private var firstSeenAt: Date?
 
     public init(configuration: Configuration = .init()) {
         self.configuration = configuration
@@ -109,19 +141,50 @@ public struct OffRouteMonitor: Sendable {
         suspectSince = nil
         suspectAtRouteM = nil
         lastUsableFixAt = nil
+        firstSeenAt = nil
+    }
+
+    /// Time has passed with no new fix at all. Core Location can simply stop
+    /// delivering — in a gorge, under dense cover — and when it does, `update`
+    /// is never called and the last state would otherwise stand forever, saying
+    /// "on route" about a position minutes stale. Driven by a timer while the
+    /// app is foreground; in the background the process is suspended and nothing
+    /// can run until a fix or the user wakes it, at which point this or `update`
+    /// catches up.
+    public mutating func evaluate(at time: Date) -> Update {
+        if firstSeenAt == nil { firstSeenAt = time }
+        let previous = state
+        let baseline = lastUsableFixAt ?? firstSeenAt ?? time
+        let silentFor = time.timeIntervalSince(baseline)
+
+        guard silentFor >= configuration.noFixAfter else {
+            return Update(state: state)
+        }
+        state = .noFix
+        return Update(state: state, didEnterNoFix: previous != .noFix)
     }
 
     /// Feed one matched fix. `accuracyM` is the fix's own horizontal accuracy.
     public mutating func update(match: RouteMatcher.Match, accuracyM: Double, at time: Date) -> Update {
+        if firstSeenAt == nil { firstSeenAt = time }
         let previous = state
 
         // An unusable fix must not be read as "still fine". If they keep coming
         // the state degrades, and after long enough it becomes an explicit
-        // no-fix that the UI is obliged to show.
+        // no-fix that the UI is obliged to show. Before any usable fix has ever
+        // arrived there is nothing to have gone stale, so silence is measured
+        // from when recording began and the honest state is `acquiring`, not a
+        // `noFix` conjured from a nil timestamp read as infinite.
         guard match.confidence != .lost else {
-            let silentFor = lastUsableFixAt.map { time.timeIntervalSince($0) } ?? .infinity
-            state = silentFor >= configuration.noFixAfter ? .noFix : .degraded
-            return Update(state: state, didEnterOffRoute: false, didReturnToRoute: false)
+            let baseline = lastUsableFixAt ?? firstSeenAt ?? time
+            let silentFor = time.timeIntervalSince(baseline)
+            let hadAFix = lastUsableFixAt != nil
+            if silentFor >= configuration.noFixAfter {
+                state = .noFix
+                return Update(state: state, didEnterNoFix: previous != .noFix)
+            }
+            state = hadAFix ? .degraded : .acquiring
+            return Update(state: state)
         }
 
         // A jump is not evidence of anything yet: a GPS glitch and a cable car
