@@ -53,6 +53,39 @@ struct WalkedDistanceTests {
         #expect(WalkedDistance.step(from: a, to: b) == 0)
     }
 
+    @Test func aShuttleOrCableCarIsNotWalked() {
+        // ~8 km covered in ten minutes — 13 m/s, a vehicle. Real travel, but
+        // not distance on foot, and the readout promises the latter. Speed left
+        // nil so the receiver-speed guard cannot be what rejects it.
+        let a = Self.fix(1, 45.9, 6.8, at: 0, speed: nil)
+        let b = Self.fix(2, 45.972, 6.8, at: 600, speed: nil)
+        #expect(WalkedDistance.step(from: a, to: b) == 0)
+    }
+
+    @Test func aGpsSpikeInOneIntervalIsRejected() {
+        // ~400 m flung out in thirteen seconds — 30 m/s. A glitch, not a sprint.
+        let a = Self.fix(1, 45.9, 6.8, at: 0, speed: nil)
+        let b = Self.fix(2, 45.9036, 6.8, at: 13, speed: nil)
+        #expect(WalkedDistance.step(from: a, to: b) == 0)
+    }
+
+    @Test func aLongGapIsNotBridged() {
+        // 200 m apart but twenty minutes between them: a break, or a dropout.
+        // The straight line across it was not walked, so it is not counted —
+        // even though the implied speed is slow enough to look like strolling.
+        let a = Self.fix(1, 45.9, 6.8, at: 0, speed: nil)
+        let b = Self.fix(2, 45.9018, 6.8, at: 1_200, speed: nil)
+        #expect(WalkedDistance.step(from: a, to: b) == 0)
+    }
+
+    @Test func abriskButHumanPaceStillCounts() {
+        // ~150 m in a minute — 2.5 m/s, a fast walk downhill. This must survive:
+        // the vehicle guard has to clear traffic without clipping walkers.
+        let a = Self.fix(1, 45.9, 6.8, at: 0, speed: nil)
+        let b = Self.fix(2, 45.90135, 6.8, at: 60, speed: nil)
+        #expect(WalkedDistance.step(from: a, to: b) > 140)
+    }
+
     @Test func poorFixesNeverReachTheTotal() {
         // 50 m is the accuracy ceiling; anything worse is evidence about
         // conditions, not about distance.
@@ -88,10 +121,11 @@ struct WalkedDistanceTests {
         )
 
         #expect(abs(progress.routeDistanceM - 21_000) < 200)
-        // The straight hop is one step and it is long, so it does land in the
-        // total — what matters is that walked and route progress are now
-        // different numbers rather than the same one wearing two labels.
-        #expect(progress.walkedM < progress.routeDistanceM)
+        // Route progress follows the line to metre 21,000; walked distance does
+        // not. The 20 km hop happened in one interval far faster than anyone
+        // walks, so it is rejected outright rather than banked — walked stays
+        // near the ~1 km actually covered on foot, nowhere near route progress.
+        #expect(progress.walkedM < 2_000)
     }
 
     @Test func theMapIsGivenTheFixAndNotTheProjection() throws {

@@ -75,7 +75,7 @@ private struct ActivityRow: View {
     /// that includes time spent reading the map.
     private func batteryLine(_ power: Power.Report, rate: Double) -> String {
         var line = String(format: "%.1f%%/h", rate)
-        if let background = power.backgroundPercentPerHour, power.backgroundS >= Power.minimumReliableS {
+        if power.backgroundReliable, let background = power.backgroundPercentPerHour {
             line += String(format: " · %.1f%%/h in pocket", background)
         }
         if power.maxThermal != "nominal" { line += " · ran \(power.maxThermal)" }
@@ -104,7 +104,11 @@ struct BatteryForecastView: View {
     }
 
     private var pocketRate: Double {
-        if let background = report.backgroundPercentPerHour, report.backgroundS >= Power.minimumReliableS {
+        // The pocket rate only when it is reliable in its own right — enough
+        // time *and* enough measured drop. A background stretch that cleared the
+        // half hour but never ticked down a quantum reads as 0 %/h, and
+        // forecasting nine days from that would promise the phone lasts forever.
+        if report.backgroundReliable, let background = report.backgroundPercentPerHour {
             return background
         }
         return report.percentPerHour ?? 0

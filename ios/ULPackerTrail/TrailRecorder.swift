@@ -147,9 +147,14 @@ final class TrailRecorder {
     func pause() {
         guard let session else { return }
         do {
+            // Read the battery one last time before the gap, so the stretch up
+            // to the pause is fully measured, then stop the monitor for the
+            // duration — a paused walk is not drawing power on our account.
+            recordPower(force: true)
             try session.pause()
             location.stopUpdates()
             stopFreshnessTimer()
+            PowerMonitor.shared.stop()
             writeError = nil
             status = .paused
         } catch {
@@ -163,6 +168,11 @@ final class TrailRecorder {
     func resume() {
         guard let session else { return }
         session.resumeRecording()
+        // Restart the monitor and open a fresh segment with a boundary reading,
+        // so the report excludes the paused interval between this and the last
+        // pre-pause sample rather than counting a lunch or a night as drain.
+        PowerMonitor.shared.start()
+        recordPower(force: true, boundary: true)
         location.startUpdates()
         startFreshnessTimer()
         status = .recording
@@ -244,8 +254,8 @@ final class TrailRecorder {
 
     /// Offer the session a battery reading. Throttled inside the monitor, so
     /// calling it on every fix costs a property read and nothing else.
-    private func recordPower(force: Bool = false) {
-        guard let sample = PowerMonitor.shared.sample(force: force) else { return }
+    private func recordPower(force: Bool = false, boundary: Bool = false) {
+        guard let sample = PowerMonitor.shared.sample(force: force, boundary: boundary) else { return }
         session?.receive(power: sample)
     }
 

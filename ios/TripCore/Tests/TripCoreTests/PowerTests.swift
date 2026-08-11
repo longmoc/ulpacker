@@ -166,4 +166,64 @@ struct PowerTests {
         #expect(report.dischargeS == 2 * 3600)
         #expect(abs(report.drainedPercent - 10) < 0.01)
     }
+
+    // MARK: - Pause boundaries
+
+    func boundarySample(_ minutes: Double, level: Double, foreground: Bool = false) -> Power.Sample {
+        Power.Sample(
+            t: Date(timeIntervalSince1970: minutes * 60),
+            level: level, charging: false, foreground: foreground,
+            lowPowerMode: false, thermal: "nominal", boundary: true
+        )
+    }
+
+    @Test func thePausedStretchIsNotChargedToTheRecording() throws {
+        // Thirty minutes walking, then a long lunch with the app paused, then
+        // another half hour. The pause dropped the battery too — the phone was
+        // still on — but that drain is not the recording's, and its eight hours
+        // must not dilute the rate into meaninglessness.
+        let report = try #require(Power.report(for: [
+            sample(0, level: 1.00),
+            sample(30, level: 0.95),                    // 30 min, 5 pts recording
+            boundarySample(510, level: 0.90),           // 8 h paused, 5 pts NOT ours
+            sample(540, level: 0.88)                    // 30 min, 2 pts recording
+        ]))
+        // Only the two recording stretches: one hour, seven points.
+        #expect(report.dischargeS == 3600)
+        #expect(abs(report.drainedPercent - 7) < 0.01)
+        #expect(report.percentPerHour == 7)
+    }
+
+    @Test func aFlatPocketStretchIsNotReliableToForecastFrom() throws {
+        // Forty minutes in a pocket with the level not yet ticking down a
+        // quantum. Plenty of time, no measured drop: "0 %/h" here is not a
+        // measurement, it is a lack of resolution, and the forecast must not
+        // prefer it. The number still exists — it is only its trustworthiness
+        // that is withheld.
+        let flat = try #require(Power.report(for: [
+            sample(0, level: 0.90, foreground: false),
+            sample(40, level: 0.90, foreground: false)
+        ]))
+        #expect(flat.backgroundS == 40 * 60)        // the time is real
+        #expect(flat.backgroundPercentPerHour == 0) // a number, but…
+        #expect(!flat.backgroundReliable)           // …not one to forecast from
+
+        // A pocket stretch that actually dropped is reliable.
+        let real = try #require(Power.report(for: [
+            sample(0, level: 0.90, foreground: false),
+            sample(60, level: 0.86, foreground: false)  // 4 points in an hour
+        ]))
+        #expect(real.backgroundReliable)
+        #expect(real.backgroundPercentPerHour == 4)
+    }
+
+    @Test func aSampleWithoutABoundaryFieldDecodesAsNotABoundary() throws {
+        // Journals written before boundaries existed have no such key; they must
+        // decode as ordinary samples, not fail.
+        let json = Data("""
+        {"t":"2026-08-01T09:00:00.000Z","level":0.9,"charging":false,"foreground":false,"lowPowerMode":false,"thermal":"nominal"}
+        """.utf8)
+        let sample = try ISO8601.decoder().decode(Power.Sample.self, from: json)
+        #expect(sample.boundary == nil)
+    }
 }

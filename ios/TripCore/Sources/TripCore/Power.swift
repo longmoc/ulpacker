@@ -35,6 +35,12 @@ public enum Power {
         /// throttles, and a drain figure with no thermal context invites the
         /// wrong conclusion.
         public let thermal: String
+        /// This sample opens a new recording segment after a pause. The
+        /// interval leading up to it — the paused stretch, which can be a lunch
+        /// or a whole night — is not recording and must not be charged to it.
+        /// Optional so journals written before this existed decode as `nil`,
+        /// i.e. not a boundary.
+        public let boundary: Bool?
 
         public init(
             t: Date,
@@ -42,7 +48,8 @@ public enum Power {
             charging: Bool,
             foreground: Bool,
             lowPowerMode: Bool,
-            thermal: String
+            thermal: String,
+            boundary: Bool? = nil
         ) {
             self.t = t
             self.level = level
@@ -50,6 +57,7 @@ public enum Power {
             self.foreground = foreground
             self.lowPowerMode = lowPowerMode
             self.thermal = thermal
+            self.boundary = boundary
         }
     }
 
@@ -80,6 +88,24 @@ public enum Power {
         /// would be the one that gets remembered.
         public var isReliable: Bool {
             dischargeS >= Power.minimumReliableS && drainedPercent >= Power.minimumReliableDrop
+        }
+
+        /// Whether the background rate is worth *forecasting from*, as opposed to
+        /// merely being a number. A pocket stretch can pass the half-hour mark
+        /// with the level not yet ticking down a quantum; the resulting "0 %/h"
+        /// clears the time bar but measures nothing, and the forecast used to
+        /// prefer it for exactly that reason. It needs the drop too — the same
+        /// two-conditions test as the headline, applied to the bucket's own span.
+        public var backgroundReliable: Bool {
+            guard let rate = backgroundPercentPerHour else { return false }
+            let drained = rate * Double(backgroundS) / 3600
+            return backgroundS >= Power.minimumReliableS && drained >= Power.minimumReliableDrop
+        }
+
+        public var foregroundReliable: Bool {
+            guard let rate = foregroundPercentPerHour else { return false }
+            let drained = rate * Double(foregroundS) / 3600
+            return foregroundS >= Power.minimumReliableS && drained >= Power.minimumReliableDrop
         }
 
         public init(
@@ -133,6 +159,11 @@ public enum Power {
             guard seconds > 0 else { continue }
             // Either end plugged in and the pair says nothing about drain.
             guard !previous.charging, !next.charging else { continue }
+            // `next` opens a fresh segment after a pause, so this pair spans the
+            // paused stretch — a lunch, an overnight — which is not recording
+            // and would otherwise dilute or inflate the rate depending on what
+            // the phone did while set down. Skip it.
+            guard next.boundary != true else { continue }
 
             // Clamped at zero: a level that rises on battery is the reporting
             // granularity moving, not energy appearing.

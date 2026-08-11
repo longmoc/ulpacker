@@ -24,16 +24,46 @@ public enum WalkedDistance {
     /// Steps shorter than this are noise whatever the speed says.
     public static let minimumStepM = 2.0
 
+    /// Faster than this between two fixes is not walking.
+    ///
+    /// 5.5 m/s is ~20 km/h — above any walk or trail run, and below the cable
+    /// car at Les Houches, the itinerary's shuttle days, and the kind of GPS
+    /// spike that flings a fix hundreds of metres in one interval. Distance
+    /// covered at vehicle speed is real travel but it is not walking, and the
+    /// readout promises the latter.
+    public static let maxWalkedSpeedMPS = 5.5
+
+    /// Longer than this between two fixes and the pair is not bridged.
+    ///
+    /// A gap this size means the walker was stationary long enough that no fix
+    /// fired — a break, a pause nobody registered, a night at a refuge — or the
+    /// receiver dropped out. In none of those cases did they walk the straight
+    /// line between the two points, so it is not counted. Erring toward
+    /// under-counting is deliberate: a distance-walked figure earns trust by
+    /// never being inflated by something that was not walked.
+    public static let maxStepGapS = 300.0
+
     /// The distance between two consecutive fixes, or zero if the pair says
-    /// nothing about walking.
+    /// nothing about *walking* specifically — as opposed to travel, drift, or a
+    /// glitch.
     public static func step(
         from previous: ActivityPackage.Fix, to next: ActivityPackage.Fix
     ) -> Double {
         if let speed = next.speed, speed >= 0, speed < stationarySpeedMPS { return 0 }
+
+        let seconds = next.t.timeIntervalSince(previous.t)
+        // Time did not advance (a reordered or duplicated fix), or the pair
+        // straddles a gap too long to be a measured walk. Either way there is
+        // no straight line here worth trusting.
+        guard seconds > 0, seconds <= maxStepGapS else { return 0 }
+
         let metres = ActivityJournal.haversine(
             previous.lat, previous.lng, next.lat, next.lng
         )
-        return metres < minimumStepM ? 0 : metres
+        if metres < minimumStepM { return 0 }
+        // A cable car, a shuttle, or a spike: covered at a speed no walker holds.
+        if metres / seconds > maxWalkedSpeedMPS { return 0 }
+        return metres
     }
 
     /// The whole walk, from every fix worth trusting.

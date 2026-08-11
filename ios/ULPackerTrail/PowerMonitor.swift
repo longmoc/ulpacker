@@ -45,7 +45,10 @@ final class PowerMonitor {
     /// Nil on the simulator, which reports no level at all — the code path has
     /// to survive that, because the simulator is where everything else about
     /// this app gets exercised.
-    func sample(at time: Date = Date(), force: Bool = false) -> Power.Sample? {
+    /// - Parameter boundary: mark this reading as the first of a new segment
+    ///   after a pause, so the drain over the paused stretch is not charged to
+    ///   the recording.
+    func sample(at time: Date = Date(), force: Bool = false, boundary: Bool = false) -> Power.Sample? {
         guard enabled else { return nil }
         if !force, let lastSampleAt, time.timeIntervalSince(lastSampleAt) < Self.minimumIntervalS {
             return nil
@@ -65,7 +68,8 @@ final class PowerMonitor {
             // there is no other way to separate them.
             foreground: UIApplication.shared.applicationState == .active,
             lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled,
-            thermal: Self.name(ProcessInfo.processInfo.thermalState)
+            thermal: Self.name(ProcessInfo.processInfo.thermalState),
+            boundary: boundary ? true : nil
         )
     }
 
