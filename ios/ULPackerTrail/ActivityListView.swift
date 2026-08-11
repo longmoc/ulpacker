@@ -16,7 +16,11 @@ struct ActivityListView: View {
                 }
             }
             ForEach(store.activities(for: package), id: \.activityId) { activity in
-                ActivityRow(activity: activity)
+                NavigationLink {
+                    ActivityDetailView(package: package, activity: activity)
+                } label: {
+                    ActivityRow(activity: activity)
+                }
             }
             .onDelete { offsets in
                 for index in offsets { store.delete(store.activities(for: package)[index]) }
