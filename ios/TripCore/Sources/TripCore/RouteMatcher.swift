@@ -50,6 +50,8 @@ public struct RouteMatcher: Sendable {
         /// turn, a variant, a bail-out down a valley are all far inside it —
         /// while excluding the case where the walker is not on this walk at all.
         public var maxCredibleOffsetM: Double
+        /// Ends closer than this make the route a closed loop.
+        public var closureGapM: Double
 
         public init(
             searchRadiusM: Double = 300,
@@ -59,7 +61,8 @@ public struct RouteMatcher: Sendable {
             ambiguitySeparationM: Double = 500,
             minimumAmbiguityMarginM: Double = 10,
             windingAllowance: Double = 4,
-            maxCredibleOffsetM: Double = 2_000
+            maxCredibleOffsetM: Double = 2_000,
+            closureGapM: Double = 150
         ) {
             self.searchRadiusM = searchRadiusM
             self.maxSpeedMPS = maxSpeedMPS
@@ -69,6 +72,7 @@ public struct RouteMatcher: Sendable {
             self.minimumAmbiguityMarginM = minimumAmbiguityMarginM
             self.windingAllowance = windingAllowance
             self.maxCredibleOffsetM = maxCredibleOffsetM
+            self.closureGapM = closureGapM
         }
     }
 
@@ -127,11 +131,38 @@ public struct RouteMatcher: Sendable {
     /// from a jump to another part of the route.
     private var lastLat: Double?
     private var lastLng: Double?
+    /// The furthest point on the route the walker has actually been at — a
+    /// tracking match within `highWaterOffsetM` of the line. What tells the
+    /// start of a closed loop from its finish, which are the same ground.
+    private var highWaterM: Double?
+
+    /// Present when the route closes on itself: the first and last points are
+    /// the same place, so route metre 0 and route metre `totalM` are too.
+    ///
+    /// Both real loops in use are closed this way — the Tour du Mont Blanc
+    /// (0 m between its ends) and the test loop near home (10 m) — and neither
+    /// sets the package's `loop` flag, so this is detected from geometry.
+    private struct Closure: Sendable {
+        let totalM: Double
+        /// Candidates this close to either end, along the route, belong to it.
+        let zoneM: Double
+    }
+    private let closure: Closure?
 
     public init(index: RouteIndex, configuration: Configuration = .init()) {
         self.index = index
         self.configuration = configuration
+        if let first = index.edges.first, let last = index.edges.last,
+           ActivityJournal.haversine(first.startLat, first.startLng, last.endLat, last.endLng)
+               <= configuration.closureGapM {
+            closure = Closure(totalM: index.totalM, zoneM: min(2_000, index.totalM / 4))
+        } else {
+            closure = nil
+        }
     }
+
+    /// A tracking match this close to the line counts as having been there.
+    private static let highWaterOffsetM = 100.0
 
     public var currentRouteDistanceM: Double? { lastRouteM }
 
@@ -142,12 +173,21 @@ public struct RouteMatcher: Sendable {
         lastTime = nil
         lastLat = nil
         lastLng = nil
+        highWaterM = nil
     }
 
-    /// Seed the matcher with a known position, e.g. the start of a chosen stage.
-    public mutating func seed(routeDistanceM: Double, at time: Date) {
+    /// Seed the matcher with a known position, e.g. the start of a chosen stage
+    /// or the cursor recovered after a crash.
+    ///
+    /// Pass where the walker physically was when there is a fix for it. The
+    /// progress prior measures how far the walker has *moved* since then, and
+    /// without a location it cannot — which is how a recovered session used to
+    /// fall back to assuming the walker kept walking for the whole outage.
+    public mutating func seed(routeDistanceM: Double, at time: Date, lat: Double? = nil, lng: Double? = nil) {
         lastRouteM = routeDistanceM
         lastTime = time
+        if let lat, let lng { lastLat = lat; lastLng = lng }
+        highWaterM = max(highWaterM ?? 0, routeDistanceM)
     }
 
     // MARK: - Matching
@@ -237,29 +277,44 @@ public struct RouteMatcher: Sendable {
         // receiver actually reports, believe the receiver. The margin is wide
         // enough that ordinary noise never triggers it, which keeps the
         // progress prior doing its job on switchbacks and parallel paths.
+        //
+        // The comparison is against the best candidate the walker could
+        // physically have reached, not against the nearest one outright. It
+        // used to require the nearest to be explainable, which made the result
+        // depend on which of two equally good answers happened to be a few
+        // metres closer: rejoining a closed loop at its seam, where the start
+        // and finish legs are both metres away, escaped when the start leg was
+        // nearer and stayed trapped on a stale branch — offset climbing, a
+        // false off-route — when the finish leg was. The pool is then only the
+        // explainable candidates, so the winner is always one of them.
+        let explainable = candidates.filter { isPhysicallyExplainable($0, from: fix) }
         if !reachable.isEmpty,
            let bestReachable = reachable.min(by: { $0.offsetM < $1.offsetM }),
-           let bestOverall = candidates.min(by: { $0.offsetM < $1.offsetM }),
-           bestReachable.offsetM > bestOverall.offsetM + escapeMargin(for: fix),
-           isPhysicallyExplainable(bestOverall, from: fix) {
-            pool = candidates
+           let bestExplainable = explainable.min(by: { $0.offsetM < $1.offsetM }),
+           bestReachable.offsetM > bestExplainable.offsetM + escapeMargin(for: fix) {
+            pool = explainable
             escaped = true
         }
 
+        let displacement = lastLat.flatMap { la in
+            lastLng.map { ActivityJournal.haversine(la, $0, fix.lat, fix.lng) }
+        }
         let scored = pool
             .map {
-                (candidate: $0, score: score($0, elapsed: elapsed, amongReachable: !reachable.isEmpty && !escaped))
+                (candidate: $0, score: score($0, elapsed: elapsed, displacement: displacement,
+                                             amongReachable: !reachable.isEmpty && !escaped))
             }
             .sorted { $0.score < $1.score }
 
         // The fix is usable by this point, so an empty result is a statement
         // about the route, not the receiver.
-        guard let best = scored.first else { return distantMatch(fix: fix, offsetM: .infinity) }
+        guard var best = scored.first else { return distantMatch(fix: fix, offsetM: .infinity) }
+        if let preferred = closurePreference(scored, fix: fix) { best = preferred }
 
         // Ambiguity means a rival that is *far along the route* yet nearly as
         // good — the loop-self-approach case. Neighbouring edges of the same
         // stretch are always metres apart and must not count.
-        let rival = scored.dropFirst().first { candidate in
+        let rival = scored.first { candidate in
             abs(candidate.candidate.routeDistanceM - best.candidate.routeDistanceM)
                 > configuration.ambiguitySeparationM
         }
@@ -291,6 +346,9 @@ public struct RouteMatcher: Sendable {
         lastLng = fix.lng
 
         let confidence: Confidence = jumped ? .jumped : (ambiguous ? .ambiguous : .tracking)
+        if confidence == .tracking, best.candidate.offsetM <= Self.highWaterOffsetM {
+            highWaterM = max(highWaterM ?? 0, best.candidate.routeDistanceM)
+        }
         return Match(
             routeDistanceM: best.candidate.routeDistanceM,
             offsetM: best.candidate.offsetM,
@@ -312,6 +370,7 @@ public struct RouteMatcher: Sendable {
     private func score(
         _ candidate: RouteIndex.Projection,
         elapsed: TimeInterval,
+        displacement: Double?,
         amongReachable: Bool
     ) -> Double {
         guard amongReachable, let lastRouteM, elapsed > 0 else { return candidate.offsetM }
@@ -323,7 +382,20 @@ public struct RouteMatcher: Sendable {
         // gentle — a rest stop, a wrong turn, or a scramble are all normal, and
         // a strong prior here would drag the cursor along when it should sit
         // still.
-        let expected = elapsed * configuration.nominalSpeedMPS
+        // Expected progress is what the walker could have covered *given how far
+        // they actually moved*. Time alone is not evidence of walking: the
+        // bare `elapsed × pace` assumed the walker kept going through every
+        // stop, so a thirteen-minute pause "expected" a kilometre of progress
+        // and — on a route that comes back near itself — pulled the cursor
+        // 1.5 km onto another branch while the walker had moved 24 m. Found by
+        // replaying a real walk. A 60-minute lunch expected 4.3 km.
+        //
+        // Bounded, not replaced: while walking, displacement × winding is well
+        // above elapsed × pace, so ordinary tracking is unchanged.
+        var expected = elapsed * configuration.nominalSpeedMPS
+        if let displacement {
+            expected = min(expected, displacement * configuration.windingAllowance)
+        }
         score += abs(delta - expected) * 0.05
 
         // Small extra cost for going backwards, which is rarer than pausing.
@@ -359,6 +431,35 @@ public struct RouteMatcher: Sendable {
         let displacement = ActivityJournal.haversine(lastLat, lastLng, fix.lat, fix.lng)
         let routeJump = abs(candidate.routeDistanceM - lastRouteM)
         return routeJump <= displacement * configuration.windingAllowance + escapeMargin(for: fix) * 4
+    }
+
+    /// On a closed loop, choose between the two ends when the fix fits both.
+    ///
+    /// Standing at the seam, "metre 0" and "metre `totalM`" are the same place
+    /// and the geometry cannot choose. What can is how far round the walker has
+    /// been: nowhere yet, and this is the start of the day; more than half way,
+    /// and this is the finish. Before this the choice fell to whichever end the
+    /// index returned first — which is how a walk on day one at Les Houches
+    /// avoided reading "finished" by luck rather than by reason.
+    ///
+    /// Only intervenes when both ends are in play and fit the fix about equally
+    /// well; if one end clearly fits better, that evidence stands.
+    private func closurePreference(
+        _ scored: [(candidate: RouteIndex.Projection, score: Double)],
+        fix: ActivityPackage.Fix
+    ) -> (candidate: RouteIndex.Projection, score: Double)? {
+        guard let closure else { return nil }
+        let startSide = scored.filter { $0.candidate.routeDistanceM < closure.zoneM }
+        let finishSide = scored.filter { $0.candidate.routeDistanceM > closure.totalM - closure.zoneM }
+        guard let bestStart = startSide.min(by: { $0.candidate.offsetM < $1.candidate.offsetM }),
+              let bestFinish = finishSide.min(by: { $0.candidate.offsetM < $1.candidate.offsetM })
+        else { return nil }
+
+        let preferFinish = (highWaterM ?? 0) >= closure.totalM / 2
+        let preferred = preferFinish ? bestFinish : bestStart
+        let other = preferFinish ? bestStart : bestFinish
+        let tolerance = max(configuration.minimumAmbiguityMarginM, max(0, fix.hAcc))
+        return preferred.candidate.offsetM <= other.candidate.offsetM + tolerance ? preferred : nil
     }
 
     /// A good fix with no credible route point. Like `lostMatch` it leaves the

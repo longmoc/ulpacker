@@ -239,8 +239,8 @@ public final class RecordingSession {
         if let cursor {
             walkedM = cursor.walkedM
             lastUsableFix = cursor.lastUsableFix
-            if let routeM = cursor.acceptedRouteM, let at = cursor.lastUsableFix?.t {
-                matcher.seed(routeDistanceM: routeM, at: at)
+            if let routeM = cursor.acceptedRouteM, let last = cursor.lastUsableFix {
+                matcher.seed(routeDistanceM: routeM, at: last.t, lat: last.lat, lng: last.lng)
             }
             return
         }
@@ -252,7 +252,7 @@ public final class RecordingSession {
         // distance cannot be recovered here and stays at zero.
         if let last = resumedFixes.last(where: { $0.isUsable(maxAccuracyM: maxAccuracyM) }),
            let projection = index.nearestExhaustive(lat: last.lat, lng: last.lng) {
-            matcher.seed(routeDistanceM: projection.routeDistanceM, at: last.t)
+            matcher.seed(routeDistanceM: projection.routeDistanceM, at: last.t, lat: last.lat, lng: last.lng)
             lastUsableFix = last
         }
     }
