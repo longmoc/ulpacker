@@ -20,12 +20,12 @@ struct MatcherCredibilityTests {
         .init(seq: 1, t: Date(timeIntervalSince1970: seconds), lat: lat, lng: lng, hAcc: 5)
     }
 
-    @Test func aFixNowhereNearTheRouteIsLostRatherThanProjected() throws {
+    @Test func aFixNowhereNearTheRouteIsDistantRatherThanProjected() throws {
         let (matcher, _) = try Self.matcher()
         // Cupertino, which is where a simulator sits until told otherwise.
         var matcher2 = matcher
         let match = matcher2.match(Self.fix(37.3349, -122.0090))
-        #expect(match.confidence == .lost)
+        #expect(match.confidence == .distant)
         // And the position it reports is the fix itself, not a point on a
         // mountain the walker has never seen.
         #expect(abs(match.lat - 37.3349) < 1e-6)
@@ -39,7 +39,7 @@ struct MatcherCredibilityTests {
         // Route distance stays where it was — nought, for a walk not started —
         // rather than the 28 km that the nearest projection would have claimed.
         #expect(match.routeDistanceM == 0)
-        #expect(match.confidence == .lost)
+        #expect(match.confidence == .distant)
     }
 
     @Test func stillMatchesAWalkerActuallyOnTheRoute() throws {
@@ -95,7 +95,7 @@ struct MatcherCredibilityTests {
         // reporting it would be the confident, useless answer.
         var matcher = try Self.straightRoute()
         let match = matcher.match(Self.fix(45.9 + 0.045, 6.825))
-        #expect(match.confidence == .lost)
+        #expect(match.confidence == .distant)
         #expect(match.routeDistanceM == 0)
     }
 

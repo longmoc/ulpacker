@@ -124,7 +124,10 @@ struct RecordingSessionTests {
             horizontalAccuracyM: 400
         ))
 
-        #expect(progress.confidence == .lost)
+        // The weak signal is reported as such; the position it cannot vouch
+        // for is not adopted — the screen keeps the last good one.
+        #expect(progress.offRouteState == .degraded)
+        #expect(progress.confidence != .lost)
         #expect(progress.rejectedFixCount == 1)
         #expect(progress.routeDistanceM == before)
         // Still recorded: a rejected fix is evidence about the conditions.

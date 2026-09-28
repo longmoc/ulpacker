@@ -32,6 +32,9 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
 
     private let manager = CLLocationManager()
     private var distanceFilterM: Double = 15
+    /// A one-fix probe is in flight: the distance filter is off until the next
+    /// fix arrives, then goes straight back.
+    private var probing = false
 
     override init() {
         super.init()
@@ -122,6 +125,29 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
         manager.stopUpdatingLocation()
         manager.allowsBackgroundLocationUpdates = false
         isUpdating = false
+        endProbe()
+    }
+
+    /// Ask for one fix now, whatever the distance filter says.
+    ///
+    /// The filter is what keeps a walk cheap — no callback until 15 m of
+    /// movement — and it is also why standing still is indistinguishable from
+    /// a dead receiver. Lifting it for a single fix settles the question: the
+    /// GPS is already running, so a working receiver answers within a second
+    /// and the filter goes back on at once. A dead one never answers; the
+    /// filter then stays off until the sky returns, and the first fix back
+    /// restores it. Either way the cost is one fix per probe, and the app only
+    /// probes after a minute of silence with the screen on.
+    func probe() {
+        guard isUpdating, !probing else { return }
+        probing = true
+        manager.distanceFilter = kCLDistanceFilterNone
+    }
+
+    private func endProbe() {
+        guard probing else { return }
+        probing = false
+        manager.distanceFilter = distanceFilterM
     }
 
     // MARK: - CLLocationManagerDelegate
@@ -155,6 +181,8 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
             // The OS may deliver several at once after a gap; all of them are
             // real observations and all are recorded.
             for location in locations { onFix?(location) }
+            // The probe has its answer; back to the battery-friendly filter.
+            endProbe()
         }
     }
 

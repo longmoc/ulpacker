@@ -121,6 +121,10 @@ public final class RecordingSession {
     private var nextSequence: Int
     private var totalFixes: Int
     private var rejectedFixes = 0
+    /// When the receiver last delivered anything, usable or not. Distinct from
+    /// the monitor's last *usable* fix: poor fixes still prove the receiver is
+    /// alive, which is what decides whether silence needs a probe.
+    private var lastFixAt: Date?
     private let recoveredFromCrash: Bool
 
     // MARK: - Lifecycle
@@ -282,6 +286,7 @@ public final class RecordingSession {
             bearing: bearing
         )
         nextSequence += 1
+        lastFixAt = time
         totalFixes += 1
 
         // Buffered, not written straight through: batching keeps flash writes
@@ -316,6 +321,38 @@ public final class RecordingSession {
         let match = matcher.match(fix)
         let update = monitor.update(match: match, accuracyM: horizontalAccuracyM, at: time)
 
+        // A fix too poor to use says nothing new about where the walker is, so
+        // it must not move what the screen shows. It used to: one 70 m fix
+        // under trees replaced the position with "nowhere", turned the banner
+        // red with "Not on this route" and blanked Left and Off line, then the
+        // next good fix put everything back — a flicker that reads as the app
+        // losing the walker. Now the last good position stands, and only the
+        // GPS state (degraded, eventually no-fix) and the counters move.
+        if match.confidence == .lost, let last = progress {
+            let carried = Progress(
+                routeDistanceM: last.routeDistanceM,
+                remainingM: last.remainingM,
+                offsetM: last.offsetM,
+                walkedM: walkedM,
+                lat: last.lat,
+                lng: last.lng,
+                fixLat: last.fixLat,
+                fixLng: last.fixLng,
+                courseDegrees: last.courseDegrees,
+                // A jump was news about the previous fix, not this one.
+                confidence: last.confidence == .jumped ? .tracking : last.confidence,
+                offRouteState: update.state,
+                shouldAlertOffRoute: update.didEnterOffRoute,
+                shouldAlertNoFix: update.didEnterNoFix,
+                nextCheckpoint: last.nextCheckpoint,
+                distanceToNextCheckpointM: last.distanceToNextCheckpointM,
+                fixCount: totalFixes,
+                rejectedFixCount: rejectedFixes
+            )
+            self.progress = carried
+            return carried
+        }
+
         let next = package.checkpoints.first { Double($0.routeDistanceM) > match.routeDistanceM }
         let progress = Progress(
             routeDistanceM: match.routeDistanceM,
@@ -338,6 +375,29 @@ public final class RecordingSession {
         )
         self.progress = progress
         return progress
+    }
+
+    /// How long without any fix before the silence is worth questioning.
+    ///
+    /// Silence is ambiguous under a distance filter. Standing still for a photo
+    /// or a lunch produces no fixes by design — the filter only fires after
+    /// 15 m of movement — and so does a receiver that has genuinely lost the
+    /// sky. The field replay of a real walk showed the cost of guessing: a
+    /// thirteen-minute stop with a 4.9 m fix raised "No GPS fix" at two
+    /// minutes, notification and all, and wiped the off-route suspicion that
+    /// was building at the time. Rather than guess, the app asks: after this
+    /// long it requests one fix regardless of the filter. A working receiver
+    /// answers within seconds and the stop is just a stop; a dead one stays
+    /// silent and the no-fix alarm, well after this, is then true.
+    public static let probeAfterSilence: TimeInterval = 60
+
+    /// Whether the app should ask the receiver for a fix now, ignoring the
+    /// distance filter. Pure, so the protocol is testable without a phone; the
+    /// app's freshness timer calls it and performs the probe.
+    public func needsFreshnessProbe(at time: Date) -> Bool {
+        guard state == .recording else { return false }
+        let since = lastFixAt ?? journal.session.startedAt
+        return time.timeIntervalSince(since) >= Self.probeAfterSilence
     }
 
     /// Re-judge the GPS state when no new fix has arrived. Core Location can go

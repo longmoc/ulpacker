@@ -175,6 +175,13 @@ public struct OffRouteMonitor: Sendable {
         // arrived there is nothing to have gone stale, so silence is measured
         // from when recording began and the honest state is `acquiring`, not a
         // `noFix` conjured from a nil timestamp read as infinite.
+        //
+        // Only `.lost` takes this path. `.distant` — a good fix far from the
+        // route — deliberately falls through to the ordinary judgement below:
+        // the receiver is working, so freshness is refreshed and the distance
+        // is judged like any other deviation. Treating it as silence is what
+        // once sent "No GPS fix" to a walker with a 5 m fix on the way to the
+        // trailhead.
         guard match.confidence != .lost else {
             let baseline = lastUsableFixAt ?? firstSeenAt ?? time
             let silentFor = time.timeIntervalSince(baseline)

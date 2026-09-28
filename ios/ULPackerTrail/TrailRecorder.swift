@@ -323,7 +323,13 @@ final class TrailRecorder {
     }
 
     private func checkFreshness() {
-        guard let session, let update = session.evaluate(at: Date()) else { return }
+        guard let session else { return }
+        let now = Date()
+        // Silence under a distance filter is usually just standing still. Ask
+        // the receiver before the no-fix judgement gets a chance to cry wolf: a
+        // working GPS answers within seconds and the stop stays a stop.
+        if session.needsFreshnessProbe(at: now) { location.probe() }
+        guard let update = session.evaluate(at: now) else { return }
         progress = update
         fireAlerts(for: update)
     }

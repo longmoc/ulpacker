@@ -86,8 +86,22 @@ public struct RouteMatcher: Sendable {
         /// ground truth available — and marks it so nothing downstream raises
         /// an alert on the strength of it.
         case jumped
-        /// Nothing near enough, or the fix was too poor to use.
+        /// The fix itself was too poor to use. Says nothing about where the
+        /// walker is relative to the route — only that this reading cannot
+        /// tell. Freshness is not refreshed by it: a run of these is what a
+        /// failing signal looks like.
         case lost
+        /// A good fix, but nowhere credibly near this route — beyond
+        /// `maxCredibleOffsetM`. The receiver is fine; the walker is simply not
+        /// on this walk yet (a hotel, a car park, a bus).
+        ///
+        /// Kept apart from `.lost` because the two were once the same case and
+        /// the app treated both as "no signal": a walker two kilometres from
+        /// the trailhead with a 5 m fix got a "No GPS fix" notification, and a
+        /// single 70 m fix under trees turned the screen red with "Not on this
+        /// route". One is a statement about the receiver, the other about the
+        /// walker's position; they need different words and different alarms.
+        case distant
     }
 
     public struct Match: Sendable, Equatable {
@@ -154,9 +168,11 @@ public struct RouteMatcher: Sendable {
         if candidates.isEmpty {
             // Nothing nearby in the grid. One exhaustive scan tells us whether
             // this is genuinely off-route or the index simply had no cell here.
-            guard let nearest = index.nearestExhaustive(lat: fix.lat, lng: fix.lng),
-                  nearest.offsetM <= configuration.maxCredibleOffsetM else {
-                return lostMatch(lat: fix.lat, lng: fix.lng)
+            let nearest = index.nearestExhaustive(lat: fix.lat, lng: fix.lng)
+            guard let nearest, nearest.offsetM <= configuration.maxCredibleOffsetM else {
+                // The fix passed the accuracy gate above, so this is a good
+                // position that simply has no credible point on the route.
+                return distantMatch(fix: fix, offsetM: nearest?.offsetM ?? .infinity)
             }
             candidates = [nearest]
         }
@@ -236,7 +252,9 @@ public struct RouteMatcher: Sendable {
             }
             .sorted { $0.score < $1.score }
 
-        guard let best = scored.first else { return lostMatch(lat: fix.lat, lng: fix.lng) }
+        // The fix is usable by this point, so an empty result is a statement
+        // about the route, not the receiver.
+        guard let best = scored.first else { return distantMatch(fix: fix, offsetM: .infinity) }
 
         // Ambiguity means a rival that is *far along the route* yet nearly as
         // good — the loop-self-approach case. Neighbouring edges of the same
@@ -341,6 +359,23 @@ public struct RouteMatcher: Sendable {
         let displacement = ActivityJournal.haversine(lastLat, lastLng, fix.lat, fix.lng)
         let routeJump = abs(candidate.routeDistanceM - lastRouteM)
         return routeJump <= displacement * configuration.windingAllowance + escapeMargin(for: fix) * 4
+    }
+
+    /// A good fix with no credible route point. Like `lostMatch` it leaves the
+    /// cursor where it was — reporting the nearest point of a route five
+    /// kilometres away would be the confident, useless answer — but it carries
+    /// the real distance, so the readout can say how far off the walker is and
+    /// the off-route judgement has a number to work with.
+    private func distantMatch(fix: ActivityPackage.Fix, offsetM: Double) -> Match {
+        Match(
+            routeDistanceM: lastRouteM ?? 0,
+            offsetM: offsetM,
+            lat: fix.lat,
+            lng: fix.lng,
+            ele: nil,
+            confidence: .distant,
+            progressM: 0
+        )
     }
 
     private func lostMatch(lat: Double, lng: Double) -> Match {

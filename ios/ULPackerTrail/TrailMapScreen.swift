@@ -436,8 +436,17 @@ struct TrailMapScreen: View {
     }
 
     /// Whether the position on screen is a place on this route.
+    ///
+    /// Neither a poor fix (`.lost`, before any good position exists) nor a good
+    /// fix far from the route (`.distant`) is. Once a good position exists, a
+    /// poor fix no longer arrives here as `.lost` at all — the session carries
+    /// the last good position through it — so the readouts hold steady under
+    /// trees instead of blanking with every weak reading.
     private func isOnRoute(_ recorder: TrailRecorder) -> Bool {
-        recorder.progress?.confidence != .lost
+        switch recorder.progress?.confidence {
+        case .lost, .distant, nil: false
+        default: true
+        }
     }
 
     private func statusBanner(_ recorder: TrailRecorder) -> (text: String, colour: Color)? {
@@ -469,7 +478,11 @@ struct TrailMapScreen: View {
     /// The state as the walker should read it. A match the route refused to
     /// make is not "possibly off route" — it is not this route at all.
     private func offRouteText(_ recorder: TrailRecorder) -> String? {
-        guard !isOnRoute(recorder) else { return nil }
+        // Only a good fix far from the route earns this. A weak signal is a
+        // statement about the receiver, and says so through the GPS states
+        // below ("Weak GPS signal", "No GPS fix"), never as red "Not on this
+        // route" — which is what one 70 m fix under trees used to produce.
+        guard recorder.progress?.confidence == .distant else { return nil }
         return "Not on this route"
     }
 
