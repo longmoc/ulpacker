@@ -50,6 +50,18 @@ public enum OfflineStyle {
     /// place names render can render the trip's stops too.
     public static let labelFont = "Noto Sans Regular"
 
+    /// Every glyph range MapLibre can ask for: 256 blocks of 256 code points.
+    ///
+    /// All of them must exist, even the empty ones. A range that fails to load
+    /// does not just lose its characters — MapLibre abandons the **whole tile**
+    /// whose labels needed it, roads, buildings and water included, without a
+    /// word in a release build. Packs used to carry three ranges, enough for the
+    /// French and Italian names of the Alps; the first tile over Hanoi with a
+    /// Vietnamese place name (U+1E00–1EFF, range 7680-7935) came out blank, and
+    /// so did every other tile with one. That was the "blank basemap in the
+    /// city" that survived two attempts to fix it at the tile-cutting end.
+    public static let glyphRanges: [String] = (0..<256).map { "\($0 * 256)-\($0 * 256 + 255)" }
+
     /// A basemap of nothing: one background fill, no sources, no network.
     ///
     /// The fallback when a trip has no usable offline pack. The alternative the
@@ -59,8 +71,8 @@ public enum OfflineStyle {
     /// which the battery priority forbids outright. A blank canvas the planned
     /// route still draws on is worse to look at and correct to ship; the screen
     /// says the basemap is missing rather than pretending to fetch one.
-    public static func emptyJSON() throws -> Data {
-        let style: [String: Any] = [
+    public static func emptyJSON(glyphsDirectory: URL? = nil) throws -> Data {
+        var style: [String: Any] = [
             "version": 8,
             "name": "ULPacker Offline (no basemap)",
             "sources": [String: Any](),
@@ -69,6 +81,11 @@ public enum OfflineStyle {
                 "paint": ["background-color": Palette.earth]
             ]]
         ]
+        // Without glyphs the app's own labels — checkpoint names over the route
+        // — cannot draw on a trip that has no pack yet.
+        if let glyphsDirectory {
+            style["glyphs"] = "\(glyphsDirectory.absoluteString)/{fontstack}/{range}.pbf"
+        }
         return try JSONSerialization.data(withJSONObject: style, options: [.sortedKeys])
     }
 
@@ -76,10 +93,10 @@ public enum OfflineStyle {
     /// each call so a container path change (iOS moves the data directory) never
     /// leaves a stale absolute URL behind — the same reason the pack rewrites
     /// its own style.
-    public static func writeEmptyStyle(to directory: URL) throws -> URL {
+    public static func writeEmptyStyle(to directory: URL, glyphsDirectory: URL? = nil) throws -> URL {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("empty-style.json")
-        try emptyJSON().write(to: url, options: .atomic)
+        try emptyJSON(glyphsDirectory: glyphsDirectory).write(to: url, options: .atomic)
         return url
     }
 
@@ -236,8 +253,12 @@ extension OfflinePack {
     /// Write the style beside the tiles and return its URL, ready for
     /// MapLibre's `styleURL`. Rewritten on every call because the container
     /// path it embeds changes between installs.
-    public func makeStyle() throws -> URL {
-        let data = try OfflineStyle.json(tilesURL: tilesURL, glyphsDirectory: glyphsDirectory)
+    ///
+    /// - Parameter sharedGlyphs: a complete glyph set kept once for the whole
+    ///   app (see `OfflineStyle.glyphRanges`). Preferred over the pack's own,
+    ///   which older packs carry with only a few ranges.
+    public func makeStyle(glyphsDirectory sharedGlyphs: URL? = nil) throws -> URL {
+        let data = try OfflineStyle.json(tilesURL: tilesURL, glyphsDirectory: sharedGlyphs ?? glyphsDirectory)
         try data.write(to: styleURL, options: .atomic)
         return styleURL
     }

@@ -53,6 +53,17 @@ struct RouteMapView: UIViewRepresentable {
     var recordedTrack: [[CLLocationCoordinate2D]] = []
 
     func makeUIView(context: Context) -> MLNMapView {
+        #if DEBUG
+        // MapLibre says nothing unless asked. A tile it cannot draw is skipped
+        // without a word in a release build; in a debug build it should be in
+        // the log, under "MLN", where a blank patch of map can be traced.
+        if ProcessInfo.processInfo.arguments.contains("-mapLog") {
+            MLNLoggingConfiguration.shared.loggingLevel = .verbose
+            MLNLoggingConfiguration.shared.handler = { level, path, line, message in
+                NSLog("MLN[%lu] %@", level.rawValue, message)
+            }
+        }
+        #endif
         let mapView = MLNMapView(frame: .zero)
         // A local pack wins whenever one is installed. The remote style is a
         // development convenience only — on a trail there is no signal, and a
@@ -133,13 +144,16 @@ struct RouteMapView: UIViewRepresentable {
     }
 
     private static func styleURL(for package: TripPackage) -> URL? {
-        if let pack = usablePack(for: package), let style = try? pack.makeStyle() {
+        if let pack = usablePack(for: package),
+           let style = try? pack.makeStyle(glyphsDirectory: BundledGlyphs.ensureInstalled()) {
             return style
         }
         // No usable pack: a blank canvas, drawn locally, never the network. The
         // planned route and checkpoints still render on top; the screen tells
         // the walker the basemap is missing rather than pretending to fetch it.
-        return try? OfflineStyle.writeEmptyStyle(to: fallbackStyleDirectory)
+        return try? OfflineStyle.writeEmptyStyle(
+            to: fallbackStyleDirectory, glyphsDirectory: BundledGlyphs.ensureInstalled()
+        )
     }
 
     final class Coordinator: NSObject, MLNMapViewDelegate {

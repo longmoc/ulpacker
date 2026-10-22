@@ -55,45 +55,67 @@ enum BundledPacks {
             at: manifest, to: destination.appendingPathComponent("manifest.json")
         )
 
-        // Glyphs are the same for every pack — one font, three ranges — so they
-        // ship once and are copied into each.
-        let glyphs = destination.appendingPathComponent("glyphs", isDirectory: true)
-        for url in Bundle.main.urls(forResourcesWithExtension: "pbf", subdirectory: nil) ?? [] {
-            let file = url.lastPathComponent
-            guard file.hasPrefix("glyph-") else { continue }
-            // `glyph-Noto_Sans_Regular-0-255.pbf` → `Noto Sans Regular/0-255.pbf`
-            let body = file.dropFirst("glyph-".count).replacingOccurrences(of: ".pbf", with: "")
-            // Split on the *first* hyphen: the font name has none, having had
-            // its spaces turned into underscores, while the range is "0-255"
-            // and splitting from the other end cuts it in half.
-            guard let split = body.range(of: "-") else { continue }
-            let font = body[..<split.lowerBound].replacingOccurrences(of: "_", with: " ")
-            let range = String(body[split.upperBound...])
-
-            let fontDirectory = glyphs.appendingPathComponent(font, isDirectory: true)
-            try FileManager.default.createDirectory(
-                at: fontDirectory, withIntermediateDirectories: true
-            )
-            try FileManager.default.copyItem(
-                at: url, to: fontDirectory.appendingPathComponent("\(range).pbf")
-            )
-        }
+        // No glyphs here: they are shared by every pack — see `BundledGlyphs`.
 
         // Nothing is trusted because it came from the bundle: a truncated copy
         // is exactly what `verify()` exists to catch, and a pack that cannot be
         // opened must not be left looking installed.
         try OfflinePack.open(directory: destination).verify()
+    }
+}
 
-        // `verify()` checks the tiles and says nothing about glyphs, so a pack
-        // can pass it and still draw no labels at all — which is what happened
-        // when the font name was split off the wrong end of the filename and
-        // every range landed in a directory of its own. Ask for the exact path
-        // the style will ask for.
-        let expected = glyphs
-            .appendingPathComponent(OfflineStyle.labelFont, isDirectory: true)
-            .appendingPathComponent("0-255.pbf")
-        guard FileManager.default.fileExists(atPath: expected.path) else {
-            throw CocoaError(.fileNoSuchFile)
+/// One complete glyph set for the whole app, shared by every map pack.
+///
+/// Packs used to carry their own glyphs — three ranges of "Noto Sans Regular",
+/// enough for the Alps. MapLibre, asked for a range that is not there, does not
+/// just skip those characters: it abandons the entire tile whose labels needed
+/// them, so any tile over Hanoi naming a place in Vietnamese drew nothing at
+/// all. All 256 ranges now ship once in the bundle (7 MB; most are 29-byte
+/// empty files, which load cleanly and draw nothing, as they should), and every
+/// pack's style points here. Packs already on a phone are fixed by this
+/// without being re-cut or re-pushed.
+///
+/// Flattened in the bundle like the pack files (`glyph-Noto_Sans_Regular-
+/// 7680-7935.pbf`) and restored to `<font>/<range>.pbf` in Library — not
+/// Application Support, whose space would sit inside the glyph URL.
+enum BundledGlyphs {
+    /// Bump when the bundled set changes, so phones re-copy it.
+    static let version = "noto-sans-regular/protomaps-basemaps-assets/256/v1"
+
+    static var directory: URL {
+        URL.libraryDirectory.appendingPathComponent("glyphs", isDirectory: true)
+    }
+
+    private static var marker: URL { directory.appendingPathComponent(".version") }
+
+    /// The shared directory, installing it first if needed; nil if that fails,
+    /// in which case a pack falls back to its own (partial) glyphs.
+    @MainActor
+    static func ensureInstalled() -> URL? {
+        if (try? String(contentsOf: marker, encoding: .utf8)) == version { return directory }
+        do {
+            try install()
+            return directory
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            return nil
         }
+    }
+
+    private static func install() throws {
+        let fm = FileManager.default
+        try? fm.removeItem(at: directory)
+        let font = OfflineStyle.labelFont
+        let fontDirectory = directory.appendingPathComponent(font, isDirectory: true)
+        try fm.createDirectory(at: fontDirectory, withIntermediateDirectories: true)
+
+        let prefix = "glyph-" + font.replacingOccurrences(of: " ", with: "_") + "-"
+        for range in OfflineStyle.glyphRanges {
+            guard let source = Bundle.main.url(forResource: prefix + range, withExtension: "pbf")
+            else { throw CocoaError(.fileNoSuchFile) }
+            try fm.copyItem(at: source, to: fontDirectory.appendingPathComponent("\(range).pbf"))
+        }
+        // Written last: present only when every range is.
+        try version.write(to: marker, atomically: true, encoding: .utf8)
     }
 }
