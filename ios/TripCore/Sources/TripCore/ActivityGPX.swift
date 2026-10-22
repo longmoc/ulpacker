@@ -47,7 +47,8 @@ public enum ActivityGPX {
     /// Break the fixes wherever the gap between them is too long to be one
     /// continuous stretch of walking — the same threshold walked distance uses,
     /// so a paused or dropped-out interval is a segment boundary here too.
-    static func segments(of fixes: [ActivityPackage.Fix]) -> [[ActivityPackage.Fix]] {
+    /// Public because the replay map draws the same segments the export writes.
+    public static func segments(of fixes: [ActivityPackage.Fix]) -> [[ActivityPackage.Fix]] {
         var segments: [[ActivityPackage.Fix]] = []
         var current: [ActivityPackage.Fix] = []
         for fix in fixes {

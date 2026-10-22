@@ -46,6 +46,11 @@ struct RouteMapView: UIViewRepresentable {
     var highlighted: TripPackage.Checkpoint?
     /// Called when a checkpoint pin is tapped.
     var onSelectCheckpoint: ((TripPackage.Checkpoint, CGPoint) -> Void)?
+    /// A walk already recorded, drawn over the plan: one polyline per segment,
+    /// broken where the walk had a gap. Empty on the live trail screen. When
+    /// present the camera frames the walk rather than the whole route — on a
+    /// nine-day trip a single day's track would be a speck in the full view.
+    var recordedTrack: [[CLLocationCoordinate2D]] = []
 
     func makeUIView(context: Context) -> MLNMapView {
         let mapView = MLNMapView(frame: .zero)
@@ -348,6 +353,9 @@ struct RouteMapView: UIViewRepresentable {
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             addRoute(to: style)
             addDirectionArrows(to: style)
+            // Above the plan so the walked line reads on top where they
+            // coincide, below every pin and the position marker.
+            addRecordedTrack(to: style)
             let daySpotSource = MLNShapeSource(identifier: "day-stops", shape: nil, options: nil)
             style.addSource(daySpotSource)
             let daySpots = MLNCircleStyleLayer(identifier: "day-stops", source: daySpotSource)
@@ -381,7 +389,7 @@ struct RouteMapView: UIViewRepresentable {
             // always claimed otherwise — which drew a translucent green disc
             // over every icon it marked and left the orange campsites olive.
             addPosition(to: style)
-            zoomToRoute(mapView)
+            if !zoomToTrack(mapView) { zoomToRoute(mapView) }
             didAddRoute = true
             updatePosition(parent.position, mode: parent.followMode)
         }
@@ -1224,6 +1232,60 @@ struct RouteMapView: UIViewRepresentable {
             return TripPackage.bearing(
                 fromLat: here.lat, fromLng: here.lng, toLat: ahead.lat, toLng: ahead.lng
             )
+        }
+
+        /// The recorded walk, if one was given. Orange against the green plan
+        /// and the blue position marker, so all three stay distinct; a white
+        /// casing keeps it readable over the basemap's own colours. Constant
+        /// paint only — data-driven expressions on a shape source are the
+        /// class of thing that makes MapLibre drop a source without a word.
+        private func addRecordedTrack(to style: MLNStyle) {
+            let lines = parent.recordedTrack
+                .filter { $0.count >= 2 }
+                .map { MLNPolylineFeature(coordinates: $0, count: UInt($0.count)) }
+            guard !lines.isEmpty else { return }
+            let source = MLNShapeSource(
+                identifier: "recorded-track",
+                shape: MLNShapeCollectionFeature(shapes: lines),
+                options: nil
+            )
+            style.addSource(source)
+
+            let casing = MLNLineStyleLayer(identifier: "recorded-track-casing", source: source)
+            casing.lineColor = NSExpression(forConstantValue: UIColor.white)
+            casing.lineWidth = NSExpression(forConstantValue: 7)
+            casing.lineCap = NSExpression(forConstantValue: "round")
+            casing.lineJoin = NSExpression(forConstantValue: "round")
+            style.addLayer(casing)
+
+            let line = MLNLineStyleLayer(identifier: "recorded-track", source: source)
+            line.lineColor = NSExpression(forConstantValue: UIColor.systemOrange)
+            line.lineWidth = NSExpression(forConstantValue: 4)
+            line.lineCap = NSExpression(forConstantValue: "round")
+            line.lineJoin = NSExpression(forConstantValue: "round")
+            style.addLayer(line)
+        }
+
+        /// Frame the recorded walk. Returns false when there is none, so the
+        /// caller falls back to framing the route.
+        private func zoomToTrack(_ mapView: MLNMapView) -> Bool {
+            let points = parent.recordedTrack.joined()
+            guard let first = points.first else { return false }
+            var minLat = first.latitude, maxLat = first.latitude
+            var minLng = first.longitude, maxLng = first.longitude
+            for p in points {
+                minLat = min(minLat, p.latitude); maxLat = max(maxLat, p.latitude)
+                minLng = min(minLng, p.longitude); maxLng = max(maxLng, p.longitude)
+            }
+            mapView.setVisibleCoordinateBounds(
+                MLNCoordinateBounds(
+                    sw: CLLocationCoordinate2D(latitude: minLat, longitude: minLng),
+                    ne: CLLocationCoordinate2D(latitude: maxLat, longitude: maxLng)
+                ),
+                edgePadding: UIEdgeInsets(top: 40, left: 32, bottom: 56, right: 32),
+                animated: false
+            )
+            return true
         }
 
         private func zoomToRoute(_ mapView: MLNMapView) {

@@ -1,4 +1,5 @@
 import SwiftUI
+import TripCore
 
 @main
 struct ULPackerTrailApp: App {
@@ -110,7 +111,7 @@ private struct RootView: View {
     #if DEBUG
     private var debugArgument: String? {
         let arguments = ProcessInfo.processInfo.arguments
-        return ["-uiTestAutoStartTrail", "-uiTestOpenTrail", "-uiTestOpenDetail"]
+        return ["-uiTestAutoStartTrail", "-uiTestOpenTrail", "-uiTestOpenDetail", "-uiTestOpenActivity"]
             .first { arguments.contains($0) }
     }
 
@@ -133,9 +134,30 @@ private struct RootView: View {
             switch debugArgument {
             case "-uiTestAutoStartTrail": TrailMapScreen(package: first, autoStart: true)
             case "-uiTestOpenDetail": TripDetailView(package: first)
+            case "-uiTestOpenActivity": DebugLatestActivity(package: first)
             default: TrailMapScreen(package: first)
             }
         }
     }
     #endif
 }
+
+#if DEBUG
+/// The newest recorded walk of a trip, opened directly — the replay screen is
+/// three taps deep and a headless run cannot tap.
+private struct DebugLatestActivity: View {
+    let package: TripPackage
+    @State private var store = ActivityStore()
+
+    var body: some View {
+        Group {
+            if let activity = store.activities(for: package).first {
+                ActivityDetailView(package: package, activity: activity)
+            } else {
+                Text("No recorded walk for this trip")
+            }
+        }
+        .onAppear { store.reload() }
+    }
+}
+#endif
