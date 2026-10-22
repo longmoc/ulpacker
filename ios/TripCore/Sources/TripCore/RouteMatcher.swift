@@ -219,6 +219,15 @@ public struct RouteMatcher: Sendable {
 
         let elapsed = max(lastTime.map { fix.t.timeIntervalSince($0) } ?? 0, 0)
 
+        // The fastest the walker could have gone. Normally the walking ceiling,
+        // but when the receiver itself measures more — a cable car, a shuttle,
+        // the motorbike ride on the 12 October test — believe it. With a fixed
+        // 4 m/s the cursor fell behind a 6–7 m/s ride, the offset climbed to
+        // 40–54 m, and the escape hatch caught up with a "Position jumped"
+        // banner four times in fifty seconds. Doppler speed is the receiver's
+        // most reliable output, and a margin keeps a burst from being clipped.
+        let speedCeiling = max(configuration.maxSpeedMPS, (fix.speed ?? 0) * 1.5)
+
         // Split first, score second. An earlier version scored every candidate
         // on a penalty proportional to how unreachable it was, which produced a
         // smooth gradient — and on a jump the winner became a point partway
@@ -227,7 +236,7 @@ public struct RouteMatcher: Sendable {
         // time or it is not; there is no meaningful "slightly too far".
         let reachable: [RouteIndex.Projection]
         if let lastRouteM, elapsed > 0 {
-            let limit = elapsed * configuration.maxSpeedMPS
+            let limit = elapsed * speedCeiling
             reachable = candidates.filter { abs($0.routeDistanceM - lastRouteM) <= limit }
         } else {
             reachable = candidates
@@ -338,7 +347,7 @@ public struct RouteMatcher: Sendable {
         let jumped = escaped
             || (lastRouteM != nil
                 && elapsedOrZero > 0
-                && abs(progress) > elapsedOrZero * configuration.maxSpeedMPS)
+                && abs(progress) > elapsedOrZero * speedCeiling)
 
         lastRouteM = best.candidate.routeDistanceM
         lastTime = fix.t

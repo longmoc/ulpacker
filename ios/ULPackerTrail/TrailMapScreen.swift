@@ -450,7 +450,15 @@ struct TrailMapScreen: View {
     }
 
     private func statusBanner(_ recorder: TrailRecorder) -> (text: String, colour: Color)? {
+        // Walking to the start: the distance, calmly. Not red, not an alarm —
+        // nobody has left a route they have not yet joined.
+        if recorder.progress?.offRouteState == .approaching {
+            return ("Route " + Self.distanceText(recorder.progress?.offsetM) + " away", .blue)
+        }
         if let offRouteText = offRouteText(recorder) { return (offRouteText, .red) }
+        if recorder.progress?.isWrongWay == true {
+            return ("Walking against the route", .orange)
+        }
 
         // The matcher knows when it might be wrong, and until now the app threw
         // that away and showed a confident number anyway. On a loop the first
@@ -472,7 +480,15 @@ struct TrailMapScreen: View {
         case .offRoute: return ("Off route", .red)
         case .degraded: return ("Weak GPS signal", .orange)
         case .noFix: return ("No GPS fix", .red)
+        case .approaching: return ("Route " + Self.distanceText(recorder.progress?.offsetM) + " away", .blue)
+        case .finished: return ("Route finished", .green)
         }
+    }
+
+    private static func distanceText(_ metres: Double?) -> String {
+        // Past 20 km a number stops helping — same cut-off as the readout.
+        guard let metres, metres.isFinite, metres < 20_000 else { return "far" }
+        return metres >= 1_000 ? String(format: "%.1f km", metres / 1000) : String(format: "%.0f m", metres)
     }
 
     /// The state as the walker should read it. A match the route refused to

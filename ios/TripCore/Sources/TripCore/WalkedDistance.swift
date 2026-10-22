@@ -43,6 +43,17 @@ public enum WalkedDistance {
     /// never being inflated by something that was not walked.
     public static let maxStepGapS = 300.0
 
+    /// With no receiver speed to vouch for movement, the fastest a step may be.
+    ///
+    /// A fix without a speed is the receiver saying it does not know whether
+    /// the walker is moving — which is exactly the state of a phone indoors.
+    /// On the 12 October walk the GPS inside a building hopped 33 m back and
+    /// forth with no speed and 20–26 m accuracy, and every hop was banked:
+    /// +172 m, 23 % of the walk, standing still. Without a speed, a step must
+    /// be both bigger than the two fixes' combined error and no faster than a
+    /// brisk walk.
+    public static let maxUnvouchedSpeedMPS = 3.0
+
     /// The distance between two consecutive fixes, or zero if the pair says
     /// nothing about *walking* specifically — as opposed to travel, drift, or a
     /// glitch.
@@ -50,6 +61,10 @@ public enum WalkedDistance {
         from previous: ActivityPackage.Fix, to next: ActivityPackage.Fix
     ) -> Double {
         if let speed = next.speed, speed >= 0, speed < stationarySpeedMPS { return 0 }
+        // The receiver measured vehicle speed: a ride, not a walk, whatever the
+        // positions say. Covers the stretch of a motorbike ride slow enough
+        // that the implied-speed check below would let it through.
+        if let speed = next.speed, speed > maxWalkedSpeedMPS { return 0 }
 
         let seconds = next.t.timeIntervalSince(previous.t)
         // Time did not advance (a reordered or duplicated fix), or the pair
@@ -63,6 +78,10 @@ public enum WalkedDistance {
         if metres < minimumStepM { return 0 }
         // A cable car, a shuttle, or a spike: covered at a speed no walker holds.
         if metres / seconds > maxWalkedSpeedMPS { return 0 }
+        if next.speed == nil || (next.speed ?? 0) < 0 {
+            let combinedError = max(0, previous.hAcc) + max(0, next.hAcc)
+            if metres <= combinedError || metres / seconds > maxUnvouchedSpeedMPS { return 0 }
+        }
         return metres
     }
 

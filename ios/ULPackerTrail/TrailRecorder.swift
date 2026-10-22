@@ -304,6 +304,9 @@ final class TrailRecorder {
         if progress.shouldAlertNoFix {
             notifier.notifyNoFix()
         }
+        if progress.shouldAlertWrongWay {
+            notifier.notifyWrongWay()
+        }
     }
 
     // MARK: - Freshness

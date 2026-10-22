@@ -60,11 +60,24 @@ public struct ActivityJournal: Sendable {
         /// The last fix good enough to measure distance from, carried so the
         /// next step after a resume is measured from the right place.
         public let lastUsableFix: ActivityPackage.Fix?
+        /// The walker had been on the route, so distance from it is deviation,
+        /// not approach. Optional: cursors written before it existed decode nil.
+        public let joined: Bool?
+        /// The walker had reached the end of the route.
+        public let reachedFinish: Bool?
 
-        public init(walkedM: Double, acceptedRouteM: Double?, lastUsableFix: ActivityPackage.Fix?) {
+        public init(
+            walkedM: Double,
+            acceptedRouteM: Double?,
+            lastUsableFix: ActivityPackage.Fix?,
+            joined: Bool? = nil,
+            reachedFinish: Bool? = nil
+        ) {
             self.walkedM = walkedM
             self.acceptedRouteM = acceptedRouteM
             self.lastUsableFix = lastUsableFix
+            self.joined = joined
+            self.reachedFinish = reachedFinish
         }
     }
 

@@ -91,6 +91,18 @@ public struct OffRouteMonitor: Sendable {
         case degraded
         /// Nothing usable for a while — reported, never mistaken for on-route.
         case noFix
+        /// Good fixes, but the walker has not yet been on the route this
+        /// session — walking to the trailhead from a hotel or a car park.
+        ///
+        /// Not "off route": nobody has left a route they never joined. Both
+        /// field walks near home began 390 m from the line, and both raised an
+        /// "Off route" notification within a minute and a red banner for six,
+        /// for the whole walk to the start. The distance is still on screen;
+        /// it simply is not an alarm. Joining (coming within `exitM`) ends it.
+        case approaching
+        /// Set by the session, never by this monitor: the walker has reached
+        /// the end of the route, so leaving it is going home, not getting lost.
+        case finished
     }
 
     public struct Update: Sendable, Equatable {
@@ -124,6 +136,13 @@ public struct OffRouteMonitor: Sendable {
     /// When and where the current suspicion began, for the sustain test.
     private var suspectSince: Date?
     private var suspectAtRouteM: Double?
+    /// Where the walker physically was when the suspicion began.
+    private var suspectAtLat: Double?
+    private var suspectAtLng: Double?
+    /// The walker has been on the route at least once this session. Survives
+    /// a pause — a walker resuming after lunch has joined, and a wrong turn
+    /// then must still alert.
+    public private(set) var hasJoined = false
     private var lastUsableFixAt: Date?
     /// The first time the monitor saw anything at all. Before a single usable
     /// fix has arrived there is no `lastUsableFixAt` to measure silence from,
@@ -142,6 +161,23 @@ public struct OffRouteMonitor: Sendable {
         suspectAtRouteM = nil
         lastUsableFixAt = nil
         firstSeenAt = nil
+        hasJoined = false
+        suspectAtLat = nil
+        suspectAtLng = nil
+    }
+
+    /// Start judging afresh after a pause, keeping only the fact that the
+    /// walker had joined the route. A deviation from before lunch says nothing
+    /// about now; having been on the route still does.
+    public mutating func resumeAfterPause() {
+        let joined = hasJoined
+        reset()
+        hasJoined = joined
+    }
+
+    /// Restore "has joined" after a crash, from the recovery cursor.
+    public mutating func markJoined() {
+        hasJoined = true
     }
 
     /// Time has passed with no new fix at all. Core Location can simply stop
@@ -164,8 +200,17 @@ public struct OffRouteMonitor: Sendable {
         return Update(state: state, didEnterNoFix: previous != .noFix)
     }
 
-    /// Feed one matched fix. `accuracyM` is the fix's own horizontal accuracy.
-    public mutating func update(match: RouteMatcher.Match, accuracyM: Double, at time: Date) -> Update {
+    /// Feed one matched fix. `accuracyM` is the fix's own horizontal accuracy;
+    /// `fixLat`/`fixLng` is where the receiver put the walker, used to measure
+    /// how far they have actually travelled while off the line. Without it the
+    /// travel falls back to progress along the route.
+    public mutating func update(
+        match: RouteMatcher.Match,
+        accuracyM: Double,
+        at time: Date,
+        fixLat: Double? = nil,
+        fixLng: Double? = nil
+    ) -> Update {
         if firstSeenAt == nil { firstSeenAt = time }
         let previous = state
 
@@ -202,6 +247,9 @@ public struct OffRouteMonitor: Sendable {
             lastUsableFixAt = time
             suspectSince = nil
             suspectAtRouteM = nil
+            suspectAtLat = nil
+            suspectAtLng = nil
+            if !hasJoined { state = .approaching }
             if state == .offRoute { state = .suspect }
             return Update(state: state, didEnterOffRoute: false, didReturnToRoute: false)
         }
@@ -214,14 +262,38 @@ public struct OffRouteMonitor: Sendable {
         let certainlyOff = match.offsetM - accuracy
         let possiblyOn = match.offsetM + accuracy
 
+        // Before the walker has ever been on the route, distance from it is
+        // approach, not deviation: no suspicion, no alert.
+        guard hasJoined else {
+            if possiblyOn < configuration.exitM {
+                hasJoined = true
+                state = .onRoute
+            } else {
+                state = .approaching
+            }
+            return Update(state: state)
+        }
+
         if certainlyOff > configuration.enterM {
             if suspectSince == nil {
                 suspectSince = time
                 suspectAtRouteM = match.routeDistanceM
+                suspectAtLat = fixLat
+                suspectAtLng = fixLng
                 if state != .offRoute { state = .suspect }
             }
             let heldFor = time.timeIntervalSince(suspectSince ?? time)
-            let movedM = abs(match.routeDistanceM - (suspectAtRouteM ?? match.routeDistanceM))
+            // Travel since the suspicion began, measured on the ground. It used
+            // to be progress *along the route*, which is the one thing a walker
+            // heading straight away from the line does not make: walking off at
+            // a right angle, the projection hardly moves, so the alert waited
+            // for the 225 m no-travel-needed limit — 240 m and three minutes.
+            let movedM: Double
+            if let fixLat, let fixLng, let fromLat = suspectAtLat, let fromLng = suspectAtLng {
+                movedM = ActivityJournal.haversine(fromLat, fromLng, fixLat, fixLng)
+            } else {
+                movedM = abs(match.routeDistanceM - (suspectAtRouteM ?? match.routeDistanceM))
+            }
             // Time, plus either travel or a deviation too large to be drift.
             // Travel alone was the original rule and it left someone parked
             // 400 m off the line permanently on "possibly off route" — the
@@ -236,6 +308,8 @@ public struct OffRouteMonitor: Sendable {
         } else if possiblyOn < configuration.exitM {
             suspectSince = nil
             suspectAtRouteM = nil
+            suspectAtLat = nil
+            suspectAtLng = nil
             let returned = previous == .offRoute
             state = .onRoute
             return Update(state: state, didEnterOffRoute: false, didReturnToRoute: returned)
@@ -251,7 +325,15 @@ public struct OffRouteMonitor: Sendable {
             // sustain timer. That is intended: prolonged marginal wandering is
             // itself evidence of a wrong turn, and only a confident return to
             // the line should wipe the slate.
-            if state == .acquiring || state == .degraded || state == .noFix { state = .onRoute }
+            //
+            // Coming out of a state that held no judgement — no fix yet, weak
+            // signal, no fix at all — the band must not default to "on route".
+            // It did: on the replayed walk the signal came back with the walker
+            // 83–88 m off the line, and the screen said "on route" for a minute.
+            // Use the raw distance to pick the honest side of the band.
+            if state == .acquiring || state == .degraded || state == .noFix || state == .approaching {
+                state = match.offsetM > configuration.enterM ? .suspect : .onRoute
+            }
         }
 
         return Update(state: state, didEnterOffRoute: false, didReturnToRoute: false)

@@ -21,6 +21,8 @@ protocol TrailNotifier {
     func notifyOffRoute()
     /// The GPS has been lost for long enough to report. Fired once per loss.
     func notifyNoFix()
+    /// On the line but walking it backwards. Fired once per episode.
+    func notifyWrongWay()
 }
 
 /// Delivers through `UNUserNotificationCenter`.
@@ -51,6 +53,14 @@ final class SystemNotifier: TrailNotifier {
             id: "no-fix",
             title: "No GPS fix",
             body: "The phone has lost GPS. Your position is unknown until it returns."
+        )
+    }
+
+    func notifyWrongWay() {
+        post(
+            id: "wrong-way",
+            title: "Walking against the route",
+            body: "You are on the route but heading back the way it came."
         )
     }
 

@@ -82,6 +82,10 @@ public final class RecordingSession {
         public let distanceToNextCheckpointM: Double?
         public let fixCount: Int
         public let rejectedFixCount: Int
+        /// On the line but moving back along it, for long enough to mean it.
+        public var isWrongWay: Bool = false
+        /// Set on the transition into wrong-way — the one moment to notify.
+        public var shouldAlertWrongWay: Bool = false
     }
 
     public enum State: String, Sendable {
@@ -125,6 +129,23 @@ public final class RecordingSession {
     /// the monitor's last *usable* fix: poor fixes still prove the receiver is
     /// alive, which is what decides whether silence needs a probe.
     private var lastFixAt: Date?
+    /// The walker has reached the end of the route. Leaving it after that is
+    /// going home, not getting lost.
+    private var reachedFinish = false
+    /// Wrong-way tracking: the furthest route point reached on the line, and —
+    /// once walking back from it — the nearest point of the retreat.
+    private var wrongWayAnchorM: Double?
+    private var wrongWayLowM: Double = 0
+    private var wrongWay = false
+
+    /// How close to the end of the route counts as having arrived.
+    static let finishZoneM = 50.0
+    /// How far back along the line before it is worth saying so. About two
+    /// minutes at a walk — enough that a few steps back for a photo, or a
+    /// switchback the matcher briefly reads backwards, never trip it.
+    static let wrongWayAfterM = 150.0
+    /// Forward progress that ends a wrong-way episode: they have turned round.
+    static let wrongWayClearM = 30.0
     private let recoveredFromCrash: Bool
 
     // MARK: - Lifecycle
@@ -239,6 +260,9 @@ public final class RecordingSession {
         if let cursor {
             walkedM = cursor.walkedM
             lastUsableFix = cursor.lastUsableFix
+            if cursor.joined == true { monitor.markJoined() }
+            reachedFinish = cursor.reachedFinish ?? false
+            wrongWayAnchorM = cursor.acceptedRouteM
             if let routeM = cursor.acceptedRouteM, let last = cursor.lastUsableFix {
                 matcher.seed(routeDistanceM: routeM, at: last.t, lat: last.lat, lng: last.lng)
             }
@@ -319,7 +343,9 @@ public final class RecordingSession {
             && (bearing ?? -1) >= 0
 
         let match = matcher.match(fix)
-        let update = monitor.update(match: match, accuracyM: horizontalAccuracyM, at: time)
+        let update = monitor.update(
+            match: match, accuracyM: horizontalAccuracyM, at: time, fixLat: fix.lat, fixLng: fix.lng
+        )
 
         // A fix too poor to use says nothing new about where the walker is, so
         // it must not move what the screen shows. It used to: one 70 m fix
@@ -347,11 +373,32 @@ public final class RecordingSession {
                 nextCheckpoint: last.nextCheckpoint,
                 distanceToNextCheckpointM: last.distanceToNextCheckpointM,
                 fixCount: totalFixes,
-                rejectedFixCount: rejectedFixes
+                rejectedFixCount: rejectedFixes,
+                isWrongWay: last.isWrongWay
             )
             self.progress = carried
             return carried
         }
+
+        // Arrived: on the line, within the last stretch of the route.
+        if !reachedFinish,
+           match.confidence == .tracking || match.confidence == .ambiguous,
+           match.offsetM <= monitor.configuration.exitM,
+           match.routeDistanceM >= index.totalM - Self.finishZoneM {
+            reachedFinish = true
+        }
+        // After the finish, walking away is going home. On the 12 October walk
+        // the walker crossed the line and carried on 143 m to the house; that
+        // stayed quiet only because off-route travel was then measured along
+        // the route, which cannot advance past its end. Measured on the ground
+        // now, it would have alerted — so the finish has to say so explicitly.
+        var state = update.state
+        var alertOffRoute = update.didEnterOffRoute
+        if reachedFinish, state == .suspect || state == .offRoute {
+            state = .finished
+            alertOffRoute = false
+        }
+        let enteredWrongWay = judgeWrongWay(match, onLine: state == .onRoute, moving: (speed ?? 1) >= WalkedDistance.stationarySpeedMPS)
 
         let next = package.checkpoints.first { Double($0.routeDistanceM) > match.routeDistanceM }
         let progress = Progress(
@@ -365,16 +412,55 @@ public final class RecordingSession {
             fixLng: fix.lng,
             courseDegrees: moving ? bearing : nil,
             confidence: match.confidence,
-            offRouteState: update.state,
-            shouldAlertOffRoute: update.didEnterOffRoute,
+            offRouteState: state,
+            shouldAlertOffRoute: alertOffRoute,
             shouldAlertNoFix: update.didEnterNoFix,
             nextCheckpoint: next,
             distanceToNextCheckpointM: next.map { Double($0.routeDistanceM) - match.routeDistanceM },
             fixCount: totalFixes,
-            rejectedFixCount: rejectedFixes
+            rejectedFixCount: rejectedFixes,
+            isWrongWay: wrongWay,
+            shouldAlertWrongWay: enteredWrongWay
         )
         self.progress = progress
         return progress
+    }
+
+    /// Walking the line the wrong way.
+    ///
+    /// The matcher already knew — every fix carried a negative progress — and
+    /// nothing used it: in the field scenario a walker set off back the way
+    /// they came after a break and the app said "on route" for 500 m. The
+    /// classic place to lose an hour is the junction after a rest, so it is
+    /// worth one notification. Only on the line, only while moving, and reset
+    /// by any jump or ambiguity, where "backwards" may be the matcher changing
+    /// its mind rather than the walker changing direction.
+    private func judgeWrongWay(_ match: RouteMatcher.Match, onLine: Bool, moving: Bool) -> Bool {
+        let here = match.routeDistanceM
+        guard !reachedFinish else { wrongWay = false; return false }
+        if match.confidence == .jumped || match.confidence == .ambiguous {
+            wrongWayAnchorM = here
+            wrongWay = false
+            return false
+        }
+        guard onLine, match.confidence == .tracking else { return false }
+        guard let anchor = wrongWayAnchorM else { wrongWayAnchorM = here; return false }
+
+        if wrongWay {
+            wrongWayLowM = min(wrongWayLowM, here)
+            if here - wrongWayLowM >= Self.wrongWayClearM {
+                wrongWay = false
+                wrongWayAnchorM = here
+            }
+            return false
+        }
+        if here > anchor { wrongWayAnchorM = here; return false }
+        if moving, anchor - here >= Self.wrongWayAfterM {
+            wrongWay = true
+            wrongWayLowM = here
+            return true
+        }
+        return false
     }
 
     /// How long without any fix before the silence is worth questioning.
@@ -427,7 +513,8 @@ public final class RecordingSession {
             nextCheckpoint: last.nextCheckpoint,
             distanceToNextCheckpointM: last.distanceToNextCheckpointM,
             fixCount: last.fixCount,
-            rejectedFixCount: last.rejectedFixCount
+            rejectedFixCount: last.rejectedFixCount,
+            isWrongWay: last.isWrongWay
         )
         self.progress = refreshed
         return refreshed
@@ -463,7 +550,9 @@ public final class RecordingSession {
             .init(
                 walkedM: walkedM,
                 acceptedRouteM: matcher.currentRouteDistanceM,
-                lastUsableFix: lastUsableFix
+                lastUsableFix: lastUsableFix,
+                joined: monitor.hasJoined,
+                reachedFinish: reachedFinish
             )
         )
     }
@@ -483,7 +572,7 @@ public final class RecordingSession {
         // The off-route judgement starts again — a deviation from before lunch
         // says nothing about now, and replaying it would alert about something
         // hours old.
-        monitor.reset()
+        monitor.resumeAfterPause()
 
         // The *position* is kept. This used to be reset too, on the reasoning
         // that a pause can be a lunch stop or a night in a refuge, so the old

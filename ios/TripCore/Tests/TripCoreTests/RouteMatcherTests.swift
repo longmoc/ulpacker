@@ -456,6 +456,15 @@ struct RouteMatcherTests {
 
     // MARK: - Off-route
 
+    /// A monitor that has seen the walker on the line, as every walk past its
+    /// first fix has. Before that, distance from the route is approach, not
+    /// deviation, and these tests are about deviation.
+    static func joinedMonitor() -> OffRouteMonitor {
+        var monitor = OffRouteMonitor()
+        _ = monitor.update(match: onRouteMatch(offsetM: 0), accuracyM: 5, at: Date(timeIntervalSince1970: -600))
+        return monitor
+    }
+
     static func onRouteMatch(offsetM: Double, routeM: Double = 0) -> RouteMatcher.Match {
         RouteMatcher.Match(
             routeDistanceM: routeM,
@@ -469,7 +478,7 @@ struct RouteMatcherTests {
     }
 
     @Test func doesNotAlertOnASingleBadFix() {
-        var monitor = OffRouteMonitor()
+        var monitor = Self.joinedMonitor()
         let start = Date(timeIntervalSince1970: 1_700_000_000)
 
         let update = monitor.update(match: Self.onRouteMatch(offsetM: 300), accuracyM: 8, at: start)
@@ -479,7 +488,7 @@ struct RouteMatcherTests {
     }
 
     @Test func alertsOnceTheDeviationPersistsInTimeAndDistance() {
-        var monitor = OffRouteMonitor()
+        var monitor = Self.joinedMonitor()
         let start = Date(timeIntervalSince1970: 1_700_000_000)
 
         _ = monitor.update(match: Self.onRouteMatch(offsetM: 300, routeM: 1000), accuracyM: 8, at: start)
@@ -493,7 +502,7 @@ struct RouteMatcherTests {
     }
 
     @Test func alertsOnlyOnceForOneDeparture() {
-        var monitor = OffRouteMonitor()
+        var monitor = Self.joinedMonitor()
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         _ = monitor.update(match: Self.onRouteMatch(offsetM: 300, routeM: 1000), accuracyM: 8, at: start)
         _ = monitor.update(
@@ -513,7 +522,7 @@ struct RouteMatcherTests {
     }
 
     @Test func doesNotAlertWhenTheFixIsTooVagueToBeSure() {
-        var monitor = OffRouteMonitor()
+        var monitor = Self.joinedMonitor()
         let start = Date(timeIntervalSince1970: 1_700_000_000)
 
         // 90 m off with 60 m of error: consistent with standing on the path
@@ -528,7 +537,7 @@ struct RouteMatcherTests {
     }
 
     @Test func doesNotAlertForAStationaryPhoneDrifting() {
-        var monitor = OffRouteMonitor()
+        var monitor = Self.joinedMonitor()
         let start = Date(timeIntervalSince1970: 1_700_000_000)
 
         // Ten minutes of a wandering fix while route distance barely moves —
@@ -554,7 +563,7 @@ struct RouteMatcherTests {
         // "not really off route" — but stopping to look at the map is exactly
         // what someone does once they realise they are lost, and that is the
         // moment the alert is worth most.
-        var monitor = OffRouteMonitor()
+        var monitor = Self.joinedMonitor()
         let start = Date(timeIntervalSince1970: 1_700_000_000)
 
         var last = OffRouteMonitor.Update(state: .acquiring, didEnterOffRoute: false, didReturnToRoute: false)
@@ -573,7 +582,7 @@ struct RouteMatcherTests {
         // The counterweight, and why the distance condition existed: a fix
         // wandering tens of metres beside the path must not alert, however long
         // it wanders.
-        var monitor = OffRouteMonitor()
+        var monitor = Self.joinedMonitor()
         let start = Date(timeIntervalSince1970: 1_700_000_000)
 
         var last = OffRouteMonitor.Update(state: .acquiring, didEnterOffRoute: false, didReturnToRoute: false)
@@ -589,7 +598,7 @@ struct RouteMatcherTests {
     }
 
     @Test func clearsOnlyWellInsideTheThreshold() {
-        var monitor = OffRouteMonitor()
+        var monitor = Self.joinedMonitor()
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         _ = monitor.update(match: Self.onRouteMatch(offsetM: 300, routeM: 1000), accuracyM: 8, at: start)
         _ = monitor.update(
@@ -617,7 +626,7 @@ struct RouteMatcherTests {
     }
 
     @Test func reportsLostSignalInsteadOfAssumingOnRoute() {
-        var monitor = OffRouteMonitor()
+        var monitor = Self.joinedMonitor()
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         _ = monitor.update(match: Self.onRouteMatch(offsetM: 5), accuracyM: 8, at: start)
 
