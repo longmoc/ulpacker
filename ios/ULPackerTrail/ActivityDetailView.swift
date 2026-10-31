@@ -200,13 +200,20 @@ private struct Replay {
         return CLLocationCoordinate2D(latitude: fixes[i].lat, longitude: fixes[i].lng)
     }
 
-    /// The receiver's course while moving, as the live screen uses it; a plain
-    /// dot when standing still, where a course means nothing.
+    /// Which way the walker was heading at a fix: the receiver's own course
+    /// while moving, as the live screen uses it. Some fixes carry no course —
+    /// the first few of a walk, or as the signal settles — and there the step
+    /// from the previous fix stands in, if it is long enough to have a
+    /// direction. A plain dot when standing still, where a heading means
+    /// nothing.
     func course(at i: Int) -> Double? {
-        guard fixes.indices.contains(i),
-              let speed = fixes[i].speed, speed >= WalkedDistance.stationarySpeedMPS,
-              let bearing = fixes[i].bearing, bearing >= 0
-        else { return nil }
-        return bearing
+        guard fixes.indices.contains(i) else { return nil }
+        let fix = fixes[i]
+        if let speed = fix.speed, speed >= 0, speed < WalkedDistance.stationarySpeedMPS { return nil }
+        if let bearing = fix.bearing, bearing >= 0, fix.speed != nil { return bearing }
+        guard i > 0 else { return nil }
+        let previous = fixes[i - 1]
+        guard ActivityJournal.haversine(previous.lat, previous.lng, fix.lat, fix.lng) >= 5 else { return nil }
+        return TripPackage.bearing(fromLat: previous.lat, fromLng: previous.lng, toLat: fix.lat, toLng: fix.lng)
     }
 }

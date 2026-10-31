@@ -1044,7 +1044,7 @@ struct RouteMapView: UIViewRepresentable {
 
         /// A chevron pointing along the line, drawn rather than shipped so it
         /// stays crisp at any scale and needs no asset catalogue.
-        private static func arrowImage() -> UIImage {
+        private static func arrowImage(colour: UIColor = .brandOnMap) -> UIImage {
             let size = CGSize(width: 24, height: 24)
             return UIGraphicsImageRenderer(size: size).image { _ in
                 let path = UIBezierPath()
@@ -1057,7 +1057,7 @@ struct RouteMapView: UIViewRepresentable {
                 UIColor.white.setStroke()
                 path.stroke()
                 path.lineWidth = 2
-                UIColor.brandOnMap.setStroke()
+                colour.setStroke()
                 path.stroke()
             }
         }
@@ -1278,6 +1278,20 @@ struct RouteMapView: UIViewRepresentable {
             line.lineCap = NSExpression(forConstantValue: "round")
             line.lineJoin = NSExpression(forConstantValue: "round")
             style.addLayer(line)
+
+            // Which way the walk went, along its whole length. The polylines
+            // run in time order, so the line's own direction is the direction
+            // of travel — no attribute needed, which keeps this to constant
+            // paint like everything else on a shape source.
+            style.setImage(Self.arrowImage(colour: .systemOrange), forName: "recorded-arrow")
+            let arrows = MLNSymbolStyleLayer(identifier: "recorded-track-arrows", source: source)
+            arrows.iconImageName = NSExpression(forConstantValue: "recorded-arrow")
+            arrows.symbolPlacement = NSExpression(forConstantValue: "line")
+            arrows.symbolSpacing = NSExpression(forConstantValue: 80)
+            arrows.iconAllowsOverlap = NSExpression(forConstantValue: false)
+            arrows.iconRotationAlignment = NSExpression(forConstantValue: "map")
+            arrows.iconScale = Self.zoomStops([10: 0.5, 14: 0.8, 16: 1.1])
+            style.addLayer(arrows)
         }
 
         /// Frame the recorded walk. Returns false when there is none, so the
