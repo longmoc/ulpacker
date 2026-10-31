@@ -105,6 +105,8 @@ private struct TripRow: View {
 struct TripDetailView: View {
     let package: TripPackage
     @State private var store = ActivityStore()
+    @Environment(ActiveSessionCoordinator.self) private var coordinator
+    @State private var showing3D = false
 
     var body: some View {
         List {
@@ -137,6 +139,20 @@ struct TripDetailView: View {
                 }
             }
 
+            // Looking at the route in 3D streams from Apple's servers, so it is
+            // for planning at home, not for the trail: closed while a walk is
+            // recording or paused, and nothing loads until it is opened.
+            Section {
+                Button { showing3D = true } label: {
+                    Label("3D overview", systemImage: "mountain.2")
+                }
+                .disabled(coordinator.recorder?.isActive == true)
+            } footer: {
+                Text(coordinator.recorder?.isActive == true
+                     ? "Available after the walk is finished."
+                     : "Uses Apple Maps online. Nothing is downloaded until you open it.")
+            }
+
             if let report = store.batteryRate(for: package) {
                 BatteryForecastView(package: package, report: report)
             }
@@ -167,6 +183,11 @@ struct TripDetailView: View {
         .navigationTitle(package.trip.name)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { store.reload() }
+        .fullScreenCover(isPresented: $showing3D) { Overview3DView.preview(of: package) }
+        #if DEBUG
+        // Screenshot runs cannot tap: open the 3D view directly.
+        .onAppear { if ProcessInfo.processInfo.arguments.contains("-uiTestOpen3D") { showing3D = true } }
+        #endif
     }
 
 }

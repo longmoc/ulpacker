@@ -23,6 +23,8 @@ struct ActivityDetailView: View {
     /// The exported file, written once on appear. `ShareLink` shares a real file
     /// so the sheet offers a named `.gpx`, not a blob of text.
     @State private var gpxURL: URL?
+    @Environment(ActiveSessionCoordinator.self) private var coordinator
+    @State private var showing3D = false
 
     init(package: TripPackage, activity: ActivityPackage) {
         self.package = package
@@ -50,6 +52,29 @@ struct ActivityDetailView: View {
         }
         .navigationTitle("Walk")
         .navigationBarTitleDisplayMode(.inline)
+        // 3D streams from Apple, so it is for looking back at home: unavailable
+        // while any walk is recording or paused, and nothing loads until tapped.
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showing3D = true } label: {
+                    Label("3D", systemImage: "mountain.2")
+                }
+                .disabled(replay.fixes.count < 2 || coordinator.recorder?.isActive == true)
+            }
+        }
+        .fullScreenCover(isPresented: $showing3D) {
+            Overview3DView(
+                title: activity.startedAt.formatted(date: .abbreviated, time: .shortened),
+                route: package.plannedRoute.segments.flatMap { $0.points }
+                    .map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) },
+                track: replay.segments,
+                stretches: [.init(id: "walk", title: "This walk", path: replay.segments.flatMap { $0 })]
+            )
+        }
+        #if DEBUG
+        // Screenshot runs cannot tap: open the 3D view directly.
+        .onAppear { if ProcessInfo.processInfo.arguments.contains("-uiTestOpen3D") { showing3D = true } }
+        #endif
         .onAppear { if gpxURL == nil { gpxURL = writeGPX() } }
     }
 
