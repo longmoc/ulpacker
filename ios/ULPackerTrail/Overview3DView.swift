@@ -70,12 +70,13 @@ struct Overview3DView: View {
     /// centre instead put it wherever the camera cut a corner or swung in from
     /// the framing view.
     @State private var markerCoordinate: CLLocationCoordinate2D?
-    /// The part of the stretch flown so far, drawn bold over the rest: whole
-    /// kilometres, which once drawn never change, and the short tail behind
-    /// the pen tip, the only part redrawn as the flight goes on. Redrawing the
-    /// whole flown line instead more than doubled the flight's CPU.
-    @State private var flownKilometres: [[CLLocationCoordinate2D]] = []
-    @State private var flownTail: [CLLocationCoordinate2D] = []
+    /// The part of the stretch flown so far, drawn bold over the rest, and
+    /// redrawn every 50 m. It cannot follow the pen tip smoothly however often
+    /// it is redrawn: filmed frame by frame, Apple lays a changed line onto
+    /// its 3D terrain only every 0.4 s or so, even when handed a new one every
+    /// frame. One line from the start, not pieces: each piece's white halo
+    /// showed as a band across the joint, whatever order they were drawn in.
+    @State private var flown: [CLLocationCoordinate2D] = []
     @State private var flownTo = 0.0
     @State private var flightClock: FlightClock?
     /// Where the marker is actually drawn, in screen points: see `steer`.
@@ -154,16 +155,12 @@ struct Overview3DView: View {
                             .stroke(Self.trackColour.opacity(flying ? 0.4 : 1), style: StrokeStyle(lineWidth: flying ? 4 : 5, lineCap: .round, lineJoin: .round))
                     }
                 }
-                if flying {
-                    ForEach(Array((flownKilometres + [flownTail]).enumerated()), id: \.offset) { _, piece in
-                        if piece.count >= 2 {
-                            MapPolyline(coordinates: piece)
-                                .stroke(.white, style: StrokeStyle(lineWidth: 11, lineCap: .round, lineJoin: .round))
-                            MapPolyline(coordinates: piece)
-                                .stroke(track.isEmpty ? Self.routeColour : Self.trackColour,
-                                        style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
-                        }
-                    }
+                if flying, flown.count >= 2 {
+                    MapPolyline(coordinates: flown)
+                        .stroke(.white, style: StrokeStyle(lineWidth: 11, lineCap: .round, lineJoin: .round))
+                    MapPolyline(coordinates: flown)
+                        .stroke(track.isEmpty ? Self.routeColour : Self.trackColour,
+                                style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
                 }
                 // Static arrows on the line say which way. Turned against the
                 // camera's heading, because SwiftUI draws them upright.
@@ -204,14 +201,8 @@ struct Overview3DView: View {
                 if var clock = flightClock {
                     let reached = clock.reached(at: .now)
                     markerCoordinate = clock.point(atDistance: reached)
-                    // Every 50 m: a step of a few points on screen, hidden
-                    // under the pen tip.
-                    if reached - flownTo >= 50 || reached >= clock.length {
-                        let done = Double(flownKilometres.count + 1) * 1_000
-                        if reached >= done {
-                            flownKilometres.append(clock.piece(from: done - 1_000, to: done))
-                        }
-                        flownTail = clock.piece(from: Double(flownKilometres.count) * 1_000, to: reached)
+                    if reached - flownTo >= 50 || (reached >= clock.length && flownTo < clock.length) {
+                        flown = clock.piece(from: 0, to: reached)
                         flownTo = reached
                     }
                     if let walker = walkerOnScreen, let centre = proxy.convert(context.camera.centerCoordinate, to: .global) {
@@ -556,8 +547,7 @@ struct Overview3DView: View {
         flight = nil
         flightClock = nil
         markerCoordinate = nil
-        flownKilometres = []
-        flownTail = []
+        flown = []
         flownTo = 0
         walkerOnScreen = nil
     }
