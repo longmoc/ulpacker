@@ -49,6 +49,22 @@ struct Overview3DView: View {
 
     private var current: Stretch? { selection ?? stretches.first }
 
+    /// The longest stretch worth flying. A flight lasts at most a minute, so
+    /// beyond this the camera outruns Apple's terrain — the first try over the
+    /// whole Tour du Mont Blanc reached a grey grid a third of the way round —
+    /// and streams a whole region's imagery for the privilege. One day of a
+    /// long trip fits comfortably; the whole trip is framed, not flown.
+    static let maxFlightM = 30_000.0
+
+    private var currentLengthM: Double {
+        guard let path = current?.path else { return 0 }
+        return Self.length(of: path)
+    }
+
+    private var canFly: Bool {
+        (current?.path.count ?? 0) >= 2 && currentLengthM <= Self.maxFlightM
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             Map(position: $position) {
@@ -85,7 +101,12 @@ struct Overview3DView: View {
             frame(current)
             watchConnection()
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-uiTestFly") {
+            let args = ProcessInfo.processInfo.arguments
+            if let i = args.firstIndex(of: "-uiTestStretch"), i + 1 < args.count,
+               let n = Int(args[i + 1]), stretches.indices.contains(n) {
+                selection = stretches[n]
+            }
+            if args.contains("-uiTestFly") {
                 Task { try? await Task.sleep(for: .seconds(3)); startFlight() }
             }
             #endif
@@ -154,17 +175,23 @@ struct Overview3DView: View {
             } else {
                 Spacer()
             }
-            Button {
-                flight == nil ? startFlight() : stopFlight()
-            } label: {
-                Label(flight == nil ? "Fly along" : "Stop", systemImage: flight == nil ? "play.fill" : "stop.fill")
-                    .font(.headline)
-                    .padding(.horizontal, 18)
-                    .frame(height: 44)
+            if flight == nil, !canFly, currentLengthM > Self.maxFlightM {
+                Text("Pick a day to fly along")
+                    .font(.footnote)
+                    .foregroundStyle(Color.subtle)
+            } else {
+                Button {
+                    flight == nil ? startFlight() : stopFlight()
+                } label: {
+                    Label(flight == nil ? "Fly along" : "Stop", systemImage: flight == nil ? "play.fill" : "stop.fill")
+                        .font(.headline)
+                        .padding(.horizontal, 18)
+                        .frame(height: 44)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.brand)
+                .disabled(flight == nil && !canFly)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.brand)
-            .disabled((current?.path.count ?? 0) < 2)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -198,14 +225,15 @@ struct Overview3DView: View {
     /// animated move between each, heading where the path goes next. A long
     /// day is covered faster than a short walk, so either takes under a minute.
     private func startFlight() {
-        guard let path = current?.path, path.count >= 2 else { return }
+        guard canFly, let path = current?.path else { return }
         let samples = Self.resample(path, count: 90)
-        let length = zip(path, path.dropFirst()).reduce(0.0) {
-            $0 + ActivityJournal.haversine($1.0.latitude, $1.0.longitude, $1.1.latitude, $1.1.longitude)
-        }
+        let length = Self.length(of: path)
         let seconds = min(60, max(20, length / 120))
         let hop = seconds / Double(samples.count)
-        let altitude = min(4_000, max(700, length / 6))
+        // Higher and less steep than the framing view: in the Alps the ridge
+        // beside the path stood between a 65° camera and the line it was
+        // following, and the route vanished behind it.
+        let altitude = min(3_500, max(900, length / 5))
 
         flight = Task { @MainActor in
             var heading = Self.bearing(samples[0], samples[min(3, samples.count - 1)])
@@ -216,7 +244,7 @@ struct Overview3DView: View {
                     heading = Self.turn(from: heading, to: Self.bearing(samples[i], ahead), by: 25)
                 }
                 withAnimation(.linear(duration: hop)) {
-                    position = .camera(MapCamera(centerCoordinate: samples[i], distance: altitude, heading: heading, pitch: 65))
+                    position = .camera(MapCamera(centerCoordinate: samples[i], distance: altitude, heading: heading, pitch: 52))
                 }
                 try? await Task.sleep(for: .seconds(hop))
             }
@@ -227,6 +255,12 @@ struct Overview3DView: View {
     private func stopFlight() {
         flight?.cancel()
         flight = nil
+    }
+
+    private static func length(of path: [CLLocationCoordinate2D]) -> Double {
+        zip(path, path.dropFirst()).reduce(0.0) {
+            $0 + ActivityJournal.haversine($1.0.latitude, $1.0.longitude, $1.1.latitude, $1.1.longitude)
+        }
     }
 
     private static func resample(_ path: [CLLocationCoordinate2D], count: Int) -> [CLLocationCoordinate2D] {
@@ -277,7 +311,7 @@ extension Overview3DView {
                 index.position(atRouteDistance: start + (end - start) * Double(i) / Double(steps))
                     .map { CLLocationCoordinate2D(latitude: $0.lat, longitude: $0.lng) }
             }
-            stretches.append(Stretch(id: "day-\(day.index)", title: "Day \(number): \(day.startName) → \(day.endName)", path: path))
+            stretches.append(Stretch(id: "day-\(day.index)", title: "\(number) · " + Itinerary.Entry.walking(day, number: number).title, path: path))
         }
         return Overview3DView(title: package.trip.name, route: route, stretches: stretches)
     }
