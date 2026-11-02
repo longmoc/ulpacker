@@ -21,6 +21,8 @@ import TripCore
 ///   * the flyover runs only when asked, and stops on leaving the screen or the
 ///     app going to the background;
 ///   * without a connection it says so instead of showing an empty globe.
+///
+/// The map itself is `Overview3DMap`; this is the screen around it.
 struct Overview3DView: View {
     struct Stretch: Identifiable, Hashable {
         let id: String
@@ -41,62 +43,17 @@ struct Overview3DView: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @State private var map = Overview3DMap()
     @State private var selection: Stretch?
-    @State private var position: MapCameraPosition = .automatic
-    @State private var flight: Task<Void, Never>?
     @State private var online = true
     @State private var monitor: NWPathMonitor?
-    /// The camera's heading, so the direction chevrons — drawn upright by
-    /// SwiftUI — can be turned to point along the line on the map.
-    @State private var cameraHeading: Double = 0
-    /// Built once per stretch, not per redraw — recomputing over an
-    /// 8,500-point route on every camera move would be waste.
-    @State private var chevronList: [Chevron] = []
-    /// The framing camera, re-applied once the map is ready. Measured: a
-    /// camera set before the map has loaded is clamped to 30–35° whatever was
-    /// asked for, so the angle this screen requested on opening had never been
-    /// used — which is why tilting felt so limited.
-    @State private var pendingCamera: MapCamera?
-    @State private var currentPitch: Double = 0
-    /// The re-asks after a clamp, and the camera they ask for. Cancelled the
-    /// moment the camera goes anywhere they did not send it: a re-ask landing
-    /// mid-gesture snapped the walker's own tilt or pan back to the framing.
-    @State private var retry: Task<Void, Never>?
-    @State private var retryCamera: MapCamera?
-    /// Where the flight's pen tip sits, on the path itself: worked out from
-    /// the flight's clock on every frame the camera moves — and during a
-    /// flight it always moves — so it glides at an even pace along the line.
-    /// The camera follows it (see `FlightClock.lift`). Taking the camera's
-    /// centre instead put it wherever the camera cut a corner or swung in from
-    /// the framing view.
-    @State private var markerCoordinate: CLLocationCoordinate2D?
-    /// The part of the stretch flown so far, drawn bold over the rest, and
-    /// redrawn every 50 m. It cannot follow the pen tip smoothly however often
-    /// it is redrawn: filmed frame by frame, Apple lays a changed line onto
-    /// its 3D terrain only every 0.4 s or so, even when handed a new one every
-    /// frame. One line from the start, not pieces: each piece's white halo
-    /// showed as a band across the joint, whatever order they were drawn in.
-    @State private var flown: [CLLocationCoordinate2D] = []
-    @State private var flownTo = 0.0
-    @State private var flightClock: FlightClock?
-    /// Where the marker is actually drawn, in screen points: see `steer`.
-    @State private var walkerOnScreen: CGPoint?
-    /// The footer's height, so the map frames into the part of the screen
-    /// left visible: the map runs on under the footer, and without this it
-    /// centred a day on the whole screen and tucked its end out of sight.
+    /// The footer's height, given to the map as safe area so it frames into
+    /// the part of the screen left visible.
     @State private var footerHeight: CGFloat = 0
-
-    /// The app's own green, as on the 2D map; the white halo under it is what
-    /// lifts it off the satellite imagery, not a brighter colour.
-    private static let routeColour = Color(uiColor: .brandOnMap)
-    private static let trackColour = Color.orange
 
     private var current: Stretch? { selection ?? stretches.first }
 
-    private var flying: Bool { flight != nil }
-
-    /// A single day picked out of a planned trip. The rest of the trip then
-    /// steps back to a thin pale line, so the day reads at a glance.
+    /// A single day picked out of a planned trip.
     private var isPickedDay: Bool {
         track.isEmpty && current.map { $0.path.count >= 2 && $0.id != stretches.first?.id } == true
     }
@@ -119,143 +76,15 @@ struct Overview3DView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            MapReader { proxy in
-            Map(position: $position) {
-                // Every line: a solid colour line over a white halo that lifts
-                // it off the imagery. On a replay the plan steps back and the
-                // walk is the line in front; with one day picked, the rest of
-                // the trip steps back and the day is the line in front.
-                if route.count >= 2 {
-                    if isPickedDay {
-                        MapPolyline(coordinates: route)
-                            .stroke(.white.opacity(0.85), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                    } else {
-                        MapPolyline(coordinates: route)
-                            .stroke(.white.opacity(track.isEmpty ? 0.9 : 0.55),
-                                    style: StrokeStyle(lineWidth: track.isEmpty ? 9 : 6, lineCap: .round, lineJoin: .round))
-                        MapPolyline(coordinates: route)
-                            .stroke(Self.routeColour.opacity(track.isEmpty ? 1 : 0.6),
-                                    style: StrokeStyle(lineWidth: track.isEmpty ? 5 : 3, lineCap: .round, lineJoin: .round))
-                    }
-                }
-                // While flying, the line ahead fades back and the part flown
-                // is drawn in full over it, so the line itself shows how far
-                // the flight has got.
-                if isPickedDay, let day = current?.path {
-                    MapPolyline(coordinates: day)
-                        .stroke(.white.opacity(flying ? 0.5 : 1), style: StrokeStyle(lineWidth: flying ? 7 : 11, lineCap: .round, lineJoin: .round))
-                    MapPolyline(coordinates: day)
-                        .stroke(Self.routeColour.opacity(flying ? 0.4 : 1), style: StrokeStyle(lineWidth: flying ? 4 : 6, lineCap: .round, lineJoin: .round))
-                }
-                ForEach(Array(track.enumerated()), id: \.offset) { _, segment in
-                    if segment.count >= 2 {
-                        MapPolyline(coordinates: segment)
-                            .stroke(.white.opacity(flying ? 0.5 : 0.9), style: StrokeStyle(lineWidth: flying ? 7 : 9, lineCap: .round, lineJoin: .round))
-                        MapPolyline(coordinates: segment)
-                            .stroke(Self.trackColour.opacity(flying ? 0.4 : 1), style: StrokeStyle(lineWidth: flying ? 4 : 5, lineCap: .round, lineJoin: .round))
-                    }
-                }
-                if flying, flown.count >= 2 {
-                    MapPolyline(coordinates: flown)
-                        .stroke(.white, style: StrokeStyle(lineWidth: 11, lineCap: .round, lineJoin: .round))
-                    MapPolyline(coordinates: flown)
-                        .stroke(track.isEmpty ? Self.routeColour : Self.trackColour,
-                                style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
-                }
-                // Static arrows on the line say which way. Turned against the
-                // camera's heading, because SwiftUI draws them upright.
-                ForEach(chevronList) { chevron in
-                    Annotation("", coordinate: chevron.coordinate, anchor: .center) {
-                        Self.chevron()
-                            .rotationEffect(.degrees(chevron.bearing - cameraHeading))
-                    }
-                    .annotationTitles(.hidden)
-                }
-                if let first = current?.path.first {
-                    Annotation("Start", coordinate: first) { Self.endpoint("figure.walk", fill: Self.routeColour) }
-                }
-                if let last = current?.path.last {
-                    Annotation("End", coordinate: last) { Self.endpoint("flag.checkered", fill: .black) }
-                }
-                // The tip of the pen drawing the flown line. Moved every frame,
-                // where the line behind it is redrawn only every few tens of
-                // metres, so it covers the line's stepping end; and where the
-                // map draws it on the terrain is read back to steer the camera
-                // (see `FlightClock.lift`). An invisible probe was tried: the
-                // map reports no position for it.
-                if flying, let here = markerCoordinate {
-                    Annotation("", coordinate: here, anchor: .center) {
-                        Self.penTip(track.isEmpty ? Self.routeColour : Self.trackColour)
-                            .onGeometryChange(for: CGPoint.self) { g in
-                                let f = g.frame(in: .global)
-                                return CGPoint(x: f.midX, y: f.midY)
-                            } action: { walkerOnScreen = $0 }
-                    }
-                    .annotationTitles(.hidden)
-                }
-            }
-            .mapStyle(.hybrid(elevation: .realistic))
-            .onMapCameraChange(frequency: .continuous) { context in
-                cameraHeading = context.camera.heading
-                currentPitch = context.camera.pitch
-                if var clock = flightClock {
-                    let reached = clock.reached(at: .now)
-                    markerCoordinate = clock.point(atDistance: reached)
-                    if reached - flownTo >= 50 || (reached >= clock.length && flownTo < clock.length) {
-                        flown = clock.piece(from: 0, to: reached)
-                        flownTo = reached
-                    }
-                    if let walker = walkerOnScreen, let centre = proxy.convert(context.camera.centerCoordinate, to: .global) {
-                        clock.measure(walker: walker, centre: centre)
-                    }
-                    flightClock = clock
-                }
-                if let asked = retryCamera, Self.movedByHand(context.camera, from: asked) { stopRetry() }
-            }
-            .onMapCameraChange(frequency: .onEnd) { context in
-                // The map first echoes the requested camera, then clamps it as
-                // it finishes loading, and keeps clamping for a moment after.
-                // Once the clamp is seen, ask again a few times, further apart
-                // each time, until the angle holds. Only close in: beyond
-                // 2.5 km the clamp is Apple's real limit, and asking again
-                // achieves nothing but yanking the camera.
-                guard let camera = pendingCamera, context.camera.pitch < camera.pitch - 1 else { return }
-                pendingCamera = nil
-                currentPitch = context.camera.pitch
-                guard camera.distance <= Self.steepTiltM else { return }
-                retryCamera = camera
-                retry = Task { @MainActor in
-                    for (attempt, delay) in [0.5, 1.0, 2.0, 3.0].enumerated() {
-                        try? await Task.sleep(for: .seconds(delay))
-                        if Task.isCancelled || currentPitch >= camera.pitch - 1 || flight != nil { break }
-                        // A camera equal to the one already in `position` is
-                        // not a change as far as SwiftUI is concerned, so the
-                        // map is never told. Nudge the distance so it is.
-                        var again = camera
-                        again.distance *= 1 + 0.001 * Double(attempt + 1)
-                        withAnimation(.easeInOut(duration: 0.8)) { position = .camera(again) }
-                    }
-                    retryCamera = nil
-                    retry = nil
-                }
-            }
-            .mapControls {
-                MapCompass()
-                MapPitchToggle()
-            }
-            // Keep the map's own controls below the title bar, not in the
+            // The map's own controls sit below the title bar, not in the
             // status bar where the edge-to-edge map would put them.
-            .safeAreaPadding(.top, 56)
-            .safeAreaPadding(.bottom, footerHeight)
-            .ignoresSafeArea()
-            }
-
+            Overview3DMapView(map: map, insets: UIEdgeInsets(top: 56, left: 0, bottom: footerHeight, right: 0))
+                .ignoresSafeArea()
             header
         }
         .safeAreaInset(edge: .bottom) { footer }
         .onAppear {
-            refreshDirection()
-            frame(current)
+            show(animated: false)
             watchConnection()
             #if DEBUG
             let args = ProcessInfo.processInfo.arguments
@@ -269,19 +98,26 @@ struct Overview3DView: View {
             #endif
         }
         .onDisappear {
-            stopFlight()
-            stopRetry()
+            map.stopFlight()
             monitor?.cancel()
             monitor = nil
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active { stopFlight() }
+            if phase != .active { map.stopFlight() }
         }
-        .onChange(of: selection) { _, stretch in
-            stopFlight()
-            refreshDirection()
-            frame(stretch)
+        .onChange(of: selection) {
+            show(animated: true)
         }
+    }
+
+    private func show(animated: Bool) {
+        map.show(.init(route: route, track: track, stretch: current, pickedDay: isPickedDay))
+        map.frame(current?.path ?? [], animated: animated)
+    }
+
+    private func startFlight() {
+        guard canFly, let path = current?.path else { return }
+        map.startFlight(along: path)
     }
 
     // MARK: - Chrome
@@ -304,7 +140,15 @@ struct Overview3DView: View {
                     .padding(.vertical, 8)
                     .background(.regularMaterial, in: Capsule())
                 Spacer()
-                Color.clear.frame(width: 40, height: 40)
+                // UIKit's map has no 2D/3D control on iOS, so this one stands
+                // in for SwiftUI's.
+                Button { map.toggleTilt() } label: {
+                    Text(map.tilted ? "2D" : "3D")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(width: 40, height: 40)
+                        .background(.regularMaterial, in: Circle())
+                }
+                .accessibilityLabel(map.tilted ? "Show flat" : "Show in 3D")
             }
             if !online {
                 Label("No connection — Apple's 3D map needs one", systemImage: "wifi.slash")
@@ -334,22 +178,22 @@ struct Overview3DView: View {
             } else {
                 Spacer()
             }
-            if flight == nil, !canFly, currentLengthM > Self.maxFlightM {
+            if !map.flying, !canFly, currentLengthM > Self.maxFlightM {
                 Text("Pick a day to fly along")
                     .font(.footnote)
                     .foregroundStyle(Color.subtle)
             } else {
                 Button {
-                    flight == nil ? startFlight() : stopFlight()
+                    map.flying ? map.stopFlight() : startFlight()
                 } label: {
-                    Label(flight == nil ? "Fly along" : "Stop", systemImage: flight == nil ? "play.fill" : "stop.fill")
+                    Label(map.flying ? "Stop" : "Fly along", systemImage: map.flying ? "stop.fill" : "play.fill")
                         .font(.headline)
                         .padding(.horizontal, 18)
                         .frame(height: 44)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.brand)
-                .disabled(flight == nil && !canFly)
+                .disabled(!map.flying && !canFly)
             }
         }
         .padding(.horizontal, 16)
@@ -360,26 +204,16 @@ struct Overview3DView: View {
 
     // MARK: - Direction
 
-    struct Chevron: Identifiable {
+    struct Chevron {
         let id: Int
         let coordinate: CLLocationCoordinate2D
         let bearing: Double
     }
 
-    /// What carries the direction: the walk on a replay, the chosen stretch on
-    /// a preview.
-    private var directedPath: [CLLocationCoordinate2D] {
-        track.isEmpty ? (current?.path ?? []) : track.flatMap { $0 }
-    }
-
-    private func refreshDirection() {
-        chevronList = Self.chevrons(along: directedPath)
-    }
-
     /// Arrows spaced evenly along a path, about fourteen whatever its length:
     /// enough to read the direction anywhere along it, few enough not to turn
     /// an 800 m walk into a row of arrows.
-    private static func chevrons(along path: [CLLocationCoordinate2D]) -> [Chevron] {
+    static func chevrons(along path: [CLLocationCoordinate2D]) -> [Chevron] {
         guard path.count >= 2 else { return [] }
         let total = Self.length(of: path)
         guard total > 0 else { return [] }
@@ -406,7 +240,7 @@ struct Overview3DView: View {
     /// A white chevron sitting on the line, like the arrows on the 2D map: it
     /// reads against the coloured line, and its shadow against the imagery
     /// where the line bends away beneath it.
-    private static func chevron() -> some View {
+    static func chevron() -> some View {
         Image(systemName: "chevron.up")
             .font(.system(size: 11, weight: .heavy))
             .foregroundStyle(.white)
@@ -415,7 +249,7 @@ struct Overview3DView: View {
 
     /// Start and end of the stretch: big enough to find from a whole day
     /// away, and told apart by their symbol, not only their colour.
-    private static func endpoint(_ symbol: String, fill: Color) -> some View {
+    static func endpoint(_ symbol: String, fill: Color) -> some View {
         Image(systemName: symbol)
             .font(.system(size: 13, weight: .bold))
             .foregroundStyle(.white)
@@ -425,144 +259,15 @@ struct Overview3DView: View {
             .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
     }
 
-    private static func penTip(_ colour: Color) -> some View {
-        Circle()
-            .fill(.white)
-            .frame(width: 12, height: 12)
-            .overlay(Circle().stroke(colour, lineWidth: 3))
-            .shadow(color: .black.opacity(0.35), radius: 2)
-    }
+    // MARK: - Flight
 
-    // MARK: - Camera
-
-    /// Frame a stretch from an angle, so the relief reads at first sight.
-    ///
-    /// Apple caps the tilt by how far away the camera is — measured in this
-    /// view: 70° within about 1 km, 60° out to 2.5 km, 35° beyond 3 km. A
-    /// whole day fits only from far enough that 35° is all there is; pinching
-    /// in is what unlocks the steeper angles, and the cap follows the zoom.
-    private func frame(_ stretch: Stretch?) {
-        guard let path = stretch?.path, let first = path.first else { return }
-        var minLat = first.latitude, maxLat = first.latitude
-        var minLng = first.longitude, maxLng = first.longitude
-        for p in path {
-            minLat = min(minLat, p.latitude); maxLat = max(maxLat, p.latitude)
-            minLng = min(minLng, p.longitude); maxLng = max(maxLng, p.longitude)
-        }
-        let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLng + maxLng) / 2)
-        let span = ActivityJournal.haversine(minLat, minLng, maxLat, maxLng)
-        let camera = MapCamera(centerCoordinate: center, distance: max(1_200, span * 3), heading: 0, pitch: 60)
-        stopRetry()
-        position = .camera(camera)
-        pendingCamera = camera
-    }
-
-    /// The farthest the camera can be and still be allowed 60°.
-    static let steepTiltM = 2_500.0
-
-    private func stopRetry() {
-        retry?.cancel()
-        retry = nil
-        retryCamera = nil
-    }
-
-    /// A camera the re-asks did not produce: turned, panned or zoomed. The
-    /// clamp lowers the pitch and pulls the camera in by about 2% (measured),
-    /// and the re-asks nudge the distance by a fraction of a percent.
-    private static func movedByHand(_ camera: MapCamera, from asked: MapCamera) -> Bool {
-        var turn = abs(camera.heading - asked.heading).truncatingRemainder(dividingBy: 360)
-        if turn > 180 { turn = 360 - turn }
-        let shift = ActivityJournal.haversine(camera.centerCoordinate.latitude, camera.centerCoordinate.longitude,
-                                              asked.centerCoordinate.latitude, asked.centerCoordinate.longitude)
-        return turn > 1
-            || abs(camera.distance / asked.distance - 1) > 0.05
-            || shift > asked.distance * 0.01
-            || camera.pitch > asked.pitch + 1
-    }
-
-    /// Fly the camera along the stretch: a fixed number of hops with an
-    /// animated move between each, heading where the path goes next. A long
-    /// day is covered faster than a short walk, so either takes under a minute.
-    private func startFlight() {
-        guard canFly, let path = current?.path else { return }
-        stopRetry()
-        var clock = FlightClock(path: path)
-        let seconds = min(60, max(20, clock.length / 120))
-        clock.seconds = seconds
-        let hop = seconds / 90
-        // How far ahead the camera looks for its heading, and how fast it may
-        // turn: slower or further ahead, and on a bend the camera still faced
-        // the old way, carrying the line off to the side of the screen.
-        let lookAhead = clock.length / 50
-        // Kept within 2.4 km, where Apple allows 60°: higher than that the tilt
-        // is capped at 35° and the flight is little more than a moving plan
-        // view. 60° rather than steeper so the ridge beside the path does not
-        // stand between the camera and the line it is following.
-        let altitude = min(2_400, max(900, clock.length / 6))
-        let glide = 2.5
-        flightClock = clock
-        markerCoordinate = path[0]
-
-        flight = Task { @MainActor in
-            let start = path[0]
-            var heading = Self.bearing(start, clock.point(atDistance: lookAhead))
-            // Down to the start first, slowly, with the marker waiting there:
-            // in one short hop the map swooped in over the middle of the day
-            // and only then turned to the start.
-            withAnimation(.easeInOut(duration: glide)) {
-                position = .camera(MapCamera(centerCoordinate: start, distance: altitude, heading: heading, pitch: 60))
-            }
-            try? await Task.sleep(for: .seconds(glide))
-            let startedAt = Date.now
-            flightClock?.startedAt = startedAt
-            // Each hop aims the camera at where the flight should be when the
-            // hop ends, read off the clock: a hop that runs late is made up by
-            // the next, rather than the flight slipping with every one.
-            while !Task.isCancelled {
-                let elapsed = Date.now.timeIntervalSince(startedAt) + hop
-                let d = clock.length * min(1, elapsed / seconds)
-                let here = clock.point(atDistance: d)
-                // Near the end there is nothing left to look ahead to; hold
-                // the heading rather than swing to north.
-                if d + lookAhead / 2 < clock.length {
-                    heading = Self.turn(from: heading, to: Self.bearing(here, clock.point(atDistance: d + lookAhead)), by: 45)
-                }
-                flightClock?.steer()
-                withAnimation(.linear(duration: hop)) {
-                    position = .camera(MapCamera(centerCoordinate: flightClock?.aim(at: here, heading: heading) ?? here,
-                                                 distance: altitude, heading: heading, pitch: 60))
-                }
-                try? await Task.sleep(for: .seconds(hop))
-                if elapsed >= seconds { break }
-            }
-            // The camera trails its last request; let it, and the marker with
-            // it, arrive at the end before the marker goes.
-            try? await Task.sleep(for: .seconds(glide))
-            if !Task.isCancelled { stopFlight() }
-        }
-    }
-
-    private func stopFlight() {
-        flight?.cancel()
-        flight = nil
-        flightClock = nil
-        markerCoordinate = nil
-        flown = []
-        flownTo = 0
-        walkerOnScreen = nil
-    }
-
-    /// A path measured along the ground, and where a flight along it has got
-    /// to at a given moment: nowhere past the start until it is under way,
-    /// then an even pace to the end.
+    /// A path measured along the ground, for a flight along it at an even
+    /// pace.
     struct FlightClock {
         let path: [CLLocationCoordinate2D]
         /// Distance from the start to each point of `path`.
         let along: [Double]
         var seconds = 1.0
-        /// Unset during the glide down to the start, when the marker waits
-        /// there.
-        var startedAt: Date?
 
         init(path: [CLLocationCoordinate2D]) {
             self.path = path
@@ -575,12 +280,6 @@ struct Overview3DView: View {
 
         var length: Double { along.last ?? 0 }
 
-        /// How far along the flight has got.
-        func reached(at date: Date) -> Double {
-            guard let startedAt else { return 0 }
-            return length * min(1, max(0, date.timeIntervalSince(startedAt) / seconds))
-        }
-
         /// The path between two distances along it, ending exactly at each.
         func piece(from start: Double, to end: Double) -> [CLLocationCoordinate2D] {
             guard end > start else { return [] }
@@ -589,51 +288,6 @@ struct Overview3DView: View {
             return [point(atDistance: start)] + inner + [point(atDistance: end)]
         }
 
-        /// How far beyond the walker, along the heading, the camera must be
-        /// aimed for the walker to show mid-screen. Two things push the walker
-        /// off centre, and neither can be worked out in advance:
-        ///
-        ///   * the map eases every move, so the camera trails what it is
-        ///     asked for — by about half a kilometre on a day's flight;
-        ///   * Apple centres a camera on flat ground at one fixed height while
-        ///     drawing the terrain, and the marker on it, at their real
-        ///     heights: in a valley below that height the walker sat low on the
-        ///     screen, on a col above it slid off the top. Which height it
-        ///     picks could not be pinned down — from sea level overshot, from
-        ///     the start's height overshot too.
-        ///
-        /// So it is measured: how far above the camera's centre on screen the
-        /// marker is actually drawn (`measure`), and the aim moved on by a
-        /// share of that on every hop (`steer`). Straight ahead along the
-        /// heading: aiming further along the path instead put the camera far
-        /// off to the side on a bend, and correcting sideways as well made it
-        /// swing from side to side.
-        private(set) var lift = 0.0
-        /// How far above the camera's centre the walker was last drawn, in
-        /// screen points; below it is negative.
-        private var lead = 0.0
-
-        /// Where to aim the camera to show the walker at `point`.
-        func aim(at point: CLLocationCoordinate2D, heading: Double) -> CLLocationCoordinate2D {
-            let r = heading * .pi / 180
-            return CLLocationCoordinate2D(
-                latitude: point.latitude + lift * cos(r) / 111_320,
-                longitude: point.longitude + lift * sin(r) / (111_320 * cos(point.latitude * .pi / 180)))
-        }
-
-        mutating func measure(walker: CGPoint, centre: CGPoint) {
-            guard startedAt != nil else { return }
-            lead = Double(centre.y - walker.y)
-        }
-
-        /// A share of the error each hop, not all of it: the camera answers
-        /// only a couple of seconds later, and a full correction every hop
-        /// would pile up and swing past.
-        mutating func steer() {
-            // Metres per screen point of error, per hop: about a sixth of
-            // what a point spans near the middle of the screen at this height.
-            lift = min(4_000, max(-4_000, lift + 1.5 * lead))
-        }
 
         /// The point of `path` at or just beyond `distance`, and how far
         /// towards it from the one before.
@@ -664,17 +318,8 @@ struct Overview3DView: View {
         }
     }
 
-    private static func bearing(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
+    static func bearing(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
         TripPackage.bearing(fromLat: a.latitude, fromLng: a.longitude, toLat: b.latitude, toLng: b.longitude)
-    }
-
-    /// Turn toward a new heading by at most `limit` degrees, so the camera does
-    /// not whip round on every switchback.
-    private static func turn(from: Double, to: Double, by limit: Double) -> Double {
-        var delta = (to - from).truncatingRemainder(dividingBy: 360)
-        if delta > 180 { delta -= 360 }
-        if delta < -180 { delta += 360 }
-        return (from + max(-limit, min(limit, delta)) + 360).truncatingRemainder(dividingBy: 360)
     }
 
     // MARK: - Connection
