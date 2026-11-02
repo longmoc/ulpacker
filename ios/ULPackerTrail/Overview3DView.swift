@@ -63,12 +63,16 @@ struct Overview3DView: View {
     /// mid-gesture snapped the walker's own tilt or pan back to the framing.
     @State private var retry: Task<Void, Never>?
     @State private var retryCamera: MapCamera?
-    /// Where the flight's marker sits: the camera's centre, which is where the
-    /// flight keeps the path. Taken from the camera on every frame, so the
-    /// marker rides with the camera's own smooth motion — where the old comet,
-    /// stepped from point to point, jerked. Placed on the map rather than over
-    /// it, so it sits on the ground and not where sea level would put it.
+    /// Where the flight's marker sits, on the path itself: worked out from
+    /// the flight's clock on every frame the camera moves — and during a
+    /// flight it always moves — so it glides at an even pace along the line.
+    /// The camera follows it (see `FlightClock.lift`). Taking the camera's
+    /// centre instead put the marker wherever the camera cut a corner or swung
+    /// in from the framing view.
     @State private var markerCoordinate: CLLocationCoordinate2D?
+    @State private var flightClock: FlightClock?
+    /// Where the marker is actually drawn, in screen points: see `steer`.
+    @State private var walkerOnScreen: CGPoint?
     /// The footer's height, so the map frames into the part of the screen
     /// left visible: the map runs on under the footer, and without this it
     /// centred a day on the whole screen and tucked its end out of sight.
@@ -105,6 +109,7 @@ struct Overview3DView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
+            MapReader { proxy in
             Map(position: $position) {
                 // Every line: a solid colour line over a white halo that lifts
                 // it off the imagery. On a replay the plan steps back and the
@@ -153,15 +158,27 @@ struct Overview3DView: View {
                     Annotation("End", coordinate: last) { Self.endpoint("flag.checkered", fill: .black) }
                 }
                 if flight != nil, let here = markerCoordinate {
-                    Annotation("", coordinate: here, anchor: .center) { Self.walker() }
-                        .annotationTitles(.hidden)
+                    Annotation("", coordinate: here, anchor: .center) {
+                        Self.walker()
+                            .onGeometryChange(for: CGPoint.self) { g in
+                                let f = g.frame(in: .global)
+                                return CGPoint(x: f.midX, y: f.midY)
+                            } action: { walkerOnScreen = $0 }
+                    }
+                    .annotationTitles(.hidden)
                 }
             }
             .mapStyle(.hybrid(elevation: .realistic))
             .onMapCameraChange(frequency: .continuous) { context in
                 cameraHeading = context.camera.heading
                 currentPitch = context.camera.pitch
-                if flight != nil { markerCoordinate = context.camera.centerCoordinate }
+                if var clock = flightClock {
+                    markerCoordinate = clock.position(at: .now)
+                    if let walker = walkerOnScreen, let centre = proxy.convert(context.camera.centerCoordinate, to: .global) {
+                        clock.measure(walker: walker, centre: centre)
+                    }
+                    flightClock = clock
+                }
                 if let asked = retryCamera, Self.movedByHand(context.camera, from: asked) { stopRetry() }
             }
             .onMapCameraChange(frequency: .onEnd) { context in
@@ -200,6 +217,7 @@ struct Overview3DView: View {
             .safeAreaPadding(.top, 56)
             .safeAreaPadding(.bottom, footerHeight)
             .ignoresSafeArea()
+            }
 
             header
         }
@@ -441,49 +459,170 @@ struct Overview3DView: View {
     private func startFlight() {
         guard canFly, let path = current?.path else { return }
         stopRetry()
-        let samples = Self.resample(path, count: 90)
-        let length = Self.length(of: path)
-        let seconds = min(60, max(20, length / 120))
-        let hop = seconds / Double(samples.count)
+        var clock = FlightClock(path: path)
+        let seconds = min(60, max(20, clock.length / 120))
+        clock.seconds = seconds
+        let hop = seconds / 90
+        // How far ahead the camera looks for its heading.
+        let lookAhead = clock.length / 30
         // Kept within 2.4 km, where Apple allows 60°: higher than that the tilt
         // is capped at 35° and the flight is little more than a moving plan
         // view. 60° rather than steeper so the ridge beside the path does not
         // stand between the camera and the line it is following.
-        let altitude = min(2_400, max(900, length / 6))
+        let altitude = min(2_400, max(900, clock.length / 6))
+        let glide = 2.5
+        flightClock = clock
+        markerCoordinate = path[0]
 
         flight = Task { @MainActor in
-            var heading = Self.bearing(samples[0], samples[min(3, samples.count - 1)])
-            for i in samples.indices {
-                if Task.isCancelled { break }
-                let ahead = samples[min(i + 3, samples.count - 1)]
-                if i + 1 < samples.count {
-                    heading = Self.turn(from: heading, to: Self.bearing(samples[i], ahead), by: 25)
+            let start = path[0]
+            var heading = Self.bearing(start, clock.point(atDistance: lookAhead))
+            // Down to the start first, slowly, with the marker waiting there:
+            // in one short hop the map swooped in over the middle of the day
+            // and only then turned to the start.
+            withAnimation(.easeInOut(duration: glide)) {
+                position = .camera(MapCamera(centerCoordinate: start, distance: altitude, heading: heading, pitch: 60))
+            }
+            try? await Task.sleep(for: .seconds(glide))
+            let startedAt = Date.now
+            flightClock?.startedAt = startedAt
+            // Each hop aims the camera at where the flight should be when the
+            // hop ends, read off the clock: a hop that runs late is made up by
+            // the next, rather than the flight slipping with every one.
+            while !Task.isCancelled {
+                let elapsed = Date.now.timeIntervalSince(startedAt) + hop
+                let d = clock.length * min(1, elapsed / seconds)
+                let here = clock.point(atDistance: d)
+                // Near the end there is nothing left to look ahead to; hold
+                // the heading rather than swing to north.
+                if d + lookAhead / 2 < clock.length {
+                    heading = Self.turn(from: heading, to: Self.bearing(here, clock.point(atDistance: d + lookAhead)), by: 25)
                 }
+                flightClock?.steer()
                 withAnimation(.linear(duration: hop)) {
-                    position = .camera(MapCamera(centerCoordinate: samples[i], distance: altitude, heading: heading, pitch: 60))
+                    position = .camera(MapCamera(centerCoordinate: flightClock?.aim(at: here, heading: heading) ?? here,
+                                                 distance: altitude, heading: heading, pitch: 60))
                 }
                 try? await Task.sleep(for: .seconds(hop))
+                if elapsed >= seconds { break }
             }
-            flight = nil
-            markerCoordinate = nil
+            // The camera trails its last request; let it, and the marker with
+            // it, arrive at the end before the marker goes.
+            try? await Task.sleep(for: .seconds(glide))
+            if !Task.isCancelled { stopFlight() }
         }
     }
 
     private func stopFlight() {
         flight?.cancel()
         flight = nil
+        flightClock = nil
         markerCoordinate = nil
+        walkerOnScreen = nil
+    }
+
+    /// A path measured along the ground, and where a flight along it has got
+    /// to at a given moment: nowhere past the start until it is under way,
+    /// then an even pace to the end.
+    struct FlightClock {
+        let path: [CLLocationCoordinate2D]
+        /// Distance from the start to each point of `path`.
+        let along: [Double]
+        var seconds = 1.0
+        /// Unset during the glide down to the start, when the marker waits
+        /// there.
+        var startedAt: Date?
+
+        init(path: [CLLocationCoordinate2D]) {
+            self.path = path
+            var along = [0.0]
+            for (a, b) in zip(path, path.dropFirst()) {
+                along.append(along[along.count - 1] + ActivityJournal.haversine(a.latitude, a.longitude, b.latitude, b.longitude))
+            }
+            self.along = along
+        }
+
+        var length: Double { along.last ?? 0 }
+
+        func position(at date: Date) -> CLLocationCoordinate2D {
+            guard let startedAt else { return path[0] }
+            let fraction = min(1, max(0, date.timeIntervalSince(startedAt) / seconds))
+            return point(atDistance: length * fraction)
+        }
+
+        /// How far beyond the walker, along the heading, the camera must be
+        /// aimed for the walker to show mid-screen. Two things push the walker
+        /// off centre, and neither can be worked out in advance:
+        ///
+        ///   * the map eases every move, so the camera trails what it is
+        ///     asked for — by about half a kilometre on a day's flight;
+        ///   * Apple centres a camera on flat ground at one fixed height while
+        ///     drawing the terrain, and the marker on it, at their real
+        ///     heights: in a valley below that height the walker sat low on the
+        ///     screen, on a col above it slid off the top. Which height it
+        ///     picks could not be pinned down — from sea level overshot, from
+        ///     the start's height overshot too.
+        ///
+        /// So it is measured: how far above the camera's centre on screen the
+        /// marker is actually drawn (`measure`), and the aim moved on by a
+        /// share of that on every hop (`steer`). Straight ahead along the
+        /// heading: aiming further along the path instead put the camera far
+        /// off to the side on a bend, and correcting sideways as well made it
+        /// swing from side to side.
+        private(set) var lift = 0.0
+        /// How far above the camera's centre the walker was last drawn, in
+        /// screen points; below it is negative.
+        private var lead = 0.0
+
+        /// Where to aim the camera to show the walker at `point`.
+        func aim(at point: CLLocationCoordinate2D, heading: Double) -> CLLocationCoordinate2D {
+            let r = heading * .pi / 180
+            return CLLocationCoordinate2D(
+                latitude: point.latitude + lift * cos(r) / 111_320,
+                longitude: point.longitude + lift * sin(r) / (111_320 * cos(point.latitude * .pi / 180)))
+        }
+
+        mutating func measure(walker: CGPoint, centre: CGPoint) {
+            guard startedAt != nil else { return }
+            lead = Double(centre.y - walker.y)
+        }
+
+        /// A share of the error each hop, not all of it: the camera answers
+        /// only a couple of seconds later, and a full correction every hop
+        /// would pile up and swing past.
+        mutating func steer() {
+            // Metres per screen point of error, per hop: about a sixth of
+            // what a point spans near the middle of the screen at this height.
+            lift = min(4_000, max(-4_000, lift + 1.5 * lead))
+        }
+
+        /// The point of `path` at or just beyond `distance`, and how far
+        /// towards it from the one before.
+        private func locate(_ distance: Double) -> (Int, Double) {
+            let d = min(max(distance, 0), length)
+            var lo = 0, hi = along.count - 1
+            while lo < hi {
+                let mid = (lo + hi) / 2
+                if along[mid] < d { lo = mid + 1 } else { hi = mid }
+            }
+            guard lo > 0 else { return (0, 0) }
+            let step = along[lo] - along[lo - 1]
+            return (lo, step > 0 ? (d - along[lo - 1]) / step : 0)
+        }
+
+        func point(atDistance distance: Double) -> CLLocationCoordinate2D {
+            let (i, f) = locate(distance)
+            guard i > 0 else { return path[0] }
+            let a = path[i - 1], b = path[i]
+            return CLLocationCoordinate2D(latitude: a.latitude + (b.latitude - a.latitude) * f,
+                                          longitude: a.longitude + (b.longitude - a.longitude) * f)
+        }
     }
 
     private static func length(of path: [CLLocationCoordinate2D]) -> Double {
         zip(path, path.dropFirst()).reduce(0.0) {
             $0 + ActivityJournal.haversine($1.0.latitude, $1.0.longitude, $1.1.latitude, $1.1.longitude)
         }
-    }
-
-    private static func resample(_ path: [CLLocationCoordinate2D], count: Int) -> [CLLocationCoordinate2D] {
-        guard path.count > count else { return path }
-        return (0..<count).map { path[Int(Double($0) / Double(count - 1) * Double(path.count - 1))] }
     }
 
     private static func bearing(_ a: CLLocationCoordinate2D, _ b: CLLocationCoordinate2D) -> Double {
