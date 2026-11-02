@@ -114,7 +114,6 @@ final class Overview3DMap: NSObject, MKMapViewDelegate, UIGestureRecognizerDeleg
 
     func show(_ content: Content) {
         stopFlight()
-        keepMapKitPanToOneFinger()
         self.content = content
         mapView.removeOverlays(mapView.overlays)
 
@@ -296,42 +295,32 @@ final class Overview3DMap: NSObject, MKMapViewDelegate, UIGestureRecognizerDeleg
 
     // MARK: - Gestures
 
-    /// MapKit's own two-finger gestures hold the tilt far below what the same
-    /// map allows a camera set in code: from a flight at 60°, one twist of the
-    /// fingers dropped it to 10–20° (on the phone). So pinch, twist and tilt
-    /// are this map's own, and set the camera as a flight does; the only
-    /// limit left is Apple's by distance (70° within about 1 km, 60° out to
-    /// 2.5 km, 35° beyond 3 km). Dragging with one finger stays MapKit's.
+    /// MapKit's own gestures hold the tilt far below what the same map allows
+    /// a camera set in code: from a flight at 60°, one twist of the fingers
+    /// dropped it to 10–20° (on the phone). So every gesture is this map's
+    /// own, and sets the camera as a flight does; the only limit left is
+    /// Apple's by distance (70° within about 1 km, 60° out to 2.5 km, 35°
+    /// beyond 3 km). Dragging had to come too: left to MapKit on a view
+    /// tilted past its own limit, the ground slid far less than the finger.
     @ObservationIgnored private var wantedPitch = 60.0
     @ObservationIgnored private var holding = false
-    @ObservationIgnored private var tiltGesture: UIPanGestureRecognizer?
 
     private func installGestures() {
+        mapView.isScrollEnabled = false
         mapView.isZoomEnabled = false
         mapView.isRotateEnabled = false
         mapView.isPitchEnabled = false
+        let drag = UIPanGestureRecognizer(target: self, action: #selector(dragged(_:)))
+        drag.maximumNumberOfTouches = 1
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:)))
         let twist = UIRotationGestureRecognizer(target: self, action: #selector(twisted(_:)))
         let tilt = UIPanGestureRecognizer(target: self, action: #selector(tilted(_:)))
         tilt.minimumNumberOfTouches = 2
         tilt.maximumNumberOfTouches = 2
-        tiltGesture = tilt
-        for gesture in [pinch, twist, tilt] as [UIGestureRecognizer] {
+        for gesture in [drag, pinch, twist, tilt] as [UIGestureRecognizer] {
             gesture.delegate = self
             mapView.addGestureRecognizer(gesture)
         }
-    }
-
-    /// Two fingers moving together tilt; they must not also drag the map,
-    /// which MapKit's own pan would do with any number of fingers.
-    private func keepMapKitPanToOneFinger() {
-        func visit(_ view: UIView) {
-            for case let pan as UIPanGestureRecognizer in view.gestureRecognizers ?? [] where pan !== tiltGesture {
-                pan.maximumNumberOfTouches = 1
-            }
-            view.subviews.forEach(visit)
-        }
-        visit(mapView)
     }
 
     nonisolated func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
@@ -343,10 +332,57 @@ final class Overview3DMap: NSObject, MKMapViewDelegate, UIGestureRecognizerDeleg
     private func adjust(_ change: (MKMapCamera) -> Void) {
         guard !flying else { return }
         stopReAsking()
-        keepMapKitPanToOneFinger()
         let camera = mapView.camera.copy() as! MKMapCamera
         change(camera)
         mapView.camera = camera
+    }
+
+    /// The ground under the finger follows the finger: the camera's centre
+    /// moves by however far apart the two points under the finger's last
+    /// and current positions are. Both come from the map's own flat model,
+    /// the same one it places the camera in, so they agree with each other
+    /// even where the terrain does not.
+    @objc private func dragged(_ gesture: UIPanGestureRecognizer) {
+        switch gesture.state {
+        case .changed:
+            let now = gesture.location(in: mapView)
+            let was = CGPoint(x: now.x - gesture.translation(in: mapView).x,
+                              y: now.y - gesture.translation(in: mapView).y)
+            gesture.setTranslation(.zero, in: mapView)
+            move(from: was, to: now, animated: false)
+        case .ended:
+            // Carry on a little the way the finger was going, slowing, as
+            // MapKit's own drag does.
+            let v = gesture.velocity(in: mapView)
+            let centre = CGPoint(x: mapView.bounds.midX, y: mapView.bounds.midY)
+            move(from: centre, to: CGPoint(x: centre.x + v.x * 0.2, y: centre.y + v.y * 0.2), animated: true)
+        default:
+            break
+        }
+    }
+
+    private func move(from: CGPoint, to: CGPoint, animated: Bool) {
+        let a = mapView.convert(from, toCoordinateFrom: mapView)
+        let b = mapView.convert(to, toCoordinateFrom: mapView)
+        // Towards the horizon a point can fall off the ground altogether.
+        guard CLLocationCoordinate2DIsValid(a), CLLocationCoordinate2DIsValid(b) else { return }
+        let camera = mapView.camera.copy() as! MKMapCamera
+        let c = camera.centerCoordinate
+        // No single move further than the camera is from the ground: near the
+        // horizon a small step on screen is a long way on the ground.
+        let reach = camera.centerCoordinateDistance / ActivityJournal.haversine(a.latitude, a.longitude, b.latitude, b.longitude)
+        let f = min(1, reach)
+        camera.centerCoordinate = CLLocationCoordinate2D(latitude: c.latitude + (a.latitude - b.latitude) * f,
+                                                        longitude: c.longitude + (a.longitude - b.longitude) * f)
+        guard !flying else { return }
+        stopReAsking()
+        if animated {
+            UIView.animate(withDuration: 0.6, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
+                self.mapView.camera = camera
+            }
+        } else {
+            mapView.camera = camera
+        }
     }
 
     @objc private func pinched(_ gesture: UIPinchGestureRecognizer) {
