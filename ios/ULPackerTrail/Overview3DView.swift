@@ -52,6 +52,12 @@ struct Overview3DView: View {
     /// Built once per stretch, not per redraw — recomputing over an
     /// 8,500-point route on every camera move would be waste.
     @State private var chevronList: [Chevron] = []
+    /// The framing camera, re-applied once the map is ready. Measured: a
+    /// camera set before the map has loaded is clamped to 30–35° whatever was
+    /// asked for, so the angle this screen requested on opening had never been
+    /// used — which is why tilting felt so limited.
+    @State private var pendingCamera: MapCamera?
+    @State private var currentPitch: Double = 0
 
     /// The app's own green, as on the 2D map; the white halo under it is what
     /// lifts it off the satellite imagery, not a brighter colour.
@@ -117,6 +123,30 @@ struct Overview3DView: View {
             .mapStyle(.hybrid(elevation: .realistic))
             .onMapCameraChange(frequency: .continuous) { context in
                 cameraHeading = context.camera.heading
+                currentPitch = context.camera.pitch
+            }
+            .onMapCameraChange(frequency: .onEnd) { context in
+                // The map first echoes the requested camera, then clamps it as
+                // it finishes loading, and keeps clamping for a moment after.
+                // Once the clamp is seen, ask again a few times, further apart
+                // each time, until the angle holds. A fixed number of tries:
+                // far out 35° is the real limit, and asking for more would
+                // otherwise never stop.
+                guard let camera = pendingCamera, context.camera.pitch < camera.pitch - 1 else { return }
+                pendingCamera = nil
+                currentPitch = context.camera.pitch
+                Task { @MainActor in
+                    for (attempt, delay) in [0.5, 1.0, 2.0, 3.0].enumerated() {
+                        try? await Task.sleep(for: .seconds(delay))
+                        if currentPitch >= camera.pitch - 1 || flight != nil { break }
+                        // A camera equal to the one already in `position` is
+                        // not a change as far as SwiftUI is concerned, so the
+                        // map is never told. Nudge the distance so it is.
+                        var retry = camera
+                        retry.distance *= 1 + 0.001 * Double(attempt + 1)
+                        withAnimation(.easeInOut(duration: 0.8)) { position = .camera(retry) }
+                    }
+                }
             }
             .mapControls {
                 MapCompass()
@@ -298,6 +328,11 @@ struct Overview3DView: View {
     // MARK: - Camera
 
     /// Frame a stretch from an angle, so the relief reads at first sight.
+    ///
+    /// Apple caps the tilt by how far away the camera is — measured in this
+    /// view: 70° within about 1 km, 60° out to 2.5 km, 35° beyond 3 km. A
+    /// whole day fits only from far enough that 35° is all there is; pinching
+    /// in is what unlocks the steeper angles, and the cap follows the zoom.
     private func frame(_ stretch: Stretch?) {
         guard let path = stretch?.path, let first = path.first else { return }
         var minLat = first.latitude, maxLat = first.latitude
@@ -308,7 +343,9 @@ struct Overview3DView: View {
         }
         let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLng + maxLng) / 2)
         let span = ActivityJournal.haversine(minLat, minLng, maxLat, maxLng)
-        position = .camera(MapCamera(centerCoordinate: center, distance: max(1_200, span * 2.4), heading: 0, pitch: 55))
+        let camera = MapCamera(centerCoordinate: center, distance: max(1_200, span * 2.4), heading: 0, pitch: 60)
+        position = .camera(camera)
+        pendingCamera = camera
     }
 
     /// Fly the camera along the stretch: a fixed number of hops with an
@@ -320,10 +357,11 @@ struct Overview3DView: View {
         let length = Self.length(of: path)
         let seconds = min(60, max(20, length / 120))
         let hop = seconds / Double(samples.count)
-        // Higher and less steep than the framing view: in the Alps the ridge
-        // beside the path stood between a 65° camera and the line it was
-        // following, and the route vanished behind it.
-        let altitude = min(3_500, max(900, length / 5))
+        // Kept within 2.4 km, where Apple allows 60°: higher than that the tilt
+        // is capped at 35° and the flight is little more than a moving plan
+        // view. 60° rather than steeper so the ridge beside the path does not
+        // stand between the camera and the line it is following.
+        let altitude = min(2_400, max(900, length / 6))
 
         flight = Task { @MainActor in
             var heading = Self.bearing(samples[0], samples[min(3, samples.count - 1)])
@@ -334,7 +372,7 @@ struct Overview3DView: View {
                     heading = Self.turn(from: heading, to: Self.bearing(samples[i], ahead), by: 25)
                 }
                 withAnimation(.linear(duration: hop)) {
-                    position = .camera(MapCamera(centerCoordinate: samples[i], distance: altitude, heading: heading, pitch: 52))
+                    position = .camera(MapCamera(centerCoordinate: samples[i], distance: altitude, heading: heading, pitch: 60))
                 }
                 try? await Task.sleep(for: .seconds(hop))
             }
