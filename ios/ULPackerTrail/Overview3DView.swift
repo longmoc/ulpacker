@@ -63,6 +63,16 @@ struct Overview3DView: View {
     /// mid-gesture snapped the walker's own tilt or pan back to the framing.
     @State private var retry: Task<Void, Never>?
     @State private var retryCamera: MapCamera?
+    /// Where the flight's marker sits: the camera's centre, which is where the
+    /// flight keeps the path. Taken from the camera on every frame, so the
+    /// marker rides with the camera's own smooth motion — where the old comet,
+    /// stepped from point to point, jerked. Placed on the map rather than over
+    /// it, so it sits on the ground and not where sea level would put it.
+    @State private var markerCoordinate: CLLocationCoordinate2D?
+    /// The footer's height, so the map frames into the part of the screen
+    /// left visible: the map runs on under the footer, and without this it
+    /// centred a day on the whole screen and tucked its end out of sight.
+    @State private var footerHeight: CGFloat = 0
 
     /// The app's own green, as on the 2D map; the white halo under it is what
     /// lifts it off the satellite imagery, not a brighter colour.
@@ -70,6 +80,12 @@ struct Overview3DView: View {
     private static let trackColour = Color.orange
 
     private var current: Stretch? { selection ?? stretches.first }
+
+    /// A single day picked out of a planned trip. The rest of the trip then
+    /// steps back to a thin pale line, so the day reads at a glance.
+    private var isPickedDay: Bool {
+        track.isEmpty && current.map { $0.path.count >= 2 && $0.id != stretches.first?.id } == true
+    }
 
     /// The longest stretch worth flying. A flight lasts at most a minute, so
     /// beyond this the camera outruns Apple's terrain — the first try over the
@@ -92,14 +108,26 @@ struct Overview3DView: View {
             Map(position: $position) {
                 // Every line: a solid colour line over a white halo that lifts
                 // it off the imagery. On a replay the plan steps back and the
-                // walk is the line in front.
+                // walk is the line in front; with one day picked, the rest of
+                // the trip steps back and the day is the line in front.
                 if route.count >= 2 {
-                    MapPolyline(coordinates: route)
-                        .stroke(.white.opacity(track.isEmpty ? 0.9 : 0.55),
-                                style: StrokeStyle(lineWidth: track.isEmpty ? 9 : 6, lineCap: .round, lineJoin: .round))
-                    MapPolyline(coordinates: route)
-                        .stroke(Self.routeColour.opacity(track.isEmpty ? 1 : 0.6),
-                                style: StrokeStyle(lineWidth: track.isEmpty ? 5 : 3, lineCap: .round, lineJoin: .round))
+                    if isPickedDay {
+                        MapPolyline(coordinates: route)
+                            .stroke(.white.opacity(0.85), style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                    } else {
+                        MapPolyline(coordinates: route)
+                            .stroke(.white.opacity(track.isEmpty ? 0.9 : 0.55),
+                                    style: StrokeStyle(lineWidth: track.isEmpty ? 9 : 6, lineCap: .round, lineJoin: .round))
+                        MapPolyline(coordinates: route)
+                            .stroke(Self.routeColour.opacity(track.isEmpty ? 1 : 0.6),
+                                    style: StrokeStyle(lineWidth: track.isEmpty ? 5 : 3, lineCap: .round, lineJoin: .round))
+                    }
+                }
+                if isPickedDay, let day = current?.path {
+                    MapPolyline(coordinates: day)
+                        .stroke(.white, style: StrokeStyle(lineWidth: 11, lineCap: .round, lineJoin: .round))
+                    MapPolyline(coordinates: day)
+                        .stroke(Self.routeColour, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
                 }
                 ForEach(Array(track.enumerated()), id: \.offset) { _, segment in
                     if segment.count >= 2 {
@@ -119,16 +147,21 @@ struct Overview3DView: View {
                     .annotationTitles(.hidden)
                 }
                 if let first = current?.path.first {
-                    Annotation("Start", coordinate: first) { Self.dot(.white) }
+                    Annotation("Start", coordinate: first) { Self.endpoint("figure.walk", fill: Self.routeColour) }
                 }
                 if let last = current?.path.last {
-                    Annotation("End", coordinate: last) { Self.dot(.black) }
+                    Annotation("End", coordinate: last) { Self.endpoint("flag.checkered", fill: .black) }
+                }
+                if flight != nil, let here = markerCoordinate {
+                    Annotation("", coordinate: here, anchor: .center) { Self.walker() }
+                        .annotationTitles(.hidden)
                 }
             }
             .mapStyle(.hybrid(elevation: .realistic))
             .onMapCameraChange(frequency: .continuous) { context in
                 cameraHeading = context.camera.heading
                 currentPitch = context.camera.pitch
+                if flight != nil { markerCoordinate = context.camera.centerCoordinate }
                 if let asked = retryCamera, Self.movedByHand(context.camera, from: asked) { stopRetry() }
             }
             .onMapCameraChange(frequency: .onEnd) { context in
@@ -165,6 +198,7 @@ struct Overview3DView: View {
             // Keep the map's own controls below the title bar, not in the
             // status bar where the edge-to-edge map would put them.
             .safeAreaPadding(.top, 56)
+            .safeAreaPadding(.bottom, footerHeight)
             .ignoresSafeArea()
 
             header
@@ -272,6 +306,7 @@ struct Overview3DView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.regularMaterial)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { footerHeight = $0 }
     }
 
     // MARK: - Direction
@@ -329,11 +364,28 @@ struct Overview3DView: View {
             .shadow(color: .black.opacity(0.45), radius: 1.5)
     }
 
-    private static func dot(_ colour: Color) -> some View {
-        Circle()
-            .fill(colour)
-            .frame(width: 14, height: 14)
-            .overlay(Circle().stroke(Color.brand, lineWidth: 3))
+    /// Start and end of the stretch: big enough to find from a whole day
+    /// away, and told apart by their symbol, not only their colour.
+    private static func endpoint(_ symbol: String, fill: Color) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 28, height: 28)
+            .background(fill, in: Circle())
+            .overlay(Circle().stroke(.white, lineWidth: 2.5))
+            .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+    }
+
+    /// The flight's marker. It points straight up the screen because the
+    /// flight turns the camera to face along the path.
+    private static func walker() -> some View {
+        Image(systemName: "location.north.fill")
+            .font(.system(size: 14, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 30, height: 30)
+            .background(Color.brand, in: Circle())
+            .overlay(Circle().stroke(.white, lineWidth: 3))
+            .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
     }
 
     // MARK: - Camera
@@ -354,7 +406,7 @@ struct Overview3DView: View {
         }
         let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLng + maxLng) / 2)
         let span = ActivityJournal.haversine(minLat, minLng, maxLat, maxLng)
-        let camera = MapCamera(centerCoordinate: center, distance: max(1_200, span * 2.4), heading: 0, pitch: 60)
+        let camera = MapCamera(centerCoordinate: center, distance: max(1_200, span * 3), heading: 0, pitch: 60)
         stopRetry()
         position = .camera(camera)
         pendingCamera = camera
@@ -413,12 +465,14 @@ struct Overview3DView: View {
                 try? await Task.sleep(for: .seconds(hop))
             }
             flight = nil
+            markerCoordinate = nil
         }
     }
 
     private func stopFlight() {
         flight?.cancel()
         flight = nil
+        markerCoordinate = nil
     }
 
     private static func length(of path: [CLLocationCoordinate2D]) -> Double {
