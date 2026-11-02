@@ -46,6 +46,30 @@ struct Overview3DView: View {
     @State private var flight: Task<Void, Never>?
     @State private var online = true
     @State private var monitor: NWPathMonitor?
+    /// A point of light travelling along the line toward its end — the
+    /// direction of travel, shown without redrawing any line. Moving the
+    /// dashes themselves looked right and cost 123 % CPU in the simulator
+    /// against 0 % static: Apple's map rests when nothing changes, and a line
+    /// restyled thirty times a second never lets it.
+    @State private var cometIndex = 0
+    @State private var marching: Task<Void, Never>?
+    /// The camera's heading, so the direction chevrons — drawn upright by
+    /// SwiftUI — can be turned to point along the line on the map.
+    @State private var cameraHeading: Double = 0
+    /// Built once per stretch, not per frame: the dashes step thirty times a
+    /// second, and recomputing arrows over an 8,500-point route each time —
+    /// or redrawing that route to move its dashes — would spend the battery
+    /// the rest of this screen is careful not to.
+    @State private var chevronList: [Chevron] = []
+    /// A light copy (≤ 600 points) of what is being shown, the only line that
+    /// is redrawn as its dashes move.
+    @State private var movingPath: [CLLocationCoordinate2D] = []
+
+    /// On satellite imagery the planner's dark green disappears into forest.
+    /// A brighter green over a white halo reads on rock, ice and trees alike.
+    private static let routeColour = Color(red: 0.20, green: 0.86, blue: 0.47)
+    private static let trackColour = Color.orange
+    private static let dash: [CGFloat] = [10, 8]
 
     private var current: Stretch? { selection ?? stretches.first }
 
@@ -68,14 +92,42 @@ struct Overview3DView: View {
     var body: some View {
         ZStack(alignment: .top) {
             Map(position: $position) {
+                // Every line: a white halo that separates it from the imagery,
+                // a faint solid line, and — on what is being shown — bright
+                // dashes travelling toward its end, the direction of travel.
+                // The full-detail lines are static; only the light moving copy
+                // is redrawn as the dashes step.
                 if route.count >= 2 {
                     MapPolyline(coordinates: route)
-                        .stroke(Color.brand.opacity(track.isEmpty ? 0.95 : 0.6), lineWidth: 4)
+                        .stroke(.white.opacity(track.isEmpty ? 0.9 : 0.55),
+                                style: StrokeStyle(lineWidth: track.isEmpty ? 8 : 6, lineCap: .round, lineJoin: .round))
+                    MapPolyline(coordinates: route)
+                        .stroke(Self.routeColour.opacity(0.5),
+                                style: StrokeStyle(lineWidth: track.isEmpty ? 4 : 3, lineCap: .round, lineJoin: .round))
                 }
                 ForEach(Array(track.enumerated()), id: \.offset) { _, segment in
                     if segment.count >= 2 {
-                        MapPolyline(coordinates: segment).stroke(.orange, lineWidth: 4)
+                        MapPolyline(coordinates: segment)
+                            .stroke(.white.opacity(0.9), style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
+                        MapPolyline(coordinates: segment)
+                            .stroke(Self.trackColour.opacity(0.5), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round))
                     }
+                }
+                if movingPath.count >= 2 {
+                    MapPolyline(coordinates: movingPath)
+                        .stroke(track.isEmpty ? Self.routeColour : Self.trackColour,
+                                style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round, dash: Self.dash))
+                    Annotation("", coordinate: movingPath[min(cometIndex, movingPath.count - 1)], anchor: .center) {
+                        Self.comet(colour: track.isEmpty ? Self.routeColour : Self.trackColour)
+                    }
+                    .annotationTitles(.hidden)
+                }
+                ForEach(chevronList) { chevron in
+                    Annotation("", coordinate: chevron.coordinate, anchor: .center) {
+                        Self.chevron(colour: track.isEmpty ? Self.routeColour : Self.trackColour)
+                            .rotationEffect(.degrees(chevron.bearing - cameraHeading))
+                    }
+                    .annotationTitles(.hidden)
                 }
                 if let first = current?.path.first {
                     Annotation("Start", coordinate: first) { Self.dot(.white) }
@@ -85,6 +137,9 @@ struct Overview3DView: View {
                 }
             }
             .mapStyle(.hybrid(elevation: .realistic))
+            .onMapCameraChange(frequency: .continuous) { context in
+                cameraHeading = context.camera.heading
+            }
             .mapControls {
                 MapCompass()
                 MapPitchToggle()
@@ -98,8 +153,10 @@ struct Overview3DView: View {
         }
         .safeAreaInset(edge: .bottom) { footer }
         .onAppear {
+            refreshDirection()
             frame(current)
             watchConnection()
+            startMarching()
             #if DEBUG
             let args = ProcessInfo.processInfo.arguments
             if let i = args.firstIndex(of: "-uiTestStretch"), i + 1 < args.count,
@@ -113,14 +170,21 @@ struct Overview3DView: View {
         }
         .onDisappear {
             stopFlight()
+            stopMarching()
             monitor?.cancel()
             monitor = nil
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase != .active { stopFlight() }
+            if phase != .active {
+                stopFlight()
+                stopMarching()
+            } else {
+                startMarching()
+            }
         }
         .onChange(of: selection) { _, stretch in
             stopFlight()
+            refreshDirection()
             frame(stretch)
         }
     }
@@ -196,6 +260,102 @@ struct Overview3DView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.regularMaterial)
+    }
+
+    // MARK: - Direction
+
+    struct Chevron: Identifiable {
+        let id: Int
+        let coordinate: CLLocationCoordinate2D
+        let bearing: Double
+    }
+
+    /// What carries the direction: the walk on a replay, the chosen stretch on
+    /// a preview.
+    private var directedPath: [CLLocationCoordinate2D] {
+        track.isEmpty ? (current?.path ?? []) : track.flatMap { $0 }
+    }
+
+    private func refreshDirection() {
+        let path = directedPath
+        movingPath = Self.resample(path, count: 600)
+        cometIndex = 0
+        chevronList = Self.chevrons(along: path)
+    }
+
+    /// Arrows spaced evenly along a path, about ten whatever its length — the
+    /// dashes and the moving light carry the line; the arrows only need to say
+    /// which way. Two dozen crowded an 800 m walk with one every 30 m.
+    private static func chevrons(along path: [CLLocationCoordinate2D]) -> [Chevron] {
+        guard path.count >= 2 else { return [] }
+        let total = Self.length(of: path)
+        guard total > 0 else { return [] }
+        let spacing = total / 10
+        var result: [Chevron] = []
+        var travelled = 0.0, next = spacing / 2
+        for (i, (a, b)) in zip(path, path.dropFirst()).enumerated() {
+            let step = ActivityJournal.haversine(a.latitude, a.longitude, b.latitude, b.longitude)
+            while step > 0, travelled + step >= next {
+                let f = (next - travelled) / step
+                let here = CLLocationCoordinate2D(latitude: a.latitude + (b.latitude - a.latitude) * f,
+                                                  longitude: a.longitude + (b.longitude - a.longitude) * f)
+                // Heading from a point a little further on, so one wiggle in a
+                // GPS track does not turn the arrow sideways.
+                let ahead = path[min(i + 3, path.count - 1)]
+                result.append(Chevron(id: result.count, coordinate: here, bearing: Self.bearing(here, ahead)))
+                next += spacing
+            }
+            travelled += step
+        }
+        return result
+    }
+
+    private static func comet(colour: Color) -> some View {
+        Circle()
+            .fill(.white)
+            .frame(width: 13, height: 13)
+            .shadow(color: .white, radius: 4)
+            .shadow(color: colour, radius: 8)
+            .shadow(color: colour.opacity(0.9), radius: 16)
+    }
+
+    private static func chevron(colour: Color) -> some View {
+        Image(systemName: "chevron.up")
+            .font(.system(size: 10, weight: .black))
+            .foregroundStyle(colour)
+            .frame(width: 17, height: 17)
+            .background(Circle().fill(.white.opacity(0.92)))
+            .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+    }
+
+    /// Move the light along the line, start to end, then again: a few hops a
+    /// second, each animated, so the motion is smooth without the map being
+    /// asked for a frame of its own. Only while this screen is open and the app
+    /// is in front — it is decoration, and decoration does not get to spend
+    /// battery in a pocket.
+    private func startMarching() {
+        guard marching == nil, movingPath.count >= 2 else { return }
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-noMarch") { return }
+        #endif
+        let count = movingPath.count
+        let hop = 0.4
+        let step = max(1, count / 40)   // once along in about 16 s
+        marching = Task { @MainActor in
+            while !Task.isCancelled {
+                if cometIndex + step >= count {
+                    cometIndex = 0
+                } else {
+                    withAnimation(.linear(duration: hop)) { cometIndex += step }
+                }
+                try? await Task.sleep(for: .seconds(hop))
+            }
+        }
+    }
+
+    private func stopMarching() {
+        marching?.cancel()
+        marching = nil
     }
 
     private static func dot(_ colour: Color) -> some View {
