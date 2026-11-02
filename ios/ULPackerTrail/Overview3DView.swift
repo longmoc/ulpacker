@@ -58,6 +58,11 @@ struct Overview3DView: View {
     /// used — which is why tilting felt so limited.
     @State private var pendingCamera: MapCamera?
     @State private var currentPitch: Double = 0
+    /// The re-asks after a clamp, and the camera they ask for. Cancelled the
+    /// moment the camera goes anywhere they did not send it: a re-ask landing
+    /// mid-gesture snapped the walker's own tilt or pan back to the framing.
+    @State private var retry: Task<Void, Never>?
+    @State private var retryCamera: MapCamera?
 
     /// The app's own green, as on the 2D map; the white halo under it is what
     /// lifts it off the satellite imagery, not a brighter colour.
@@ -124,28 +129,33 @@ struct Overview3DView: View {
             .onMapCameraChange(frequency: .continuous) { context in
                 cameraHeading = context.camera.heading
                 currentPitch = context.camera.pitch
+                if let asked = retryCamera, Self.movedByHand(context.camera, from: asked) { stopRetry() }
             }
             .onMapCameraChange(frequency: .onEnd) { context in
                 // The map first echoes the requested camera, then clamps it as
                 // it finishes loading, and keeps clamping for a moment after.
                 // Once the clamp is seen, ask again a few times, further apart
-                // each time, until the angle holds. A fixed number of tries:
-                // far out 35° is the real limit, and asking for more would
-                // otherwise never stop.
+                // each time, until the angle holds. Only close in: beyond
+                // 2.5 km the clamp is Apple's real limit, and asking again
+                // achieves nothing but yanking the camera.
                 guard let camera = pendingCamera, context.camera.pitch < camera.pitch - 1 else { return }
                 pendingCamera = nil
                 currentPitch = context.camera.pitch
-                Task { @MainActor in
+                guard camera.distance <= Self.steepTiltM else { return }
+                retryCamera = camera
+                retry = Task { @MainActor in
                     for (attempt, delay) in [0.5, 1.0, 2.0, 3.0].enumerated() {
                         try? await Task.sleep(for: .seconds(delay))
-                        if currentPitch >= camera.pitch - 1 || flight != nil { break }
+                        if Task.isCancelled || currentPitch >= camera.pitch - 1 || flight != nil { break }
                         // A camera equal to the one already in `position` is
                         // not a change as far as SwiftUI is concerned, so the
                         // map is never told. Nudge the distance so it is.
-                        var retry = camera
-                        retry.distance *= 1 + 0.001 * Double(attempt + 1)
-                        withAnimation(.easeInOut(duration: 0.8)) { position = .camera(retry) }
+                        var again = camera
+                        again.distance *= 1 + 0.001 * Double(attempt + 1)
+                        withAnimation(.easeInOut(duration: 0.8)) { position = .camera(again) }
                     }
+                    retryCamera = nil
+                    retry = nil
                 }
             }
             .mapControls {
@@ -177,6 +187,7 @@ struct Overview3DView: View {
         }
         .onDisappear {
             stopFlight()
+            stopRetry()
             monitor?.cancel()
             monitor = nil
         }
@@ -344,8 +355,32 @@ struct Overview3DView: View {
         let center = CLLocationCoordinate2D(latitude: (minLat + maxLat) / 2, longitude: (minLng + maxLng) / 2)
         let span = ActivityJournal.haversine(minLat, minLng, maxLat, maxLng)
         let camera = MapCamera(centerCoordinate: center, distance: max(1_200, span * 2.4), heading: 0, pitch: 60)
+        stopRetry()
         position = .camera(camera)
         pendingCamera = camera
+    }
+
+    /// The farthest the camera can be and still be allowed 60°.
+    static let steepTiltM = 2_500.0
+
+    private func stopRetry() {
+        retry?.cancel()
+        retry = nil
+        retryCamera = nil
+    }
+
+    /// A camera the re-asks did not produce: turned, panned or zoomed. The
+    /// clamp lowers the pitch and pulls the camera in by about 2% (measured),
+    /// and the re-asks nudge the distance by a fraction of a percent.
+    private static func movedByHand(_ camera: MapCamera, from asked: MapCamera) -> Bool {
+        var turn = abs(camera.heading - asked.heading).truncatingRemainder(dividingBy: 360)
+        if turn > 180 { turn = 360 - turn }
+        let shift = ActivityJournal.haversine(camera.centerCoordinate.latitude, camera.centerCoordinate.longitude,
+                                              asked.centerCoordinate.latitude, asked.centerCoordinate.longitude)
+        return turn > 1
+            || abs(camera.distance / asked.distance - 1) > 0.05
+            || shift > asked.distance * 0.01
+            || camera.pitch > asked.pitch + 1
     }
 
     /// Fly the camera along the stretch: a fixed number of hops with an
@@ -353,6 +388,7 @@ struct Overview3DView: View {
     /// day is covered faster than a short walk, so either takes under a minute.
     private func startFlight() {
         guard canFly, let path = current?.path else { return }
+        stopRetry()
         let samples = Self.resample(path, count: 90)
         let length = Self.length(of: path)
         let seconds = min(60, max(20, length / 120))
