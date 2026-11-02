@@ -63,13 +63,20 @@ struct Overview3DView: View {
     /// mid-gesture snapped the walker's own tilt or pan back to the framing.
     @State private var retry: Task<Void, Never>?
     @State private var retryCamera: MapCamera?
-    /// Where the flight's marker sits, on the path itself: worked out from
+    /// Where the flight's pen tip sits, on the path itself: worked out from
     /// the flight's clock on every frame the camera moves — and during a
     /// flight it always moves — so it glides at an even pace along the line.
     /// The camera follows it (see `FlightClock.lift`). Taking the camera's
-    /// centre instead put the marker wherever the camera cut a corner or swung
-    /// in from the framing view.
+    /// centre instead put it wherever the camera cut a corner or swung in from
+    /// the framing view.
     @State private var markerCoordinate: CLLocationCoordinate2D?
+    /// The part of the stretch flown so far, drawn bold over the rest: whole
+    /// kilometres, which once drawn never change, and the short tail behind
+    /// the pen tip, the only part redrawn as the flight goes on. Redrawing the
+    /// whole flown line instead more than doubled the flight's CPU.
+    @State private var flownKilometres: [[CLLocationCoordinate2D]] = []
+    @State private var flownTail: [CLLocationCoordinate2D] = []
+    @State private var flownTo = 0.0
     @State private var flightClock: FlightClock?
     /// Where the marker is actually drawn, in screen points: see `steer`.
     @State private var walkerOnScreen: CGPoint?
@@ -84,6 +91,8 @@ struct Overview3DView: View {
     private static let trackColour = Color.orange
 
     private var current: Stretch? { selection ?? stretches.first }
+
+    private var flying: Bool { flight != nil }
 
     /// A single day picked out of a planned trip. The rest of the trip then
     /// steps back to a thin pale line, so the day reads at a glance.
@@ -128,18 +137,32 @@ struct Overview3DView: View {
                                     style: StrokeStyle(lineWidth: track.isEmpty ? 5 : 3, lineCap: .round, lineJoin: .round))
                     }
                 }
+                // While flying, the line ahead fades back and the part flown
+                // is drawn in full over it, so the line itself shows how far
+                // the flight has got.
                 if isPickedDay, let day = current?.path {
                     MapPolyline(coordinates: day)
-                        .stroke(.white, style: StrokeStyle(lineWidth: 11, lineCap: .round, lineJoin: .round))
+                        .stroke(.white.opacity(flying ? 0.5 : 1), style: StrokeStyle(lineWidth: flying ? 7 : 11, lineCap: .round, lineJoin: .round))
                     MapPolyline(coordinates: day)
-                        .stroke(Self.routeColour, style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+                        .stroke(Self.routeColour.opacity(flying ? 0.4 : 1), style: StrokeStyle(lineWidth: flying ? 4 : 6, lineCap: .round, lineJoin: .round))
                 }
                 ForEach(Array(track.enumerated()), id: \.offset) { _, segment in
                     if segment.count >= 2 {
                         MapPolyline(coordinates: segment)
-                            .stroke(.white.opacity(0.9), style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
+                            .stroke(.white.opacity(flying ? 0.5 : 0.9), style: StrokeStyle(lineWidth: flying ? 7 : 9, lineCap: .round, lineJoin: .round))
                         MapPolyline(coordinates: segment)
-                            .stroke(Self.trackColour, style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
+                            .stroke(Self.trackColour.opacity(flying ? 0.4 : 1), style: StrokeStyle(lineWidth: flying ? 4 : 5, lineCap: .round, lineJoin: .round))
+                    }
+                }
+                if flying {
+                    ForEach(Array((flownKilometres + [flownTail]).enumerated()), id: \.offset) { _, piece in
+                        if piece.count >= 2 {
+                            MapPolyline(coordinates: piece)
+                                .stroke(.white, style: StrokeStyle(lineWidth: 11, lineCap: .round, lineJoin: .round))
+                            MapPolyline(coordinates: piece)
+                                .stroke(track.isEmpty ? Self.routeColour : Self.trackColour,
+                                        style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+                        }
                     }
                 }
                 // Static arrows on the line say which way. Turned against the
@@ -157,9 +180,15 @@ struct Overview3DView: View {
                 if let last = current?.path.last {
                     Annotation("End", coordinate: last) { Self.endpoint("flag.checkered", fill: .black) }
                 }
-                if flight != nil, let here = markerCoordinate {
+                // The tip of the pen drawing the flown line. Moved every frame,
+                // where the line behind it is redrawn only every few tens of
+                // metres, so it covers the line's stepping end; and where the
+                // map draws it on the terrain is read back to steer the camera
+                // (see `FlightClock.lift`). An invisible probe was tried: the
+                // map reports no position for it.
+                if flying, let here = markerCoordinate {
                     Annotation("", coordinate: here, anchor: .center) {
-                        Self.walker()
+                        Self.penTip(track.isEmpty ? Self.routeColour : Self.trackColour)
                             .onGeometryChange(for: CGPoint.self) { g in
                                 let f = g.frame(in: .global)
                                 return CGPoint(x: f.midX, y: f.midY)
@@ -173,7 +202,18 @@ struct Overview3DView: View {
                 cameraHeading = context.camera.heading
                 currentPitch = context.camera.pitch
                 if var clock = flightClock {
-                    markerCoordinate = clock.position(at: .now)
+                    let reached = clock.reached(at: .now)
+                    markerCoordinate = clock.point(atDistance: reached)
+                    // Every 50 m: a step of a few points on screen, hidden
+                    // under the pen tip.
+                    if reached - flownTo >= 50 || reached >= clock.length {
+                        let done = Double(flownKilometres.count + 1) * 1_000
+                        if reached >= done {
+                            flownKilometres.append(clock.piece(from: done - 1_000, to: done))
+                        }
+                        flownTail = clock.piece(from: Double(flownKilometres.count) * 1_000, to: reached)
+                        flownTo = reached
+                    }
                     if let walker = walkerOnScreen, let centre = proxy.convert(context.camera.centerCoordinate, to: .global) {
                         clock.measure(walker: walker, centre: centre)
                     }
@@ -394,16 +434,12 @@ struct Overview3DView: View {
             .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
     }
 
-    /// The flight's marker. It points straight up the screen because the
-    /// flight turns the camera to face along the path.
-    private static func walker() -> some View {
-        Image(systemName: "location.north.fill")
-            .font(.system(size: 14, weight: .bold))
-            .foregroundStyle(.white)
-            .frame(width: 30, height: 30)
-            .background(Color.brand, in: Circle())
-            .overlay(Circle().stroke(.white, lineWidth: 3))
-            .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
+    private static func penTip(_ colour: Color) -> some View {
+        Circle()
+            .fill(.white)
+            .frame(width: 12, height: 12)
+            .overlay(Circle().stroke(colour, lineWidth: 3))
+            .shadow(color: .black.opacity(0.35), radius: 2)
     }
 
     // MARK: - Camera
@@ -463,8 +499,10 @@ struct Overview3DView: View {
         let seconds = min(60, max(20, clock.length / 120))
         clock.seconds = seconds
         let hop = seconds / 90
-        // How far ahead the camera looks for its heading.
-        let lookAhead = clock.length / 30
+        // How far ahead the camera looks for its heading, and how fast it may
+        // turn: slower or further ahead, and on a bend the camera still faced
+        // the old way, carrying the line off to the side of the screen.
+        let lookAhead = clock.length / 50
         // Kept within 2.4 km, where Apple allows 60°: higher than that the tilt
         // is capped at 35° and the flight is little more than a moving plan
         // view. 60° rather than steeper so the ridge beside the path does not
@@ -496,7 +534,7 @@ struct Overview3DView: View {
                 // Near the end there is nothing left to look ahead to; hold
                 // the heading rather than swing to north.
                 if d + lookAhead / 2 < clock.length {
-                    heading = Self.turn(from: heading, to: Self.bearing(here, clock.point(atDistance: d + lookAhead)), by: 25)
+                    heading = Self.turn(from: heading, to: Self.bearing(here, clock.point(atDistance: d + lookAhead)), by: 45)
                 }
                 flightClock?.steer()
                 withAnimation(.linear(duration: hop)) {
@@ -518,6 +556,9 @@ struct Overview3DView: View {
         flight = nil
         flightClock = nil
         markerCoordinate = nil
+        flownKilometres = []
+        flownTail = []
+        flownTo = 0
         walkerOnScreen = nil
     }
 
@@ -544,10 +585,18 @@ struct Overview3DView: View {
 
         var length: Double { along.last ?? 0 }
 
-        func position(at date: Date) -> CLLocationCoordinate2D {
-            guard let startedAt else { return path[0] }
-            let fraction = min(1, max(0, date.timeIntervalSince(startedAt) / seconds))
-            return point(atDistance: length * fraction)
+        /// How far along the flight has got.
+        func reached(at date: Date) -> Double {
+            guard let startedAt else { return 0 }
+            return length * min(1, max(0, date.timeIntervalSince(startedAt) / seconds))
+        }
+
+        /// The path between two distances along it, ending exactly at each.
+        func piece(from start: Double, to end: Double) -> [CLLocationCoordinate2D] {
+            guard end > start else { return [] }
+            let (i, _) = locate(start), (j, _) = locate(end)
+            let inner = i < j ? Array(path[i..<j]) : []
+            return [point(atDistance: start)] + inner + [point(atDistance: end)]
         }
 
         /// How far beyond the walker, along the heading, the camera must be
