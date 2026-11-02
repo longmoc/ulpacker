@@ -26,7 +26,7 @@ import TripCore
 /// the terrain itself.
 @MainActor
 @Observable
-final class Overview3DMap: NSObject, MKMapViewDelegate {
+final class Overview3DMap: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
     @ObservationIgnored let mapView = MKMapView()
     private(set) var flying = false
     /// Off the vertical, for the 2D/3D button.
@@ -37,6 +37,7 @@ final class Overview3DMap: NSObject, MKMapViewDelegate {
         mapView.preferredConfiguration = MKHybridMapConfiguration(elevationStyle: .realistic)
         mapView.delegate = self
         mapView.showsCompass = true
+        installGestures()
     }
 
     // MARK: - Content
@@ -113,6 +114,7 @@ final class Overview3DMap: NSObject, MKMapViewDelegate {
 
     func show(_ content: Content) {
         stopFlight()
+        keepMapKitPanToOneFinger()
         self.content = content
         mapView.removeOverlays(mapView.overlays)
 
@@ -226,6 +228,7 @@ final class Overview3DMap: NSObject, MKMapViewDelegate {
         let camera = MKMapCamera(lookingAtCenter: center, fromDistance: max(1_200, span * 3), pitch: 60, heading: 0)
         stopReAsking()
         asked = camera.centerCoordinateDistance <= Self.steepTiltM ? camera : nil
+        wantedPitch = camera.pitch
         mapView.setCamera(camera, animated: animated)
     }
 
@@ -234,6 +237,7 @@ final class Overview3DMap: NSObject, MKMapViewDelegate {
         stopReAsking()
         let camera = mapView.camera.copy() as! MKMapCamera
         camera.pitch = tilted ? 0 : 60
+        wantedPitch = camera.pitch
         mapView.setCamera(camera, animated: true)
     }
 
@@ -262,6 +266,7 @@ final class Overview3DMap: NSObject, MKMapViewDelegate {
     }
 
     func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+        if asked == nil, !flying { holdPitch() }
         // The map clamps the angle as it finishes loading, and keeps clamping
         // for a moment after. Ask again a few times, further apart each time,
         // until the angle holds.
@@ -287,6 +292,103 @@ final class Overview3DMap: NSObject, MKMapViewDelegate {
             || abs(camera.centerCoordinateDistance / asked.centerCoordinateDistance - 1) > 0.05
             || shift > asked.centerCoordinateDistance * 0.01
             || camera.pitch > asked.pitch + 1
+    }
+
+    // MARK: - Gestures
+
+    /// MapKit's own two-finger gestures hold the tilt far below what the same
+    /// map allows a camera set in code: from a flight at 60°, one twist of the
+    /// fingers dropped it to 10–20° (on the phone). So pinch, twist and tilt
+    /// are this map's own, and set the camera as a flight does; the only
+    /// limit left is Apple's by distance (70° within about 1 km, 60° out to
+    /// 2.5 km, 35° beyond 3 km). Dragging with one finger stays MapKit's.
+    @ObservationIgnored private var wantedPitch = 60.0
+    @ObservationIgnored private var holding = false
+    @ObservationIgnored private var tiltGesture: UIPanGestureRecognizer?
+
+    private func installGestures() {
+        mapView.isZoomEnabled = false
+        mapView.isRotateEnabled = false
+        mapView.isPitchEnabled = false
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(pinched(_:)))
+        let twist = UIRotationGestureRecognizer(target: self, action: #selector(twisted(_:)))
+        let tilt = UIPanGestureRecognizer(target: self, action: #selector(tilted(_:)))
+        tilt.minimumNumberOfTouches = 2
+        tilt.maximumNumberOfTouches = 2
+        tiltGesture = tilt
+        for gesture in [pinch, twist, tilt] as [UIGestureRecognizer] {
+            gesture.delegate = self
+            mapView.addGestureRecognizer(gesture)
+        }
+    }
+
+    /// Two fingers moving together tilt; they must not also drag the map,
+    /// which MapKit's own pan would do with any number of fingers.
+    private func keepMapKitPanToOneFinger() {
+        func visit(_ view: UIView) {
+            for case let pan as UIPanGestureRecognizer in view.gestureRecognizers ?? [] where pan !== tiltGesture {
+                pan.maximumNumberOfTouches = 1
+            }
+            view.subviews.forEach(visit)
+        }
+        visit(mapView)
+    }
+
+    nonisolated func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                                       shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
+    }
+
+    /// Changes the camera by `change`, unless a flight is flying it.
+    private func adjust(_ change: (MKMapCamera) -> Void) {
+        guard !flying else { return }
+        stopReAsking()
+        keepMapKitPanToOneFinger()
+        let camera = mapView.camera.copy() as! MKMapCamera
+        change(camera)
+        mapView.camera = camera
+    }
+
+    @objc private func pinched(_ gesture: UIPinchGestureRecognizer) {
+        guard gesture.state == .changed, gesture.scale > 0 else { return }
+        let scale = Double(gesture.scale)
+        gesture.scale = 1
+        adjust { $0.centerCoordinateDistance = min(400_000, max(300, $0.centerCoordinateDistance / scale)) }
+    }
+
+    @objc private func twisted(_ gesture: UIRotationGestureRecognizer) {
+        guard gesture.state == .changed else { return }
+        let degrees = Double(gesture.rotation) * 180 / .pi
+        gesture.rotation = 0
+        adjust { $0.heading = ($0.heading - degrees + 360).truncatingRemainder(dividingBy: 360) }
+    }
+
+    @objc private func tilted(_ gesture: UIPanGestureRecognizer) {
+        guard gesture.state == .changed else { return }
+        let up = -Double(gesture.translation(in: mapView).y)
+        gesture.setTranslation(.zero, in: mapView)
+        // Fingers up tip the view toward the horizon, as in Maps.
+        adjust { $0.pitch = min(80, max(0, $0.pitch + up * 0.3)) }
+        wantedPitch = mapView.camera.pitch
+    }
+
+    /// After a gesture, if the map has flattened the view below the walker's
+    /// chosen tilt, tilt it back, once; if it will not go back — zoomed out
+    /// past what the tilt allows — that becomes the tilt.
+    private func holdPitch() {
+        guard !holding, mapView.camera.pitch < wantedPitch - 2 else { return }
+        holding = true
+        let camera = mapView.camera.copy() as! MKMapCamera
+        camera.pitch = wantedPitch
+        mapView.setCamera(camera, animated: true)
+        // A camera the map clamps to where it already is reports no change,
+        // so the outcome is read once the move has had time to finish.
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard let self else { return }
+            self.holding = false
+            self.wantedPitch = min(self.wantedPitch, self.mapView.camera.pitch)
+        }
     }
 
     // MARK: - Flight
@@ -355,6 +457,7 @@ final class Overview3DMap: NSObject, MKMapViewDelegate {
                 (mapView.renderer(for: line) as? MKPolylineRenderer)?.alpha = line.alpha
             }
         }
+        if flying { wantedPitch = mapView.camera.pitch }
         flying = false
     }
 
