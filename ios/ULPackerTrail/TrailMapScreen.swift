@@ -251,21 +251,30 @@ struct TrailMapScreen: View {
 
     // MARK: - Readouts
 
+    /// Today, and what comes next. Worked out when the screen draws, never on
+    /// a timer of its own: a new fix or the app coming forward redraws it, and
+    /// with the screen off nothing here runs.
     private func readouts(_ recorder: TrailRecorder) -> some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                // Distance walked, not progress along the line. They are
-                // different numbers — cut a corner and the projection races
-                // ahead of the legs — and this one is always knowable, on the
-                // route or off it, so it is never withheld.
-                readout("Walked", km(recorder.progress?.walkedM))
-                Divider().frame(height: 44)
-                readout("Left", km(isOnRoute(recorder) ? recorder.progress?.remainingM : nil))
-                Divider().frame(height: 44)
-                readout("Off line", metres(recorder.progress?.offsetM))
+        Group {
+            if let progress = recorder.progress, progress.confidence != .lost {
+                TodayReadout(
+                    guidance: recorder.planner.guidance(
+                        routeM: progress.routeDistanceM,
+                        onRoute: isOnRoute(recorder),
+                        fix: (progress.fixLat, progress.fixLng),
+                        at: .now,
+                        paceFactor: recorder.pace.factor
+                    ),
+                    walkedM: progress.walkedM,
+                    offLineM: isOnRoute(recorder) ? progress.offsetM : nil
+                )
+            } else {
+                Text(recorder.isActive ? "Waiting for a GPS fix…" : "Today's distances appear once you start.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
             }
-            .padding(.vertical, 12)
-
         }
         .background(.background)
     }
@@ -292,14 +301,6 @@ struct TrailMapScreen: View {
             line += String(format: "\n%.1f%% battery per hour", rate)
         }
         return line
-    }
-
-    private func readout(_ label: String, _ value: String) -> some View {
-        VStack(spacing: 3) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.title3.weight(.semibold).monospacedDigit())
-        }
-        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Controls
@@ -515,15 +516,6 @@ struct TrailMapScreen: View {
     private func km(_ metres: Double?) -> String {
         guard let metres, metres.isFinite else { return "—" }
         return String(format: "%.2f", metres / 1000) + " km"
-    }
-
-    private func metres(_ value: Double?) -> String {
-        guard let value, value.isFinite else { return "—" }
-        // Past a few kilometres the exact figure stops meaning anything — you
-        // are not near this route at all, and "10,044,476 m" reads as a bug.
-        if value >= 20_000 { return "far off" }
-        if value >= 1_000 { return String(format: "%.1f km", value / 1000) }
-        return String(format: "%.0f m", value)
     }
 
     private func offRouteBinding(_ recorder: TrailRecorder) -> Binding<Bool> {

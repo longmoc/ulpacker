@@ -27,6 +27,13 @@ final class TrailRecorder {
 
     private(set) var status: Status = .idle
     private(set) var progress: RecordingSession.Progress?
+    /// The walker's own pace today, which arrival times are scaled by. Starts
+    /// afresh with each session rather than being read back from a journal: it
+    /// settles again within the first few kilometres.
+    private(set) var pace = PaceTracker()
+    /// What is left of today and what comes next. Built once here, like the
+    /// route index, so a fix never has to walk the route to answer it.
+    let planner: DayPlanner
     /// Set when the walker crosses into off-route; the UI clears it once shown.
     private(set) var pendingOffRouteAlert = false
     /// A save that failed while a walk was in progress — a full disk, a
@@ -74,6 +81,7 @@ final class TrailRecorder {
         // Built once here rather than per fix: ~8560 edges, tens of
         // milliseconds, and then every query is essentially free.
         self.index = RouteIndex(segments: package.plannedRoute.segments)
+        self.planner = DayPlanner(package: package)
         self.notifier = notifier
         location.onFix = { [weak self] fix in self?.handle(fix) }
     }
@@ -112,6 +120,7 @@ final class TrailRecorder {
             // possible moment.
             notifier.requestAuthorization()
             PowerMonitor.shared.start()
+            pace = PaceTracker()
             recordPower(force: true)
             location.startUpdates()
             startFreshnessTimer()
@@ -132,6 +141,7 @@ final class TrailRecorder {
             )
             notifier.requestAuthorization()
             PowerMonitor.shared.start()
+            pace = PaceTracker()
             recordPower(force: true)
             location.startUpdates()
             startFreshnessTimer()
@@ -277,6 +287,7 @@ final class TrailRecorder {
                 bearing: fix.course >= 0 ? fix.course : nil
             )
             progress = update
+            if let update { observePace(update, at: fix.timestamp) }
             recordPower()
             if let update { fireAlerts(for: update) }
             // A fix arrived and saved: any earlier write warning has cleared
@@ -287,6 +298,16 @@ final class TrailRecorder {
             // the session down for: the fix is buffered in memory and the next
             // flush may well succeed. Keep recording, show a retryable warning.
             writeError = Self.describe(error)
+        }
+    }
+
+    /// Only a position the matcher is sure of: a pace measured off a jump or a
+    /// fix that fits two places would say nothing about the walker.
+    private func observePace(_ update: RecordingSession.Progress, at time: Date) {
+        guard update.offRouteState == .onRoute else { return }
+        switch update.confidence {
+        case .lost, .distant, .ambiguous, .jumped: return
+        default: pace.observe(routeM: update.routeDistanceM, at: time, planner: planner)
         }
     }
 
