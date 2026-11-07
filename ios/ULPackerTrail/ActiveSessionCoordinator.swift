@@ -92,6 +92,12 @@ final class ActiveSessionCoordinator {
         recorder?.flushForBackgrounding()
     }
 
+    /// Called when the app comes forward: the recorder holds screen updates back
+    /// while it is in the background.
+    func showLatestProgress() {
+        recorder?.showLatestProgress()
+    }
+
     // MARK: - Recovery
 
     /// Look for an unfinished walk and, if there is one, classify it against the

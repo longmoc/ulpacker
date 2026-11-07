@@ -2,6 +2,7 @@ import CoreLocation
 import Foundation
 import Observation
 import TripCore
+import UIKit
 
 /// Connects the phone's location updates to the recording logic in TripCore.
 ///
@@ -26,11 +27,19 @@ final class TrailRecorder {
     }
 
     private(set) var status: Status = .idle
+    /// What the screen shows. Held back while the app is in the background:
+    /// every change redraws the map and the readouts, for nobody. Measured on a
+    /// simulated walk, that was about 85% of the app's CPU in the background.
+    /// Recording and alerts never read this; they work from each update as it
+    /// comes, so nothing about the walk depends on the screen being on.
     private(set) var progress: RecordingSession.Progress?
+    /// The newest update, shown the moment the app comes forward.
+    @ObservationIgnored private var latestProgress: RecordingSession.Progress?
     /// The walker's own pace today, which arrival times are scaled by. Starts
     /// afresh with each session rather than being read back from a journal: it
-    /// settles again within the first few kilometres.
-    private(set) var pace = PaceTracker()
+    /// settles again within the first few kilometres. Read when `progress`
+    /// changes, so it does not need to redraw anything itself.
+    @ObservationIgnored private(set) var pace = PaceTracker()
     /// What is left of today and what comes next. Built once here, like the
     /// route index, so a fix never has to walk the route to answer it.
     let planner: DayPlanner
@@ -239,6 +248,7 @@ final class TrailRecorder {
         try? session?.discard()
         session = nil
         progress = nil
+        latestProgress = nil
         writeError = nil
         status = .idle
     }
@@ -248,6 +258,7 @@ final class TrailRecorder {
         guard case .finished = status else { return }
         session = nil
         progress = nil
+        latestProgress = nil
         writeError = nil
         status = .idle
     }
@@ -286,7 +297,7 @@ final class TrailRecorder {
                 speed: fix.speed >= 0 ? fix.speed : nil,
                 bearing: fix.course >= 0 ? fix.course : nil
             )
-            progress = update
+            publish(update)
             if let update { observePace(update, at: fix.timestamp) }
             recordPower()
             if let update { fireAlerts(for: update) }
@@ -299,6 +310,16 @@ final class TrailRecorder {
             // flush may well succeed. Keep recording, show a retryable warning.
             writeError = Self.describe(error)
         }
+    }
+
+    private func publish(_ update: RecordingSession.Progress?) {
+        latestProgress = update
+        if UIApplication.shared.applicationState != .background { progress = update }
+    }
+
+    /// The app has come forward: catch the screen up with the walk.
+    func showLatestProgress() {
+        if progress != latestProgress { progress = latestProgress }
     }
 
     /// Only a position the matcher is sure of: a pace measured off a jump or a
@@ -354,7 +375,7 @@ final class TrailRecorder {
         // working GPS answers within seconds and the stop stays a stop.
         if session.needsFreshnessProbe(at: now) { location.probe() }
         guard let update = session.evaluate(at: now) else { return }
-        progress = update
+        publish(update)
         fireAlerts(for: update)
     }
 

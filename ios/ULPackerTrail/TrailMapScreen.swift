@@ -252,8 +252,9 @@ struct TrailMapScreen: View {
     // MARK: - Readouts
 
     /// Today, and what comes next. Worked out when the screen draws, never on
-    /// a timer of its own: a new fix or the app coming forward redraws it, and
-    /// with the screen off nothing here runs.
+    /// a timer of its own: a new fix or the app coming forward redraws it. In
+    /// the background `TrailRecorder` holds `progress` back, so nothing here
+    /// runs.
     private func readouts(_ recorder: TrailRecorder) -> some View {
         Group {
             if let progress = recorder.progress, progress.confidence != .lost {

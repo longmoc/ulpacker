@@ -26,6 +26,7 @@ struct ULPackerTrailApp: App {
                     if phase == .background || phase == .inactive {
                         coordinator.flushForBackgrounding()
                     }
+                    if phase == .active { coordinator.showLatestProgress() }
                 }
                 #if DEBUG
                 .task {
