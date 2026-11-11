@@ -51,7 +51,10 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
             distanceFilterM: distanceFilterM,
             activityType: "fitness",
             pausesAutomatically: manager.pausesLocationUpdatesAutomatically,
-            allowsBackgroundUpdates: manager.allowsBackgroundLocationUpdates
+            // What recording will run with, not what the manager holds right
+            // now: this is read before updates start, when the flag is still
+            // off, and every activity was being recorded as foreground-only.
+            allowsBackgroundUpdates: Self.declaresLocationBackgroundMode
         )
     }
 

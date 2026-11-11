@@ -79,6 +79,19 @@ public enum Power {
         public let backgroundPercentPerHour: Double?
         public let lowPowerModeSeen: Bool
         public let maxThermal: String
+        /// The size of the steps this phone reports its battery in, as seen in
+        /// the samples: the smallest drop between two readings taken minutes
+        /// apart. Nil when no such drop was seen, and in reports written before
+        /// this existed.
+        public let levelStepPercent: Double?
+
+        /// The drop a rate needs behind it before it is worth quoting: two of
+        /// the phone's own steps. One step is the granularity moving — on a
+        /// phone that reports in 5% steps, a single tick after half an hour
+        /// could be anything from just over 0 to 10%/hour.
+        public var requiredDropPercent: Double {
+            max(Power.minimumReliableDrop, 2 * (levelStepPercent ?? 0))
+        }
 
         /// Whether the headline rate is worth quoting.
         ///
@@ -87,7 +100,7 @@ public enum Power {
         /// 100%/hour. The guard is not pedantry: an unreliable first number
         /// would be the one that gets remembered.
         public var isReliable: Bool {
-            dischargeS >= Power.minimumReliableS && drainedPercent >= Power.minimumReliableDrop
+            dischargeS >= Power.minimumReliableS && drainedPercent >= requiredDropPercent
         }
 
         /// Whether the background rate is worth *forecasting from*, as opposed to
@@ -99,13 +112,13 @@ public enum Power {
         public var backgroundReliable: Bool {
             guard let rate = backgroundPercentPerHour else { return false }
             let drained = rate * Double(backgroundS) / 3600
-            return backgroundS >= Power.minimumReliableS && drained >= Power.minimumReliableDrop
+            return backgroundS >= Power.minimumReliableS && drained >= requiredDropPercent
         }
 
         public var foregroundReliable: Bool {
             guard let rate = foregroundPercentPerHour else { return false }
             let drained = rate * Double(foregroundS) / 3600
-            return foregroundS >= Power.minimumReliableS && drained >= Power.minimumReliableDrop
+            return foregroundS >= Power.minimumReliableS && drained >= requiredDropPercent
         }
 
         public init(
@@ -118,7 +131,8 @@ public enum Power {
             backgroundS: Int,
             backgroundPercentPerHour: Double?,
             lowPowerModeSeen: Bool,
-            maxThermal: String
+            maxThermal: String,
+            levelStepPercent: Double? = nil
         ) {
             self.sampleCount = sampleCount
             self.dischargeS = dischargeS
@@ -130,12 +144,17 @@ public enum Power {
             self.backgroundPercentPerHour = backgroundPercentPerHour
             self.lowPowerModeSeen = lowPowerModeSeen
             self.maxThermal = maxThermal
+            self.levelStepPercent = levelStepPercent
         }
     }
 
-    /// Half an hour, and two percentage points, before a rate is quotable.
+    /// Half an hour, and two percentage points — or two of the phone's own
+    /// reporting steps, if those are bigger — before a rate is quotable.
     public static let minimumReliableS = 1_800
     public static let minimumReliableDrop = 2.0
+    /// Readings further apart than this say nothing about the step size: the
+    /// level may have ticked down several times between them.
+    static let stepWindowS: TimeInterval = 300
 
     // MARK: - Derivation
 
@@ -153,6 +172,7 @@ public enum Power {
         var foregroundDrained = 0.0
         var backgroundS = 0.0
         var backgroundDrained = 0.0
+        var step: Double?
 
         for (previous, next) in zip(ordered, ordered.dropFirst()) {
             let seconds = next.t.timeIntervalSince(previous.t)
@@ -168,6 +188,7 @@ public enum Power {
             // Clamped at zero: a level that rises on battery is the reporting
             // granularity moving, not energy appearing.
             let drop = max(0, (previous.level - next.level) * 100)
+            if drop > 0.01, seconds <= stepWindowS { step = min(step ?? drop, drop) }
             dischargeS += seconds
             drained += drop
 
@@ -192,7 +213,8 @@ public enum Power {
             backgroundS: Int(backgroundS.rounded()),
             backgroundPercentPerHour: rate(backgroundDrained, over: backgroundS),
             lowPowerModeSeen: ordered.contains(where: \.lowPowerMode),
-            maxThermal: ordered.map(\.thermal).max(by: { severity($0) < severity($1) }) ?? "nominal"
+            maxThermal: ordered.map(\.thermal).max(by: { severity($0) < severity($1) }) ?? "nominal",
+            levelStepPercent: step.map { ($0 * 100).rounded() / 100 }
         )
     }
 

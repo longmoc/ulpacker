@@ -102,6 +102,46 @@ struct PowerTests {
         #expect(!report.isReliable)
     }
 
+    /// Readings a minute apart, the level falling in steps of `step` percent
+    /// at an even `ratePerHour`.
+    func walk(minutes: Int, ratePerHour: Double, step: Double) -> [Power.Sample] {
+        (0...minutes).map { minute in
+            let drained = (ratePerHour * Double(minute) / 60 / step).rounded(.down) * step
+            return sample(Double(minute), level: 1 - drained / 100)
+        }
+    }
+
+    @Test func onAPhoneThatReportsInFivesOneTickIsNotAMeasurement() throws {
+        // 40 minutes at 8%/h: exactly one 5% tick. Past the half hour and past
+        // two points, and still only the granularity moving.
+        let report = try #require(Power.report(for: walk(minutes: 40, ratePerHour: 8, step: 5)))
+        #expect(report.levelStepPercent == 5)
+        #expect(!report.isReliable)
+    }
+
+    @Test func twoTicksOfFiveAre() throws {
+        let report = try #require(Power.report(for: walk(minutes: 100, ratePerHour: 8, step: 5)))
+        #expect(report.drainedPercent == 10)
+        #expect(report.isReliable)
+        #expect(report.backgroundReliable)
+    }
+
+    @Test func aPhoneThatReportsInOnesStillNeedsOnlyTwoPoints() throws {
+        let report = try #require(Power.report(for: walk(minutes: 40, ratePerHour: 4, step: 1)))
+        #expect(report.levelStepPercent == 1)
+        #expect(report.isReliable)
+    }
+
+    @Test func aReportWrittenBeforeStepsWereRecordedStillDecodes() throws {
+        let old = """
+        {"sampleCount":2,"dischargeS":3600,"drainedPercent":4,"percentPerHour":4,"foregroundS":0,
+         "backgroundS":3600,"backgroundPercentPerHour":4,"lowPowerModeSeen":false,"maxThermal":"nominal"}
+        """
+        let report = try JSONDecoder().decode(Power.Report.self, from: Data(old.utf8))
+        #expect(report.levelStepPercent == nil)
+        #expect(report.isReliable)
+    }
+
     @Test func nothingIsReportedFromASingleReading() {
         #expect(Power.report(for: [sample(0, level: 1.0)]) == nil)
         #expect(Power.report(for: []) == nil)
