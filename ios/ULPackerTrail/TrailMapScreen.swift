@@ -252,23 +252,29 @@ struct TrailMapScreen: View {
     // MARK: - Readouts
 
     /// Today, and what comes next. Worked out when the screen draws, never on
-    /// a timer of its own: a new fix or the app coming forward redraws it. In
-    /// the background `TrailRecorder` holds `progress` back, so nothing here
-    /// runs.
+    /// a timer that outlives the screen: a new fix, the app coming forward or
+    /// the minute turning over redraws it. In the background `TrailRecorder`
+    /// holds `progress` back, so nothing here runs.
     private func readouts(_ recorder: TrailRecorder) -> some View {
         Group {
             if let progress = recorder.progress, progress.confidence != .lost {
-                TodayReadout(
-                    guidance: recorder.planner.guidance(
-                        routeM: progress.routeDistanceM,
-                        onRoute: isOnRoute(recorder),
-                        fix: (progress.fixLat, progress.fixLng),
-                        at: .now,
-                        paceFactor: recorder.pace.factor
-                    ),
-                    walkedM: progress.walkedM,
-                    offLineM: isOnRoute(recorder) ? progress.offsetM : nil
-                )
+                // Arrival is "now plus what is left", so it goes stale with no
+                // fix to redraw it: an hour's rest left the spare daylight an
+                // hour too generous. Refreshed each minute, and only while on
+                // screen — a timeline does not tick in the background.
+                TimelineView(.periodic(from: .now, by: 60)) { timeline in
+                    TodayReadout(
+                        guidance: recorder.planner.guidance(
+                            routeM: progress.routeDistanceM,
+                            onRoute: isOnRoute(recorder),
+                            fix: (progress.fixLat, progress.fixLng),
+                            at: max(timeline.date, .now),
+                            paceFactor: recorder.pace.factor
+                        ),
+                        walkedM: progress.walkedM,
+                        offLineM: isOnRoute(recorder) ? progress.offsetM : nil
+                    )
+                }
             } else {
                 Text(recorder.isActive ? "Waiting for a GPS fix…" : "Today's distances appear once you start.")
                     .font(.footnote)
