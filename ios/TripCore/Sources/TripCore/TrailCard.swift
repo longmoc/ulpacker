@@ -155,9 +155,11 @@ public struct TrailCardView: View {
     }
 
     public var body: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: 10) {
+            // As large as a lock-screen card allows (about 160 pt tall): the
+            // shape of the path is the part read at a glance.
             PathAheadView(path: state.path, lineColour: state.status.colour)
-                .frame(width: 92, height: 104)
+                .frame(width: 124, height: 140)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 5) {
                     Image(systemName: status.symbol)
@@ -194,7 +196,8 @@ public struct TrailCardView: View {
             }
             Spacer(minLength: 0)
         }
-        .padding(14)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
     }
 
     private var daylightColour: Color {
@@ -255,7 +258,7 @@ public struct PathAheadView: View {
             if let stop = path.stop { all.append(stop) }
             let minX = Double(all.map(\.x).min()!), maxX = Double(all.map(\.x).max()!)
             let minY = Double(all.map(\.y).min()!), maxY = Double(all.map(\.y).max()!)
-            let inset = 9.0
+            let inset = 12.0
             // One scale both ways, so a bend keeps its true angle; and never
             // closer than 500 m to the full height, so a short straight does
             // not look like a long one.
@@ -271,28 +274,27 @@ public struct PathAheadView: View {
             line.move(to: screen(path.points[0]))
             for p in path.points.dropFirst() { line.addLine(to: screen(p)) }
             context.stroke(line, with: .color(.white.opacity(0.9)),
-                           style: StrokeStyle(lineWidth: 6, lineCap: .round, lineJoin: .round))
+                           style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
             context.stroke(line, with: .color(lineColour),
-                           style: StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
+                           style: StrokeStyle(lineWidth: 5, lineCap: .round, lineJoin: .round))
 
             if let stop = path.stop {
                 let at = screen(stop)
-                context.fill(Path(ellipseIn: CGRect(x: at.x - 5, y: at.y - 5, width: 10, height: 10)),
-                             with: .color(.white))
-                context.stroke(Path(ellipseIn: CGRect(x: at.x - 5, y: at.y - 5, width: 10, height: 10)),
-                               with: .color(.black), lineWidth: 2)
+                let dot = Path(ellipseIn: CGRect(x: at.x - 7, y: at.y - 7, width: 14, height: 14))
+                context.fill(dot, with: .color(.white))
+                context.stroke(dot, with: .color(.black), lineWidth: 2.5)
             }
 
             // The walker: an arrow pointing the way the route runs, which is up.
             let at = screen(path.walker)
             var arrow = Path()
-            arrow.move(to: CGPoint(x: at.x, y: at.y - 8))
-            arrow.addLine(to: CGPoint(x: at.x + 6, y: at.y + 6))
-            arrow.addLine(to: CGPoint(x: at.x, y: at.y + 3))
-            arrow.addLine(to: CGPoint(x: at.x - 6, y: at.y + 6))
+            arrow.move(to: CGPoint(x: at.x, y: at.y - 11))
+            arrow.addLine(to: CGPoint(x: at.x + 8, y: at.y + 8))
+            arrow.addLine(to: CGPoint(x: at.x, y: at.y + 4))
+            arrow.addLine(to: CGPoint(x: at.x - 8, y: at.y + 8))
             arrow.closeSubpath()
             context.fill(arrow, with: .color(.blue))
-            context.stroke(arrow, with: .color(.white), lineWidth: 1.5)
+            context.stroke(arrow, with: .color(.white), lineWidth: 2)
         }
     }
 }

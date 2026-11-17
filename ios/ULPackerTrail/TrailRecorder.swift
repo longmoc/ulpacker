@@ -341,7 +341,8 @@ final class TrailRecorder {
     /// switch is pressed with the app in front, which is when a card may start.
     func setCardEnabled(_ on: Bool) {
         UserDefaults.standard.set(on, forKey: TrailCardController.enabledKey)
-        if on { showCardIfWanted() } else { card.end() }
+        // Before Start there is no walk to show; Start brings the card up.
+        if on, isActive { showCardIfWanted() } else if !on { card.end() }
     }
 
     private func showCardIfWanted() {
