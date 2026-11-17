@@ -9,16 +9,48 @@
 /* Begin PBXBuildFile section */
 		A1A1A1A1A1A1A1A1A1A10012 /* TripCore in Frameworks */ = {isa = PBXBuildFile; productRef = A1A1A1A1A1A1A1A1A1A10011 /* TripCore */; };
 		A1A1A1A1A1A1A1A1A1A10017 /* MapLibre in Frameworks */ = {isa = PBXBuildFile; productRef = A1A1A1A1A1A1A1A1A1A10016 /* MapLibre */; };
+		B1B1B1B1B1B1B1B1B1B10001 /* TripCore in Frameworks */ = {isa = PBXBuildFile; productRef = B1B1B1B1B1B1B1B1B1B10002 /* TripCore */; };
+		B1B1B1B1B1B1B1B1B1B10003 /* TrailCard.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B1B1B1B1B1B1B1B1B1B10004 /* TrailCard.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B1B1B1B1B1B1B1B1B1B10005 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1A1A1A1A1A1A1A1A1A10001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B1B1B1B1B1B1B1B1B1B10006;
+			remoteInfo = TrailCard;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B1B1B1B1B1B1B1B1B1B10007 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B1B1B1B1B1B1B1B1B1B10003 /* TrailCard.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		A1A1A1A1A1A1A1A1A1A10005 /* ULPackerTrail.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ULPackerTrail.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1B1B1B1B1B1B1B1B1B10004 /* TrailCard.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TrailCard.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A1A1A1A1A1A1A1A1A1A10006 /* ULPackerTrail */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = ULPackerTrail;
+			sourceTree = "<group>";
+		};
+		B1B1B1B1B1B1B1B1B1B10008 /* TrailCard */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = TrailCard;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -33,6 +65,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B1B1B1B1B1B1B1B1B1B10009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1B1B1B1B1B1B1B1B1B10001 /* TripCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -40,6 +80,7 @@
 			isa = PBXGroup;
 			children = (
 				A1A1A1A1A1A1A1A1A1A10006 /* ULPackerTrail */,
+				B1B1B1B1B1B1B1B1B1B10008 /* TrailCard */,
 				A1A1A1A1A1A1A1A1A1A10003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -48,6 +89,7 @@
 			isa = PBXGroup;
 			children = (
 				A1A1A1A1A1A1A1A1A1A10005 /* ULPackerTrail.app */,
+				B1B1B1B1B1B1B1B1B1B10004 /* TrailCard.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -62,10 +104,12 @@
 				A1A1A1A1A1A1A1A1A1A10007 /* Sources */,
 				A1A1A1A1A1A1A1A1A1A10008 /* Frameworks */,
 				A1A1A1A1A1A1A1A1A1A10009 /* Resources */,
+				B1B1B1B1B1B1B1B1B1B10007 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B1B1B1B1B1B1B1B1B1B1000A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A1A1A1A1A1A1A1A1A1A10006 /* ULPackerTrail */,
@@ -79,6 +123,29 @@
 			productReference = A1A1A1A1A1A1A1A1A1A10005 /* ULPackerTrail.app */;
 			productType = "com.apple.product-type.application";
 		};
+		B1B1B1B1B1B1B1B1B1B10006 /* TrailCard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B1B1B1B1B1B1B1B1B1B1000B /* Build configuration list for PBXNativeTarget "TrailCard" */;
+			buildPhases = (
+				B1B1B1B1B1B1B1B1B1B1000C /* Sources */,
+				B1B1B1B1B1B1B1B1B1B10009 /* Frameworks */,
+				B1B1B1B1B1B1B1B1B1B1000D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				B1B1B1B1B1B1B1B1B1B10008 /* TrailCard */,
+			);
+			name = TrailCard;
+			packageProductDependencies = (
+				B1B1B1B1B1B1B1B1B1B10002 /* TripCore */,
+			);
+			productName = TrailCard;
+			productReference = B1B1B1B1B1B1B1B1B1B10004 /* TrailCard.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -90,6 +157,9 @@
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
 					A1A1A1A1A1A1A1A1A1A10004 = {
+						CreatedOnToolsVersion = 26.0;
+					};
+					B1B1B1B1B1B1B1B1B1B10006 = {
 						CreatedOnToolsVersion = 26.0;
 					};
 				};
@@ -113,12 +183,20 @@
 			projectRoot = "";
 			targets = (
 				A1A1A1A1A1A1A1A1A1A10004 /* ULPackerTrail */,
+				B1B1B1B1B1B1B1B1B1B10006 /* TrailCard */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A1A1A1A1A1A1A1A1A1A10009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1B1B1B1B1B1B1B1B1B1000D /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -135,7 +213,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B1B1B1B1B1B1B1B1B1B1000C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B1B1B1B1B1B1B1B1B1B1000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B1B1B1B1B1B1B1B1B1B10006 /* TrailCard */;
+			targetProxy = B1B1B1B1B1B1B1B1B1B10005 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		A1A1A1A1A1A1A1A1A1A1000B /* Debug */ = {
@@ -197,6 +290,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ULPackerTrail-Info.plist";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ULPacker records your track and warns you if you leave the route, including while your screen is off.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -222,6 +316,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "ULPackerTrail-Info.plist";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "ULPacker records your track and warns you if you leave the route, including while your screen is off.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -232,6 +327,53 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.longmoc.ulpacker.trail;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		B1B1B1B1B1B1B1B1B1B1000E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9XK4652Y33;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "TrailCard-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "ULPacker Trail";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.longmoc.ulpacker.trail.TrailCard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		B1B1B1B1B1B1B1B1B1B1000F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 9XK4652Y33;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "TrailCard-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "ULPacker Trail";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.1;
+				PRODUCT_BUNDLE_IDENTIFIER = com.longmoc.ulpacker.trail.TrailCard;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
@@ -253,6 +395,15 @@
 			buildConfigurations = (
 				A1A1A1A1A1A1A1A1A1A1000E /* Debug */,
 				A1A1A1A1A1A1A1A1A1A1000F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B1B1B1B1B1B1B1B1B1B1000B /* Build configuration list for PBXNativeTarget "TrailCard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B1B1B1B1B1B1B1B1B1B1000E /* Debug */,
+				B1B1B1B1B1B1B1B1B1B1000F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -286,6 +437,10 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A1A1A1A1A1A1A1A1A1A10015 /* XCRemoteSwiftPackageReference "maplibre-gl-native-distribution" */;
 			productName = MapLibre;
+		};
+		B1B1B1B1B1B1B1B1B1B10002 /* TripCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TripCore;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

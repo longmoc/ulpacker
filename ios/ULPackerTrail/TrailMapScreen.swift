@@ -35,6 +35,7 @@ struct TrailMapScreen: View {
     @State private var selectedCheckpoint: TripPackage.Checkpoint?
     /// The pin tapped on the map, and where it is on screen.
     @State private var callout: (checkpoint: TripPackage.Checkpoint, at: CGPoint)?
+    @AppStorage(TrailCardController.enabledKey) private var cardEnabled = false
     private let autoStart: Bool
 
     init(package: TripPackage, autoStart: Bool = false) {
@@ -312,6 +313,25 @@ struct TrailMapScreen: View {
 
     // MARK: - Controls
 
+    /// The lock-screen card: off unless asked for, so its cost on the battery
+    /// can be told apart walk by walk.
+    private func cardSwitch(_ recorder: TrailRecorder) -> some View {
+        Toggle(isOn: Binding(
+            get: { cardEnabled },
+            set: { on in
+                cardEnabled = on
+                recorder.setCardEnabled(on)
+            }
+        )) {
+            Label("Show on lock screen", systemImage: "lock.rectangle.on.rectangle")
+                .font(.footnote)
+                .foregroundStyle(Color.subtle)
+        }
+        .tint(.brand)
+        .disabled(!TrailCardController.isAllowed)
+        .padding(.horizontal, 4)
+    }
+
     private func controls(_ recorder: TrailRecorder) -> some View {
         VStack(spacing: 8) {
             // A save problem rides above the transport controls rather than
@@ -348,17 +368,20 @@ struct TrailMapScreen: View {
                         .padding(.vertical, 14)
                 } else {
                     bigButton("Start trail", tint: .brand) { recorder.start() }
+                    cardSwitch(recorder)
                 }
             case .recording:
                 HStack(spacing: 12) {
                     bigButton("Pause", tint: .secondary) { recorder.pause() }
                     bigButton("Finish", tint: .brand) { recorder.finish() }
                 }
+                cardSwitch(recorder)
             case .paused:
                 HStack(spacing: 12) {
                     bigButton("Resume", tint: .brand) { recorder.resume() }
                     bigButton("Finish", tint: .secondary) { recorder.finish() }
                 }
+                cardSwitch(recorder)
             case .finished(let activity):
                 VStack(spacing: 8) {
                     Text(finishedSummary(activity))

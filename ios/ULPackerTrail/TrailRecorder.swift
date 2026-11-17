@@ -43,6 +43,8 @@ final class TrailRecorder {
     /// What is left of today and what comes next. Built once here, like the
     /// route index, so a fix never has to walk the route to answer it.
     let planner: DayPlanner
+    /// The lock-screen card, when the walker has turned it on.
+    @ObservationIgnored private let card = TrailCardController()
     /// Set when the walker crosses into off-route; the UI clears it once shown.
     private(set) var pendingOffRouteAlert = false
     /// A save that failed while a walk was in progress — a full disk, a
@@ -134,6 +136,7 @@ final class TrailRecorder {
             location.startUpdates()
             startFreshnessTimer()
             status = .recording
+            showCardIfWanted()
         } catch {
             status = .failed(String(describing: error))
         }
@@ -155,6 +158,7 @@ final class TrailRecorder {
             location.startUpdates()
             startFreshnessTimer()
             status = .recording
+            showCardIfWanted()
         } catch {
             // Nothing was consumed and the journal is intact on disk. Surface it
             // as a start failure the user can dismiss; the walk stays put for
@@ -176,6 +180,7 @@ final class TrailRecorder {
             PowerMonitor.shared.stop()
             writeError = nil
             status = .paused
+            if let latestProgress { pushCard(latestProgress, force: true) }
         } catch {
             // The flush that a pause performs failed. Keep recording rather than
             // half-pausing: the fixes are still buffered and Finish will try to
@@ -195,6 +200,7 @@ final class TrailRecorder {
         location.startUpdates()
         startFreshnessTimer()
         status = .recording
+        showCardIfWanted()
     }
 
     func finish() {
@@ -207,6 +213,7 @@ final class TrailRecorder {
             recordPower(force: true)
             let activity = try session.finish()
             PowerMonitor.shared.stop()
+            card.end()
             self.session = nil
             writeError = nil
             status = .finished(activity)
@@ -245,6 +252,7 @@ final class TrailRecorder {
         location.stopUpdates()
         stopFreshnessTimer()
         PowerMonitor.shared.stop()
+        card.end()
         try? session?.discard()
         session = nil
         progress = nil
@@ -298,7 +306,10 @@ final class TrailRecorder {
                 bearing: fix.course >= 0 ? fix.course : nil
             )
             publish(update)
-            if let update { observePace(update, at: fix.timestamp) }
+            if let update {
+                observePace(update, at: fix.timestamp)
+                pushCard(update)
+            }
             recordPower()
             if let update { fireAlerts(for: update) }
             // A fix arrived and saved: any earlier write warning has cleared
@@ -317,9 +328,59 @@ final class TrailRecorder {
         if UIApplication.shared.applicationState != .background { progress = update }
     }
 
-    /// The app has come forward: catch the screen up with the walk.
+    /// The app has come forward: catch the screen up with the walk, and bring
+    /// back the card if the system ended it.
     func showLatestProgress() {
         if progress != latestProgress { progress = latestProgress }
+        if status == .recording || status == .paused { showCardIfWanted() }
+    }
+
+    // MARK: - Lock-screen card
+
+    /// Turned on or off from the walking screen. On takes effect at once — the
+    /// switch is pressed with the app in front, which is when a card may start.
+    func setCardEnabled(_ on: Bool) {
+        UserDefaults.standard.set(on, forKey: TrailCardController.enabledKey)
+        if on { showCardIfWanted() } else { card.end() }
+    }
+
+    private func showCardIfWanted() {
+        card.showIfWanted(
+            tripName: package.trip.name,
+            state: latestProgress.map { cardState(for: $0) } ?? .waiting(tripName: package.trip.name)
+        )
+    }
+
+    /// Builds the card only when the controller would send it: the path and
+    /// the readouts are cheap, but not free, and most fixes change nothing a
+    /// glance at the lock screen would notice.
+    private func pushCard(_ update: RecordingSession.Progress, force: Bool = false) {
+        let state = cardStatus(for: update)
+        guard force || card.wantsUpdate(routeM: update.routeDistanceM, status: state) else { return }
+        card.update(cardState(for: update), routeM: update.routeDistanceM)
+    }
+
+    private func cardStatus(for update: RecordingSession.Progress) -> TrailCardState.Status {
+        // The same order as the card's own, without building the rest of it.
+        if status == .paused { return .paused }
+        if update.offRouteState == .approaching { return .approaching }
+        if update.confidence == .distant || update.offRouteState == .offRoute { return .offRoute }
+        if update.isWrongWay { return .wrongWay }
+        if update.offRouteState == .noFix || update.offRouteState == .degraded { return .weakGPS }
+        return .onRoute
+    }
+
+    private func cardState(for update: RecordingSession.Progress) -> TrailCardState {
+        let onRoute = update.confidence != .lost && update.confidence != .distant
+        let guidance = planner.guidance(
+            routeM: update.routeDistanceM, onRoute: onRoute, fix: (update.fixLat, update.fixLng),
+            at: .now, paceFactor: pace.factor
+        )
+        let stopAtM = guidance.next.isStraightLine ? nil : update.routeDistanceM + guidance.next.distanceM
+        let path = PathAhead.make(
+            index: index, routeM: update.routeDistanceM, fix: (update.fixLat, update.fixLng), stopAtM: stopAtM
+        )
+        return TrailCardState.make(guidance: guidance, progress: update, path: path, paused: status == .paused)
     }
 
     /// Only a position the matcher is sure of: a pace measured off a jump or a
@@ -376,6 +437,7 @@ final class TrailRecorder {
         if session.needsFreshnessProbe(at: now) { location.probe() }
         guard let update = session.evaluate(at: now) else { return }
         publish(update)
+        pushCard(update)
         fireAlerts(for: update)
     }
 
