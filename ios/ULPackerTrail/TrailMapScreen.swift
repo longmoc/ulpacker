@@ -88,6 +88,7 @@ struct TrailMapScreen: View {
                     }
                 }
             }
+            ToolbarItem(placement: .navigationBarTrailing) { optionsMenu(recorder) }
         }
         .confirmationDialog(
             "Leave while recording?",
@@ -313,23 +314,25 @@ struct TrailMapScreen: View {
 
     // MARK: - Controls
 
-    /// The lock-screen card: off unless asked for, so its cost on the battery
-    /// can be told apart walk by walk.
-    private func cardSwitch(_ recorder: TrailRecorder) -> some View {
-        Toggle(isOn: Binding(
-            get: { cardEnabled },
-            set: { on in
-                cardEnabled = on
-                recorder.setCardEnabled(on)
+    /// Settings changed once a walk at most, out of the way of the controls:
+    /// a switch among Pause and Finish was clutter where the walker's thumb
+    /// goes. The lock-screen card is off unless asked for, so its cost on the
+    /// battery can be told apart walk by walk.
+    private func optionsMenu(_ recorder: TrailRecorder) -> some View {
+        Menu {
+            Toggle(isOn: Binding(
+                get: { cardEnabled },
+                set: { on in
+                    cardEnabled = on
+                    recorder.setCardEnabled(on)
+                }
+            )) {
+                Label("Show on lock screen", systemImage: "lock.rectangle.on.rectangle")
             }
-        )) {
-            Label("Show on lock screen", systemImage: "lock.rectangle.on.rectangle")
-                .font(.footnote)
-                .foregroundStyle(Color.subtle)
+            .disabled(!TrailCardController.isAllowed)
+        } label: {
+            Label("Options", systemImage: "ellipsis.circle")
         }
-        .tint(.brand)
-        .disabled(!TrailCardController.isAllowed)
-        .padding(.horizontal, 4)
     }
 
     private func controls(_ recorder: TrailRecorder) -> some View {
@@ -368,20 +371,17 @@ struct TrailMapScreen: View {
                         .padding(.vertical, 14)
                 } else {
                     bigButton("Start trail", tint: .brand) { recorder.start() }
-                    cardSwitch(recorder)
                 }
             case .recording:
                 HStack(spacing: 12) {
                     bigButton("Pause", tint: .secondary) { recorder.pause() }
                     bigButton("Finish", tint: .brand) { recorder.finish() }
                 }
-                cardSwitch(recorder)
             case .paused:
                 HStack(spacing: 12) {
                     bigButton("Resume", tint: .brand) { recorder.resume() }
                     bigButton("Finish", tint: .secondary) { recorder.finish() }
                 }
-                cardSwitch(recorder)
             case .finished(let activity):
                 VStack(spacing: 8) {
                     Text(finishedSummary(activity))
