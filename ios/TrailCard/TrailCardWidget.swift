@@ -25,7 +25,7 @@ struct TrailCardWidget: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    PathAheadView(path: context.state.path, lineColour: context.state.status.colour)
+                    PathAheadView(path: context.state.path, lineColour: TrailCardState.Status.onRoute.colour)
                         .frame(width: 64, height: 72)
                 }
                 DynamicIslandExpandedRegion(.trailing) {

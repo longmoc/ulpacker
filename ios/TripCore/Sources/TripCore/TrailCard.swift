@@ -64,10 +64,10 @@ public struct TrailCardState: Codable, Hashable, Sendable {
             status = .paused
         } else if progress.offRouteState == .approaching {
             status = .approaching
-            detail = distance(progress.offsetM) + " to the route"
+            detail = distance(progress.offsetM)
         } else if progress.confidence == .distant || progress.offRouteState == .offRoute {
             status = .offRoute
-            detail = distance(progress.offsetM) + " off"
+            detail = distance(progress.offsetM)
         } else if progress.isWrongWay {
             status = .wrongWay
         } else if progress.offRouteState == .noFix || progress.offRouteState == .degraded {
@@ -158,7 +158,9 @@ public struct TrailCardView: View {
         HStack(alignment: .center, spacing: 10) {
             // As large as a lock-screen card allows (about 160 pt tall): the
             // shape of the path is the part read at a glance.
-            PathAheadView(path: state.path, lineColour: state.status.colour)
+            // Always the app's green: a red line reads as "the route is wrong".
+            // The status line above the figures says what is wrong instead.
+            PathAheadView(path: state.path, lineColour: TrailCardColours.brand)
                 .frame(width: 124, height: 140)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 5) {
@@ -211,9 +213,12 @@ public struct TrailCardView: View {
     private var status: (text: String, symbol: String) {
         switch state.status {
         case .onRoute: ("On route", "checkmark.circle.fill")
-        case .approaching: ("Heading to the route", "arrow.up.forward.circle")
+        // Short: the line also carries the distance, and the card is narrow
+        // beside the path; "Heading to the route · 176 m to the route" was cut
+        // off at both ends.
+        case .approaching: ("To the route", "arrow.up.forward.circle")
         case .offRoute: ("Off route", "exclamationmark.triangle.fill")
-        case .wrongWay: ("Walking against the route", "arrow.uturn.backward.circle.fill")
+        case .wrongWay: ("Against the route", "arrow.uturn.backward.circle.fill")
         case .weakGPS: ("Weak GPS", "location.slash")
         case .paused: ("Paused", "pause.circle.fill")
         case .arrived: ("Arrived", "flag.checkered")

@@ -79,7 +79,7 @@ struct PathAheadTests {
         )
         let card = TrailCardState.make(guidance: guidance, progress: progress, path: nil, paused: false, clock: { _ in "12:00" })
         #expect(card.status == .offRoute)
-        #expect(card.statusDetail == "120 m off")
+        #expect(card.statusDetail == "120 m")
         #expect(card.title.hasPrefix("Day 2 · — /"))
         #expect(card.next?.contains("straight") == true)
     }
