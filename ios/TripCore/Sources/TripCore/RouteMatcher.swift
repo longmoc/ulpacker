@@ -236,7 +236,7 @@ public struct RouteMatcher: Sendable {
         // time or it is not; there is no meaningful "slightly too far".
         let reachable: [RouteIndex.Projection]
         if let lastRouteM, elapsed > 0 {
-            let limit = elapsed * speedCeiling
+            let limit = elapsed * speedCeiling + reachSlack(for: fix)
             reachable = candidates.filter { abs($0.routeDistanceM - lastRouteM) <= limit }
         } else {
             reachable = candidates
@@ -347,7 +347,7 @@ public struct RouteMatcher: Sendable {
         let jumped = escaped
             || (lastRouteM != nil
                 && elapsedOrZero > 0
-                && abs(progress) > elapsedOrZero * speedCeiling)
+                && abs(progress) > elapsedOrZero * speedCeiling + reachSlack(for: fix))
 
         lastRouteM = best.candidate.routeDistanceM
         lastTime = fix.t
@@ -411,6 +411,21 @@ public struct RouteMatcher: Sendable {
         if delta < 0 { score += abs(delta) * 0.05 }
 
         return score
+    }
+
+    /// Room beyond the speed limit for the last position's own error.
+    ///
+    /// The limit is measured from where the last fix was placed, and that is
+    /// only ever as good as the fix — a few metres behind, a corner cut. With
+    /// fixes 12 s apart the limit was 48 m and swallowed that; with the
+    /// watched screen's 5 m filter they come every 4 s, the limit fell to
+    /// 16 m, and on the 19 November walk replayed at that rate the cursor
+    /// stuck at a bend for 50 s, the offset climbing to 56 m on the path,
+    /// until it jumped — and once 300 m off the line, a jump restarted the
+    /// off-route episode and alerted a second time. The slack is far below
+    /// the 150 m wrong-way distance and any loop, so it lets nothing new in.
+    private func reachSlack(for fix: ActivityPackage.Fix) -> Double {
+        max(20, max(0, fix.hAcc))
     }
 
     /// How much closer to the observation an unreachable candidate must be
