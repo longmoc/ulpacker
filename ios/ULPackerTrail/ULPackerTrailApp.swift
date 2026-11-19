@@ -27,7 +27,13 @@ struct ULPackerTrailApp: App {
                     if phase == .background || phase == .inactive {
                         coordinator.flushForBackgrounding()
                     }
-                    if phase == .active { coordinator.showLatestProgress() }
+                    if phase == .active {
+                        coordinator.showLatestProgress()
+                        // Again on every return, not only at launch: a walk put
+                        // off once must still be findable, and one left by a
+                        // crash while the app was away must still be asked about.
+                        coordinator.detectRecovery(in: library)
+                    }
                 }
                 #if DEBUG
                 .task {
@@ -79,11 +85,11 @@ private struct RootView: View {
             case .resumable(let journal, let package):
                 Button("Continue") { coordinator.continueRecovery(journal, package: package) }
                 Button("Discard", role: .destructive) { coordinator.discardRecovery(journal) }
-                Button("Not now", role: .cancel) { coordinator.recovery = nil }
+                Button("Not now", role: .cancel) { coordinator.postponeRecovery() }
             case .orphaned(let journal):
                 // No route to resume onto — never force it onto another. Keep it
                 // for now (a matching trip could be imported) or discard it.
-                Button("Keep", role: .cancel) { coordinator.recovery = nil }
+                Button("Keep", role: .cancel) { coordinator.postponeRecovery() }
                 Button("Discard", role: .destructive) { coordinator.discardRecovery(journal) }
             }
         } message: { recovery in
@@ -106,7 +112,7 @@ private struct RootView: View {
     private var recoveryPresented: Binding<Bool> {
         Binding(
             get: { coordinator.recovery != nil },
-            set: { if !$0 { coordinator.recovery = nil } }
+            set: { if !$0, coordinator.recovery != nil { coordinator.postponeRecovery() } }
         )
     }
 

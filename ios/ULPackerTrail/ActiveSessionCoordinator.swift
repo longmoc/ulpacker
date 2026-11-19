@@ -26,6 +26,15 @@ final class ActiveSessionCoordinator {
     /// than buried inside whichever trip happens to be opened.
     var recovery: Recovery?
 
+    /// The unfinished walk on disk, whether or not the walker has been asked
+    /// about it. The prompt alone was not enough: answering "Not now" left the
+    /// walk with no way back to it short of killing the app, and on 19 November
+    /// a paused walk looked lost. The trip screens offer it from this instead.
+    private(set) var unfinished: Recovery?
+    /// The walk last put off with "Not now", so coming back to the app does
+    /// not ask about it again; the trip screens still offer it.
+    private var postponedId: String?
+
     /// The trip id the app wants to navigate to — set when the user chooses to
     /// continue a recovered walk, so the root can push the right screen. Kept as
     /// the id (Hashable) rather than the package so it drives
@@ -104,33 +113,65 @@ final class ActiveSessionCoordinator {
     /// trips on the phone. Matching needs both `tripId` and `tripRevision`: a
     /// re-exported trip may have moved the line, so an old journal's metres would
     /// no longer mean the same thing on the new revision.
+    ///
+    /// Run at launch and every time the app comes forward; it asks only about a
+    /// walk not already put off.
     func detectRecovery(in library: TripLibrary) {
-        guard recovery == nil, recorder?.isActive != true,
-              let journal = try? ActivityJournal.pendingSessions(
-                in: TrailRecorder.activitiesRoot
-              ).first
-        else { return }
-
-        let match = library.package(
-            tripId: journal.session.tripId,
-            revision: journal.session.tripRevision
-        )
-        recovery = match.map { .resumable(journal, $0) } ?? .orphaned(journal)
+        guard recorder?.isActive != true,
+              let journal = try? ActivityJournal.pendingSessions(in: TrailRecorder.activitiesRoot).first
+        else {
+            if recorder?.isActive != true { unfinished = nil }
+            return
+        }
+        let match = library.package(tripId: journal.session.tripId, revision: journal.session.tripRevision)
+        let found: Recovery = match.map { .resumable(journal, $0) } ?? .orphaned(journal)
+        unfinished = found
+        if recovery == nil, found.id != postponedId { recovery = found }
     }
 
-    /// Continue a recovered walk: adopt a recorder for its trip, resume against
-    /// the exact package, and ask the root to open that trip's screen.
-    func continueRecovery(_ journal: ActivityJournal, package: TripPackage) {
-        let recorder = TrailRecorder(package: package)
-        self.recorder = recorder
+    /// "Not now": stop asking about this walk; it stays on the trip screens.
+    func postponeRecovery() {
+        postponedId = recovery?.id
+        recovery = nil
+    }
+
+    /// The unfinished walk on `package`, if it can be continued there.
+    func unfinishedWalk(for package: TripPackage) -> ActivityJournal? {
+        guard case .resumable(let journal, let walkPackage) = unfinished,
+              walkPackage.tripId == package.tripId, walkPackage.revision == package.revision
+        else { return nil }
+        return journal
+    }
+
+    /// An unfinished walk on some other trip, which a new walk here must not
+    /// be started over.
+    func unfinishedElsewhere(than package: TripPackage) -> Recovery? {
+        guard let unfinished, unfinishedWalk(for: package) == nil else { return nil }
+        return unfinished
+    }
+
+    /// Continue a recovered walk: resume it against the exact package and ask
+    /// the root to open that trip's screen. From that trip's own screen, its
+    /// recorder is reused and nothing is pushed — a second recorder would leave
+    /// the open screen showing an idle walk while the real one ran unseen.
+    func continueRecovery(_ journal: ActivityJournal, package: TripPackage, openScreen: Bool = true) {
+        let recorder: TrailRecorder
+        if let held = self.recorder, held.tripId == package.tripId, !held.isActive {
+            recorder = held
+        } else {
+            recorder = TrailRecorder(package: package)
+            self.recorder = recorder
+        }
         recorder.resumeCrashedSession(journal)
         recovery = nil
-        openTarget = package.tripId
+        unfinished = nil
+        if openScreen { openTarget = package.tripId }
     }
 
     /// Throw away a recovered walk the user does not want kept.
     func discardRecovery(_ journal: ActivityJournal) {
         try? journal.delete()
         recovery = nil
+        if unfinished?.id == journal.session.activityId { unfinished = nil }
     }
 }

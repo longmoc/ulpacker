@@ -22,6 +22,8 @@ struct TrailMapScreen: View {
     /// Shown when the back button is pressed mid-walk: the recording keeps going
     /// in the background, and leaving is a decision worth making on purpose.
     @State private var confirmingLeave = false
+    /// The unfinished walk the walker has asked to throw away, pending a yes.
+    @State private var discarding: ActivityJournal?
     /// Whether a real basemap is available for this trip. Resolved once on
     /// appear — even the cheap pack check touches disk — so the screen can say
     /// the map is route-only rather than leave the blank canvas unexplained.
@@ -89,6 +91,17 @@ struct TrailMapScreen: View {
                 }
             }
             ToolbarItem(placement: .navigationBarTrailing) { optionsMenu(recorder) }
+        }
+        .confirmationDialog(
+            "Discard the unfinished walk?",
+            isPresented: Binding(get: { discarding != nil }, set: { if !$0 { discarding = nil } }),
+            titleVisibility: .visible,
+            presenting: discarding
+        ) { journal in
+            Button("Discard walk", role: .destructive) { coordinator.discardRecovery(journal) }
+            Button("Keep it", role: .cancel) {}
+        } message: { _ in
+            Text("Everything recorded on it is deleted. This cannot be undone.")
         }
         .confirmationDialog(
             "Leave while recording?",
@@ -360,7 +373,29 @@ struct TrailMapScreen: View {
 
             switch recorder.status {
             case .idle, .needsPermission:
-                if coordinator.isBlocked(for: package) {
+                if let journal = coordinator.unfinishedWalk(for: package) {
+                    // A walk on this trip was left unfinished. Offer it, not a
+                    // fresh start beside it: two walks on disk, and the next
+                    // launch would ask about whichever came first.
+                    HStack(spacing: 12) {
+                        bigButton("Discard", tint: .secondary) { discarding = journal }
+                        bigButton("Continue walk", tint: .brand) {
+                            coordinator.continueRecovery(journal, package: package, openScreen: false)
+                        }
+                    }
+                } else if let other = coordinator.unfinishedElsewhere(than: package) {
+                    Text(UnfinishedWalk.elsewhereText(other))
+                        .font(.footnote)
+                        .foregroundStyle(Color.subtle)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                    // A walk whose trip is gone has no trip screen to be dealt
+                    // with from; this is where it can go.
+                    if case .orphaned(let journal) = other {
+                        bigButton("Discard that walk", tint: .secondary) { discarding = journal }
+                    }
+                } else if coordinator.isBlocked(for: package) {
                     // Another trip is recording. Starting a second walk would
                     // mean two sessions competing for one slot; say why instead.
                     Text("A walk is already recording on another trip. Finish it first.")

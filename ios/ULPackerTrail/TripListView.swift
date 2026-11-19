@@ -118,6 +118,12 @@ struct TripDetailView: View {
 
     var body: some View {
         List {
+            // First, above everything: a walk left unfinished on this trip has
+            // nowhere else to be found once its prompt was answered "Not now".
+            if let journal = coordinator.unfinishedWalk(for: package) {
+                UnfinishedWalk(journal: journal, package: package)
+            }
+
             Section("Route") {
                 LabeledContent("Distance", value: String(format: "%.1f km", package.distanceKM))
                 if let ascent = package.plannedRoute.stats.ascentM {
@@ -273,5 +279,57 @@ private struct ItineraryRow: View {
         case .offRoute(let day, _): day.note
         }
         return raw.isEmpty ? nil : raw
+    }
+}
+
+/// A walk on this trip that was left unfinished — the app ended while it was
+/// paused or recording — with the two things that can be done about it.
+struct UnfinishedWalk: View {
+    let journal: ActivityJournal
+    let package: TripPackage
+    @Environment(ActiveSessionCoordinator.self) private var coordinator
+    @State private var confirmingDiscard = false
+
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Unfinished walk", systemImage: "pause.circle.fill")
+                    .font(.headline)
+                    .foregroundStyle(Color.brand)
+                Text(summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Button {
+                coordinator.continueRecovery(journal, package: package)
+            } label: {
+                Label("Continue walk", systemImage: "play.fill")
+            }
+            Button(role: .destructive) { confirmingDiscard = true } label: {
+                Label("Discard walk", systemImage: "trash")
+            }
+            .confirmationDialog("Discard the unfinished walk?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
+                Button("Discard walk", role: .destructive) { coordinator.discardRecovery(journal) }
+                Button("Keep it", role: .cancel) {}
+            } message: {
+                Text("Everything recorded on it is deleted. This cannot be undone.")
+            }
+        }
+    }
+
+    private var summary: String {
+        let started = journal.session.startedAt.formatted(date: .abbreviated, time: .shortened)
+        guard let walked = (try? journal.readCursor())??.walkedM else { return "Started \(started)" }
+        return "Started \(started) · " + String(format: "%.1f km walked", walked / 1000)
+    }
+
+    /// Said on another trip's screen, where a new walk must not start beside it.
+    static func elsewhereText(_ recovery: ActiveSessionCoordinator.Recovery) -> String {
+        switch recovery {
+        case .resumable(_, let other):
+            "A walk on \(other.trip.name) is unfinished. Continue or discard it from that trip first."
+        case .orphaned:
+            "An unfinished walk belongs to a trip that is no longer on this phone. Import that trip to continue it, or discard it."
+        }
     }
 }
