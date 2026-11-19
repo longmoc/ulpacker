@@ -4,6 +4,7 @@ import TripCore
 /// The trips on this phone, and the way to add one.
 struct TripListView: View {
     let library: TripLibrary
+    @Environment(ActiveSessionCoordinator.self) private var coordinator
     @State private var choosingFile = false
 
     var body: some View {
@@ -24,11 +25,24 @@ struct TripListView: View {
                     Button("Add a trip") { choosingFile = true }
                 }
             case .loaded(let packages):
-                List(packages, id: \.tripId) { package in
-                    NavigationLink {
-                        TripDetailView(package: package)
-                    } label: {
-                        TripRow(package: package)
+                List {
+                    // First, and in its own colour: the walk that is still
+                    // going on, recording, paused or left unfinished. It was
+                    // otherwise a row like any other trip, and after a "Not
+                    // now" not even that.
+                    if let walk = InProgressWalk.current(coordinator) {
+                        Section("In progress") { InProgressRow(walk: walk) }
+                    }
+                    Section {
+                        ForEach(packages, id: \.tripId) { package in
+                            NavigationLink {
+                                TripDetailView(package: package)
+                            } label: {
+                                TripRow(package: package)
+                            }
+                        }
+                    } header: {
+                        if InProgressWalk.current(coordinator) != nil { Text("Trips") }
                     }
                 }
             }
@@ -331,5 +345,94 @@ struct UnfinishedWalk: View {
         case .orphaned:
             "An unfinished walk belongs to a trip that is no longer on this phone. Import that trip to continue it, or discard it."
         }
+    }
+}
+
+/// The one walk that is still going on, in whatever state it was left.
+enum InProgressWalk {
+    case live(TrailRecorder)
+    case unfinished(ActivityJournal, TripPackage)
+    case orphaned(ActivityJournal)
+
+    @MainActor
+    static func current(_ coordinator: ActiveSessionCoordinator) -> InProgressWalk? {
+        if let recorder = coordinator.recorder, recorder.isActive { return .live(recorder) }
+        switch coordinator.unfinished {
+        case .resumable(let journal, let package): return .unfinished(journal, package)
+        case .orphaned(let journal): return .orphaned(journal)
+        case nil: return nil
+        }
+    }
+}
+
+private struct InProgressRow: View {
+    let walk: InProgressWalk
+    @Environment(ActiveSessionCoordinator.self) private var coordinator
+    @State private var confirmingDiscard: ActivityJournal?
+
+    var body: some View {
+        Group {
+            switch walk {
+            case .live(let recorder):
+                NavigationLink { TrailMapScreen(package: recorder.package) } label: {
+                    row(recorder.package.trip.name,
+                        symbol: recorder.status == .recording ? "figure.hiking" : "pause.fill",
+                        state: recorder.status == .recording ? "Recording" : "Paused",
+                        walked: recorder.walkedSoFarM, started: recorder.startedAt)
+                }
+            case .unfinished(let journal, let package):
+                // Opens the walking screen, where Continue and Discard wait.
+                NavigationLink { TrailMapScreen(package: package) } label: {
+                    row(package.trip.name, symbol: "pause.fill", state: "Unfinished",
+                        walked: (try? journal.readCursor())??.walkedM, started: journal.session.startedAt)
+                }
+            case .orphaned(let journal):
+                HStack {
+                    row("Unfinished walk", symbol: "questionmark", state: "Its trip is no longer on this phone",
+                        walked: (try? journal.readCursor())??.walkedM, started: journal.session.startedAt)
+                    Button("Discard", role: .destructive) { confirmingDiscard = journal }
+                        .buttonStyle(.borderless)
+                }
+            }
+        }
+        .listRowBackground(Color.inProgress.opacity(0.13))
+        .confirmationDialog(
+            "Discard the unfinished walk?",
+            isPresented: Binding(get: { confirmingDiscard != nil }, set: { if !$0 { confirmingDiscard = nil } }),
+            titleVisibility: .visible,
+            presenting: confirmingDiscard
+        ) { journal in
+            Button("Discard walk", role: .destructive) { coordinator.discardRecovery(journal) }
+            Button("Keep it", role: .cancel) {}
+        } message: { _ in
+            Text("Everything recorded on it is deleted. This cannot be undone.")
+        }
+    }
+
+    private func row(_ title: String, symbol: String, state: String, walked: Double?, started: Date?) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(Color.inProgress, in: Circle())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title).font(.headline).lineLimit(1)
+                Text(detail(state: state, walked: walked, started: started))
+                    .font(.subheadline)
+                    .foregroundStyle(Color.inProgress)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func detail(state: String, walked: Double?, started: Date?) -> String {
+        var parts = [state]
+        if let walked { parts.append(String(format: "%.1f km", walked / 1000)) }
+        // Day, month and time, no year: it is this week's walk, and the long
+        // form pushed the line onto a second row.
+        if let started { parts.append("since " + started.formatted(.dateTime.day().month(.abbreviated).hour().minute())) }
+        return parts.joined(separator: " · ")
     }
 }

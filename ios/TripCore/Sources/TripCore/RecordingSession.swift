@@ -120,6 +120,11 @@ public final class RecordingSession {
     private var buffer: [ActivityPackage.Fix] = []
     private var powerBuffer: [Power.Sample] = []
     private var walkedM: Double = 0
+
+    /// When the walk began, and how far it has gone — for saying which walk is
+    /// in progress, paused or not, without waiting for the next fix.
+    public var startedAt: Date { journal.session.startedAt }
+    public var walkedSoFarM: Double { walkedM }
     private var lastUsableFix: ActivityPackage.Fix?
     private var lastFlushAt: Date
     private var nextSequence: Int

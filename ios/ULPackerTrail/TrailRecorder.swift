@@ -78,6 +78,8 @@ final class TrailRecorder {
     /// Which trip this recorder walks. The coordinator uses it to keep exactly
     /// one walk alive and to refuse a second on a different trip.
     var tripId: String { package.tripId }
+    var startedAt: Date? { session?.startedAt }
+    var walkedSoFarM: Double? { session?.walkedSoFarM }
 
     /// A live session exists — recording, paused, or holding buffered fixes
     /// after a write hiccup. This is what must survive leaving the screen and

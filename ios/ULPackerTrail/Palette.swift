@@ -25,6 +25,11 @@ extension Color {
     /// A plain colour is not reinterpreted, so it stays legible whatever the
     /// map is doing underneath.
     static let subtle = Color(uiColor: .secondaryLabel)
+
+    /// A walk under way or left unfinished. Warm amber, far from the forest
+    /// green of everything else, so the one thing in the list that is still
+    /// going on is the thing the eye lands on.
+    static let inProgress = Color(uiColor: .inProgress)
 }
 
 extension UIColor {
@@ -38,6 +43,14 @@ extension UIColor {
         traits.userInterfaceStyle == .dark
             ? UIColor(red: 0x2e / 255, green: 0x9e / 255, blue: 0x5b / 255, alpha: 1)
             : .brandOnMap
+    }
+
+    /// Amber `#b45309` on light, lifting to `#f5a524` on dark where the deeper
+    /// shade goes muddy.
+    static let inProgress = UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0xf5 / 255, green: 0xa5 / 255, blue: 0x24 / 255, alpha: 1)
+            : UIColor(red: 0xb4 / 255, green: 0x53 / 255, blue: 0x09 / 255, alpha: 1)
     }
 
     /// The accent as drawn on the map, which has no dark mode.
