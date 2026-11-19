@@ -290,7 +290,19 @@ public struct PathAheadView: View {
                 context.stroke(dot, with: .color(.black), lineWidth: 2.5)
             }
 
-            // The walker: an arrow pointing the way the route runs, which is up.
+            // Off the route: the way back, not to scale.
+            if let back = path.backTo {
+                var dash = Path()
+                dash.move(to: screen(path.walker))
+                dash.addLine(to: screen(back))
+                context.stroke(dash, with: .color(.white.opacity(0.9)),
+                               style: StrokeStyle(lineWidth: 5, lineCap: .round, dash: [6, 5]))
+                context.stroke(dash, with: .color(.red),
+                               style: StrokeStyle(lineWidth: 3, lineCap: .round, dash: [6, 5]))
+            }
+
+            // The walker: an arrow pointing up — the way the route runs, or off
+            // the route, the way the walker is going.
             let at = screen(path.walker)
             var arrow = Path()
             arrow.move(to: CGPoint(x: at.x, y: at.y - 11))

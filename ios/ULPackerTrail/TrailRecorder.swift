@@ -45,6 +45,9 @@ final class TrailRecorder {
     let planner: DayPlanner
     /// The lock-screen card, when the walker has turned it on.
     @ObservationIgnored private let card = TrailCardController()
+    /// The walker's last known direction of travel, for turning the card's
+    /// picture when off the route. Kept through a stop, when GPS has none.
+    @ObservationIgnored private var lastCourse: Double?
     /// Set when the walker crosses into off-route; the UI clears it once shown.
     private(set) var pendingOffRouteAlert = false
     /// A save that failed while a walk was in progress — a full disk, a
@@ -368,9 +371,15 @@ final class TrailRecorder {
     /// the readouts are cheap, but not free, and most fixes change nothing a
     /// glance at the lock screen would notice.
     private func pushCard(_ update: RecordingSession.Progress, force: Bool = false) {
-        let state = cardStatus(for: update)
-        guard force || card.wantsUpdate(routeM: update.routeDistanceM, status: state) else { return }
-        card.update(cardState(for: update), routeM: update.routeDistanceM)
+        if let course = update.courseDegrees { lastCourse = course }
+        let status = cardStatus(for: update)
+        let fix = (lat: update.fixLat, lng: update.fixLng)
+        // On the route the picture turns with the route; off it, with the walker.
+        let heading = status == .offRoute || status == .approaching
+            ? lastCourse
+            : PathAhead.routeHeading(index: index, routeM: update.routeDistanceM)
+        guard force || card.wantsUpdate(fix: fix, heading: heading, status: status) else { return }
+        card.update(cardState(for: update), fix: fix, heading: heading)
     }
 
     private func cardStatus(for update: RecordingSession.Progress) -> TrailCardState.Status {
@@ -390,8 +399,10 @@ final class TrailRecorder {
             at: .now, paceFactor: pace.factor
         )
         let stopAtM = guidance.next.isStraightLine ? nil : update.routeDistanceM + guidance.next.distanceM
+        let away = cardStatus(for: update)
         let path = PathAhead.make(
-            index: index, routeM: update.routeDistanceM, fix: (update.fixLat, update.fixLng), stopAtM: stopAtM
+            index: index, routeM: update.routeDistanceM, fix: (update.fixLat, update.fixLng),
+            stopAtM: stopAtM, offRoute: away == .offRoute || away == .approaching, walkerCourse: lastCourse
         )
         return TrailCardState.make(guidance: guidance, progress: update, path: path, paused: status == .paused)
     }

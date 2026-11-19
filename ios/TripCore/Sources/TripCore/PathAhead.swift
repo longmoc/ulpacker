@@ -30,6 +30,12 @@ public struct PathAhead: Codable, Hashable, Sendable {
     public let walker: Point
     /// The next stop, when it falls within the stretch drawn.
     public let stop: Point?
+    /// Off the route: the nearest point back on it, which the card joins to
+    /// the walker with a dashed line. The walker is then drawn at most
+    /// `maxDrawnOffM` from it, whatever the real distance, so the route stays
+    /// in the picture however far away the walker has gone; the status line
+    /// carries the true figure.
+    public let backTo: Point?
 
     /// How far ahead is drawn: a few minutes' walking, enough to see the next
     /// bend coming without shrinking it to nothing on a lock screen.
@@ -43,28 +49,54 @@ public struct PathAhead: Codable, Hashable, Sendable {
     /// The direction is taken over this distance, so one kink in the route
     /// does not swing the whole picture.
     static let directionM = 40.0
+    /// Off the route, the walker is drawn no further than this from the route.
+    public static let maxDrawnOffM = 150.0
 
-    public init(points: [Point], walker: Point, stop: Point?) {
+    public init(points: [Point], walker: Point, stop: Point?, backTo: Point? = nil) {
         self.points = points
         self.walker = walker
         self.stop = stop
+        self.backTo = backTo
     }
 
+    /// The way the route runs at `routeM`.
+    public static func routeHeading(index: RouteIndex, routeM: Double) -> Double? {
+        let total = index.totalM
+        // Forward from here if there is room, otherwise along the last stretch.
+        let from = min(max(0, routeM), max(0, total - directionM))
+        guard total > 0,
+              let a = index.position(atRouteDistance: from),
+              let b = index.position(atRouteDistance: min(total, from + directionM))
+        else { return nil }
+        return TripPackage.bearing(fromLat: a.lat, fromLng: a.lng, toLat: b.lat, toLng: b.lng)
+    }
+
+    /// - Parameters:
+    ///   - offRoute: the walker is away from the route. The picture then turns
+    ///     with the walker — `walkerCourse` up — rather than with the route, so
+    ///     the dashed line back reads as "ahead", "to my left", "behind me".
+    ///     On the route the two are the same and the route's own direction is
+    ///     steadier: it needs no movement to know, and does not swing at a rest.
+    ///   - walkerCourse: the walker's direction of travel, last known.
     public static func make(
         index: RouteIndex,
         routeM: Double,
         fix: (lat: Double, lng: Double),
-        stopAtM: Double? = nil
+        stopAtM: Double? = nil,
+        offRoute: Bool = false,
+        walkerCourse: Double? = nil
     ) -> PathAhead? {
+        var routeM = routeM
+        // Far off, the matcher keeps the last place it had on the route; the
+        // way back is to wherever the route is now nearest.
+        if offRoute, let nearest = index.nearestExhaustive(lat: fix.lat, lng: fix.lng) {
+            routeM = nearest.routeDistanceM
+        }
         let total = index.totalM
-        guard total > 0, let origin = index.position(atRouteDistance: routeM) else { return nil }
-
-        // Forward from here if there is room, otherwise along the last stretch.
-        let from = min(routeM, max(0, total - directionM))
-        guard let a = index.position(atRouteDistance: from),
-              let b = index.position(atRouteDistance: min(total, from + directionM))
+        guard total > 0, let origin = index.position(atRouteDistance: routeM),
+              let routeHeading = routeHeading(index: index, routeM: routeM)
         else { return nil }
-        let heading = TripPackage.bearing(fromLat: a.lat, fromLng: a.lng, toLat: b.lat, toLng: b.lng)
+        let heading = offRoute ? (walkerCourse ?? routeHeading) : routeHeading
 
         let frame = Frame(lat: origin.lat, lng: origin.lng, heading: heading)
         var points: [Point] = []
@@ -80,7 +112,15 @@ public struct PathAhead: Codable, Hashable, Sendable {
         if let stopAtM, stopAtM >= routeM, stopAtM <= end, let p = index.position(atRouteDistance: stopAtM) {
             stop = frame.point(p.lat, p.lng)
         }
-        return PathAhead(points: points, walker: frame.point(fix.lat, fix.lng), stop: stop)
+        var walker = frame.point(fix.lat, fix.lng)
+        if offRoute {
+            let length = hypot(Double(walker.x), Double(walker.y))
+            if length > maxDrawnOffM {
+                let k = maxDrawnOffM / length
+                walker = Point(x: Int((Double(walker.x) * k).rounded()), y: Int((Double(walker.y) * k).rounded()))
+            }
+        }
+        return PathAhead(points: points, walker: walker, stop: stop, backTo: offRoute ? Point(x: 0, y: 0) : nil)
     }
 
     /// Metres east and north of an origin, turned so `heading` points up.

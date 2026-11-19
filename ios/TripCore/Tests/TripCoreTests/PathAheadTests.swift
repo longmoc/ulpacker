@@ -53,6 +53,54 @@ struct PathAheadTests {
         #expect(abs(path.walker.y) < 20)
     }
 
+    // MARK: - Off the route
+
+    /// ~250 m east of the northbound first leg, level with its 100 m mark.
+    static let eastOfRoute = (lat: 45.9 + 9 * 0.0001, lng: 6.8 + 0.0032)
+
+    @Test func offTheRouteThePictureTurnsWithTheWalker() throws {
+        // Walking east, away from the route: the way back is behind.
+        let away = try #require(PathAhead.make(index: Self.lRoute(), routeM: 100, fix: Self.eastOfRoute,
+                                               offRoute: true, walkerCourse: 90))
+        let back = try #require(away.backTo)
+        #expect(back.y < away.walker.y - 50)
+
+        // Walking west, towards it: the way back is ahead.
+        let towards = try #require(PathAhead.make(index: Self.lRoute(), routeM: 100, fix: Self.eastOfRoute,
+                                                  offRoute: true, walkerCourse: 270))
+        #expect(try #require(towards.backTo).y > towards.walker.y + 50)
+
+        // Walking north, alongside it: the way back is to the left.
+        let along = try #require(PathAhead.make(index: Self.lRoute(), routeM: 100, fix: Self.eastOfRoute,
+                                                offRoute: true, walkerCourse: 0))
+        #expect(try #require(along.backTo).x < along.walker.x - 50)
+    }
+
+    @Test func farOffTheWalkerIsDrawnNearEnoughToKeepTheRouteInSight() throws {
+        let far = (lat: 45.9 + 9 * 0.0001, lng: 6.8 + 0.02)   // ~1.5 km east
+        let path = try #require(PathAhead.make(index: Self.lRoute(), routeM: 100, fix: far,
+                                               offRoute: true, walkerCourse: 0))
+        let drawn = hypot(Double(path.walker.x), Double(path.walker.y))
+        #expect(drawn <= PathAhead.maxDrawnOffM + 1)
+        #expect(drawn >= PathAhead.maxDrawnOffM - 1)
+    }
+
+    @Test func theWayBackIsToWhereverTheRouteIsNearestNow() throws {
+        // The matcher still holds 100 m, but the walker has wandered to beside
+        // the far end of the second leg.
+        let index = Self.lRoute()
+        let nearEnd = (lat: 45.9 + 50 * 0.0001 + 0.0005, lng: 6.8 - 60 * 0.0001)
+        let path = try #require(PathAhead.make(index: index, routeM: 100, fix: nearEnd,
+                                               offRoute: true, walkerCourse: 0))
+        let drawn = hypot(Double(path.walker.x), Double(path.walker.y))
+        #expect(drawn < 80)
+    }
+
+    @Test func onTheRouteThereIsNoWayBack() throws {
+        let path = try #require(PathAhead.make(index: Self.lRoute(), routeM: 100, fix: (45.9 + 9 * 0.0001, 6.8)))
+        #expect(path.backTo == nil)
+    }
+
     @Test func theNextStopIsMarkedOnlyWhenItIsInSight() throws {
         let index = Self.lRoute()
         let fix = (lat: 45.9 + 9 * 0.0001, lng: 6.8)

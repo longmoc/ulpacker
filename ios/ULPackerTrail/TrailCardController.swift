@@ -7,28 +7,39 @@ import TripCore
 /// Keeps the lock-screen card in step with the walk — sparingly.
 ///
 /// Every update has the system redraw the card, so it is pushed only when what
-/// it shows would visibly change: the walker has gone another 50 m along the
-/// route (the path ahead has moved under them), the status has changed (off the
-/// route, back on it, arrived), or, while off the route, a minute has passed
-/// and the distance back has moved on. Standing still pushes nothing; the card
-/// shows clock times, which do not go stale at a rest.
+/// it shows would visibly change:
 ///
-/// Off unless the walker turns it on, so the battery cost can be measured walk
-/// against walk rather than assumed.
+///   * the walker has moved 25 m — measured on the ground, not along the
+///     route, because a walker leaving the line barely moves along it, and the
+///     card used to stand still from the moment they left;
+///   * the route turns: its direction ahead has swung 30° since the last
+///     push, so a bend shows as it comes rather than after it;
+///   * the status has changed (off the route, back on it, arrived);
+///   * ten minutes have passed, so a long rest does not have the card declare
+///     itself "not updating".
+///
+/// Standing still otherwise pushes nothing; the card shows clock times, which
+/// do not go stale at a rest. Off unless the walker turns it on, so the
+/// battery cost can be measured walk against walk rather than assumed.
 @MainActor
 final class TrailCardController {
     static let enabledKey = "trailCard.enabled"
 
-    /// Further along the route than this and the path ahead has visibly moved.
-    static let refreshM = 50.0
-    /// While off the route, the distance back is worth refreshing this often.
-    static let offRouteRefreshS: TimeInterval = 60
+    /// Moved this far and the picture has visibly shifted: about 20 s at a
+    /// walk. Below the GPS's own 15 m step there is nothing new to show.
+    static let refreshM = 25.0
+    /// A turn of the route ahead this sharp is worth showing straight away.
+    static let refreshTurnDegrees = 30.0
+    /// Refreshed at least this often, standing or not.
+    static let keepAliveS: TimeInterval = 10 * 60
     /// Past this with no update, the card says it is not updating rather than
-    /// showing an old position as if it were current.
-    static let staleAfterS: TimeInterval = 15 * 60
+    /// showing an old position as if it were current. Well beyond the
+    /// keep-alive, so only an app that has stopped gets there.
+    static let staleAfterS: TimeInterval = 25 * 60
 
     private var activity: Activity<TrailCardAttributes>?
-    private var lastRouteM: Double?
+    private var lastFix: (lat: Double, lng: Double)?
+    private var lastHeading: Double?
     private var lastStatus: TrailCardState.Status?
     private var lastNext: String?
     private var lastPushAt = Date.distantPast
@@ -55,25 +66,29 @@ final class TrailCardController {
         }
     }
 
-    /// Whether `state` is worth a redraw; the caller builds it only if so.
-    func wantsUpdate(routeM: Double, status: TrailCardState.Status) -> Bool {
+    /// Whether a redraw is worth it; the caller builds the card only if so.
+    func wantsUpdate(fix: (lat: Double, lng: Double), heading: Double?, status: TrailCardState.Status) -> Bool {
         guard let activity, activity.activityState == .active else { return false }
         // Arriving is decided while building the card, so the quick check before
         // building reads it as on the route; and the end of a day is within the
-        // 50 m refresh anyway. The first fix always replaces "waiting".
+        // refresh anyway. The first fix always replaces "waiting".
         let shown: TrailCardState.Status? = lastStatus == .arrived ? .onRoute : lastStatus
         if status != shown { return true }
-        if status == .offRoute || status == .approaching {
-            return Date().timeIntervalSince(lastPushAt) >= Self.offRouteRefreshS
+        if Date().timeIntervalSince(lastPushAt) >= Self.keepAliveS { return true }
+        guard let lastFix else { return true }
+        if ActivityJournal.haversine(lastFix.lat, lastFix.lng, fix.lat, fix.lng) >= Self.refreshM { return true }
+        if let heading, let lastHeading {
+            var turn = abs(heading - lastHeading).truncatingRemainder(dividingBy: 360)
+            if turn > 180 { turn = 360 - turn }
+            if turn >= Self.refreshTurnDegrees { return true }
         }
-        guard let lastRouteM else { return true }
-        return abs(routeM - lastRouteM) >= Self.refreshM
+        return false
     }
 
-    func update(_ state: TrailCardState, routeM: Double) {
+    func update(_ state: TrailCardState, fix: (lat: Double, lng: Double), heading: Double?) {
         guard let activity else { return }
-        lastRouteM = routeM
-        if state.next == lastNext, state.status == lastStatus, Date().timeIntervalSince(lastPushAt) < 1 { return }
+        lastFix = fix
+        lastHeading = heading
         remember(state)
         let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(Self.staleAfterS))
         Task { @MainActor in await activity.update(content) }
@@ -82,7 +97,8 @@ final class TrailCardController {
     func end() {
         guard let activity else { return }
         self.activity = nil
-        lastRouteM = nil
+        lastFix = nil
+        lastHeading = nil
         lastStatus = nil
         lastNext = nil
         Task { @MainActor in await activity.end(nil, dismissalPolicy: .immediate) }
