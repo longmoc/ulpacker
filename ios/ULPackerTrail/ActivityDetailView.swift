@@ -52,14 +52,14 @@ struct ActivityDetailView: View {
         }
         .navigationTitle("Walk")
         .navigationBarTitleDisplayMode(.inline)
-        // 3D streams from Apple, so it is for looking back at home: unavailable
-        // while any walk is recording or paused, and nothing loads until tapped.
+        // 3D streams from Apple: unavailable while any walk is recording, and
+        // nothing loads until tapped. A paused walk has its GPS off.
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { showing3D = true } label: {
                     Label("3D", systemImage: "mountain.2")
                 }
-                .disabled(replay.fixes.count < 2 || coordinator.recorder?.isActive == true)
+                .disabled(replay.fixes.count < 2 || coordinator.recorder?.status == .recording)
             }
         }
         .fullScreenCover(isPresented: $showing3D) {

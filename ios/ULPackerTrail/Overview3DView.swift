@@ -15,9 +15,10 @@ import TripCore
 ///
 ///   * it exists only while open — nothing is created, fetched or cached until
 ///     the walker taps 3D, and closing it ends everything;
-///   * it cannot be opened while a walk is recording or paused (the callers
-///     disable the button), so it can never compete with the walk for battery
-///     or radio;
+///   * it cannot be opened while a walk is recording (the callers disable the
+///     button), so it can never compete with the walk for battery or radio. A
+///     paused walk allows it: GPS is off, and opening it is the walker's own
+///     choice, at camp or at lunch;
 ///   * the flyover runs only when asked, and stops on leaving the screen or the
 ///     app going to the background;
 ///   * without a connection it says so instead of showing an empty globe.

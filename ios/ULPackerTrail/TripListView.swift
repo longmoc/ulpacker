@@ -108,6 +108,14 @@ struct TripDetailView: View {
     @Environment(ActiveSessionCoordinator.self) private var coordinator
     @State private var showing3D = false
 
+    private var footer3D: String {
+        switch coordinator.recorder?.status {
+        case .recording: "Available when the walk is paused or finished."
+        case .paused: "Uses Apple Maps online and some battery. Your walk stays paused."
+        default: "Uses Apple Maps online. Nothing is downloaded until you open it."
+        }
+    }
+
     var body: some View {
         List {
             Section("Route") {
@@ -140,17 +148,17 @@ struct TripDetailView: View {
             }
 
             // Looking at the route in 3D streams from Apple's servers, so it is
-            // for planning at home, not for the trail: closed while a walk is
-            // recording or paused, and nothing loads until it is opened.
+            // closed while a walk is recording, and nothing loads until it is
+            // opened. A paused walk has its GPS off, and an evening at camp
+            // looking at tomorrow is exactly when it is wanted: opening it is a
+            // choice the walker makes, not something that happens to them.
             Section {
                 Button { showing3D = true } label: {
                     Label("3D overview", systemImage: "mountain.2")
                 }
-                .disabled(coordinator.recorder?.isActive == true)
+                .disabled(coordinator.recorder?.status == .recording)
             } footer: {
-                Text(coordinator.recorder?.isActive == true
-                     ? "Available after the walk is finished."
-                     : "Uses Apple Maps online. Nothing is downloaded until you open it.")
+                Text(footer3D)
             }
 
             if let report = store.batteryRate(for: package) {
