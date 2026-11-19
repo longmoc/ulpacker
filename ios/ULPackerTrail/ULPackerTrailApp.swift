@@ -17,6 +17,7 @@ struct ULPackerTrailApp: App {
                 // AirDrop, Files, a mail attachment: all of them arrive here.
                 .onOpenURL { library.receive($0) }
                 .task { BundledPacks.install() }
+                .task { await TrailCardController.endLeftovers() }
                 // An unfinished walk is resolved once the trips are known, so it
                 // can be matched to its exact route and revision.
                 .task { coordinator.detectRecovery(in: library) }

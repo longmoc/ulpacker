@@ -162,7 +162,6 @@ final class TrailRecorder {
             // recording through the rest of a lunch or a night.
             if session.state == .paused {
                 status = .paused
-                showCardIfWanted()
                 return
             }
             PowerMonitor.shared.start()
@@ -195,7 +194,10 @@ final class TrailRecorder {
             PowerMonitor.shared.stop()
             writeError = nil
             status = .paused
-            if let latestProgress { pushCard(latestProgress, force: true) }
+            // A paused walk takes its card down. Left up, it outlived the app
+            // once iOS ended it, showing a position hours old as if live;
+            // Resume, pressed in the app, brings it back.
+            card.end()
         } catch {
             // The flush that a pause performs failed. Keep recording rather than
             // half-pausing: the fixes are still buffered and Finish will try to
@@ -347,7 +349,7 @@ final class TrailRecorder {
     /// back the card if the system ended it.
     func showLatestProgress() {
         if progress != latestProgress { progress = latestProgress }
-        if status == .recording || status == .paused { showCardIfWanted() }
+        if status == .recording { showCardIfWanted() }
     }
 
     // MARK: - Lock-screen card
@@ -357,7 +359,7 @@ final class TrailRecorder {
     func setCardEnabled(_ on: Bool) {
         UserDefaults.standard.set(on, forKey: TrailCardController.enabledKey)
         // Before Start there is no walk to show; Start brings the card up.
-        if on, isActive { showCardIfWanted() } else if !on { card.end() }
+        if on, status == .recording { showCardIfWanted() } else if !on { card.end() }
     }
 
     private func showCardIfWanted() {

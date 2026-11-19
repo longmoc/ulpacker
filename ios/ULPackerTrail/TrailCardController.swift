@@ -55,11 +55,13 @@ final class TrailCardController {
         guard Self.isEnabled, Self.isAllowed else { return }
         if let activity, activity.activityState == .active { return }
         do {
-            activity = try Activity.request(
+            let started = try Activity.request(
                 attributes: TrailCardAttributes(tripName: tripName),
                 content: ActivityContent(state: state, staleDate: Date().addingTimeInterval(Self.staleAfterS)),
                 pushType: nil
             )
+            Self.startedHere.insert(started.id)
+            activity = started
             remember(state)
         } catch {
             activity = nil
@@ -93,6 +95,20 @@ final class TrailCardController {
         let content = ActivityContent(state: state, staleDate: Date().addingTimeInterval(Self.staleAfterS))
         Task { @MainActor in await activity.update(content) }
     }
+
+    /// Cards left by an earlier run of the app. Nothing updates them — the
+    /// process that owned them is gone — so they would sit on the lock screen
+    /// showing a stale position, and a recovered walk would put a second card
+    /// beside them. Called once at launch, before any walk can start.
+    static func endLeftovers() async {
+        for activity in Activity<TrailCardAttributes>.activities where !startedHere.contains(activity.id) {
+            await activity.end(nil, dismissalPolicy: .immediate)
+        }
+    }
+
+    /// Cards this run of the app started, which are not leftovers whenever
+    /// the launch-time sweep happens to get round to running.
+    private static var startedHere: Set<String> = []
 
     func end() {
         guard let activity else { return }
