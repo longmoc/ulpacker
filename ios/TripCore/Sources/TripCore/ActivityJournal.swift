@@ -65,19 +65,26 @@ public struct ActivityJournal: Sendable {
         public let joined: Bool?
         /// The walker had reached the end of the route.
         public let reachedFinish: Bool?
+        /// The walk was paused. A paused app stops receiving locations, so iOS
+        /// is free to end it, and a walk reopened after that used to come back
+        /// recording — GPS on, in a pocket, through the rest of a lunch or a
+        /// night. Optional: cursors written before it existed decode nil.
+        public let paused: Bool?
 
         public init(
             walkedM: Double,
             acceptedRouteM: Double?,
             lastUsableFix: ActivityPackage.Fix?,
             joined: Bool? = nil,
-            reachedFinish: Bool? = nil
+            reachedFinish: Bool? = nil,
+            paused: Bool? = nil
         ) {
             self.walkedM = walkedM
             self.acceptedRouteM = acceptedRouteM
             self.lastUsableFix = lastUsableFix
             self.joined = joined
             self.reachedFinish = reachedFinish
+            self.paused = paused
         }
     }
 

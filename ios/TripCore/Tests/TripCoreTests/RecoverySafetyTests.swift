@@ -90,6 +90,44 @@ struct RecoverySafetyTests {
         #expect(resumed.state == .recording)
     }
 
+    // MARK: - A paused walk stays paused
+
+    @Test func aWalkPausedWhenTheAppWasEndedComesBackPaused() throws {
+        let root = try Self.makeRoot()
+        let (package, index) = try RecordingSessionTests.tmb()
+        let points = package.plannedRoute.segments[0].points
+
+        // Flushed long before the pause, so the pause itself has no new fixes
+        // to write — the case where the cursor used to be left saying nothing.
+        let first = try RecordingSessionTests.start(
+            root: root, package: package, index: index,
+            configuration: .init(flushEveryFixes: 2, flushInterval: 3600)
+        )
+        try RecordingSessionTests.walk(first, points: points, from: 300, count: 6)
+        try first.pause()
+
+        let resumed = try RecordingSession.resume(
+            journal: try #require(try ActivityJournal.pendingSessions(in: root).first),
+            package: package, index: index
+        )
+        #expect(resumed.state == .paused)
+
+        // Resuming it by hand clears the mark, so a later end of the app brings
+        // it back recording.
+        resumed.resumeRecording()
+        let again = try RecordingSession.resume(
+            journal: try #require(try ActivityJournal.pendingSessions(in: root).first),
+            package: package, index: index
+        )
+        #expect(again.state == .recording)
+    }
+
+    @Test func aCursorWrittenBeforePausesWereRecordedResumesRecording() throws {
+        let old = #"{"walkedM":120,"acceptedRouteM":400,"lastUsableFix":null,"joined":true,"reachedFinish":false}"#
+        let cursor = try JSONDecoder().decode(ActivityJournal.Cursor.self, from: Data(old.utf8))
+        #expect(cursor.paused == nil)
+    }
+
     // MARK: - Cursor recovery (issue 2.4)
 
     @Test func walkedDistanceAndPositionSurviveACrash() throws {

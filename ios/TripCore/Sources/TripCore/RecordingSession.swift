@@ -262,6 +262,7 @@ public final class RecordingSession {
             lastUsableFix = cursor.lastUsableFix
             if cursor.joined == true { monitor.markJoined() }
             reachedFinish = cursor.reachedFinish ?? false
+            if cursor.paused == true { state = .paused }
             wrongWayAnchorM = cursor.acceptedRouteM
             if let routeM = cursor.acceptedRouteM, let last = cursor.lastUsableFix {
                 matcher.seed(routeDistanceM: routeM, at: last.t, lat: last.lat, lng: last.lng)
@@ -543,16 +544,22 @@ public final class RecordingSession {
         lastFlushAt = time
 
         // Written after the fixes it summarises, so the cursor never points past
-        // what is on disk. Best-effort: a failed cursor write must not fail the
-        // flush that already saved the fixes — recovery falls back to the
-        // nearest-point guess, which is strictly worse but still safe.
+        // what is on disk.
+        writeCursor()
+    }
+
+    /// Best-effort: a failed cursor write must not fail the flush that already
+    /// saved the fixes — recovery falls back to the nearest-point guess, which
+    /// is strictly worse but still safe.
+    private func writeCursor() {
         try? journal.writeCursor(
             .init(
                 walkedM: walkedM,
                 acceptedRouteM: matcher.currentRouteDistanceM,
                 lastUsableFix: lastUsableFix,
                 joined: monitor.hasJoined,
-                reachedFinish: reachedFinish
+                reachedFinish: reachedFinish,
+                paused: state == .paused
             )
         )
     }
@@ -563,11 +570,15 @@ public final class RecordingSession {
         guard state == .recording else { return }
         try flush()
         state = .paused
+        // Written outright: `flush` skips the cursor when there were no new
+        // fixes, and the pause itself is what must survive the app being ended.
+        writeCursor()
     }
 
     public func resumeRecording() {
         guard state == .paused else { return }
         state = .recording
+        writeCursor()
 
         // The off-route judgement starts again — a deviation from before lunch
         // says nothing about now, and replaying it would alert about something

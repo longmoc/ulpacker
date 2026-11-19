@@ -148,13 +148,25 @@ final class TrailRecorder {
     /// is left on disk untouched, never forced onto the wrong route.
     func resumeCrashedSession(_ journal: ActivityJournal) {
         do {
-            session = try RecordingSession.resume(
+            let session = try RecordingSession.resume(
                 journal: journal, package: package, index: index, configuration: configuration
             )
+            self.session = session
             notifier.requestAuthorization()
-            PowerMonitor.shared.start()
             pace = PaceTracker()
-            recordPower(force: true)
+            // Paused when the app was ended: it comes back paused, GPS off, and
+            // the walker resumes it — a recovery is not a reason to start
+            // recording through the rest of a lunch or a night.
+            if session.state == .paused {
+                status = .paused
+                showCardIfWanted()
+                return
+            }
+            PowerMonitor.shared.start()
+            // A boundary, as on resuming a pause: the app was not running
+            // between the last reading and this one, so that stretch is not
+            // recording and must not be charged to it.
+            recordPower(force: true, boundary: true)
             location.startUpdates()
             startFreshnessTimer()
             status = .recording
