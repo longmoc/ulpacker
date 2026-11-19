@@ -35,6 +35,9 @@ struct TrailInfoPanel: View {
 
     let package: TripPackage
     var routeDistanceM: Double?
+    /// Whether `routeDistanceM` is really where the walker is, rather than the
+    /// last place they had on a route they have since left.
+    var walkerOnRoute = true
     /// A checkpoint tapped on the map opens the panel on its note.
     @Binding var selected: TripPackage.Checkpoint?
     @Binding var detent: Detent
@@ -187,6 +190,11 @@ struct TrailInfoPanel: View {
         dayScope.flatMap { index in package.itinerary.first { $0.index == index } }
     }
 
+    private func origin(for checkpoint: TripPackage.Checkpoint) -> StopOrigin {
+        StopOrigin.make(for: checkpoint, walkerM: routeDistanceM, walkerOnRoute: walkerOnRoute,
+                        scopedDay: scopedDay, package: package)
+    }
+
     /// The route distances the chosen day covers, or nil for the whole trip.
     var scopeRange: ClosedRange<Double>? {
         guard let day = scopedDay else { return nil }
@@ -267,7 +275,7 @@ struct TrailInfoPanel: View {
                     moving: $movingPoint,
                     snapsToStops: $snapsToStops,
                     zoom: $profileZoom,
-                    from: routeDistanceM,
+                    from: walkerOnRoute ? routeDistanceM : nil,
                     onClear: {
                         pointA = nil
                         pointB = nil
@@ -308,7 +316,7 @@ struct TrailInfoPanel: View {
                             } label: {
                                 CheckpointRow(
                                     checkpoint: checkpoint,
-                                    from: routeDistanceM,
+                                    origin: origin(for: checkpoint),
                                     isOpen: selected?.id == checkpoint.id
                                 )
                             }
@@ -316,7 +324,7 @@ struct TrailInfoPanel: View {
 
                             if selected?.id == checkpoint.id {
                                 CheckpointDetail(
-                                    checkpoint: checkpoint, package: package, from: routeDistanceM
+                                    checkpoint: checkpoint, package: package, origin: origin(for: checkpoint)
                                 )
                             }
                             Divider().padding(.leading, 54)
@@ -464,7 +472,7 @@ struct TrailInfoPanel: View {
 
 private struct CheckpointRow: View {
     let checkpoint: TripPackage.Checkpoint
-    let from: Double?
+    let origin: StopOrigin
     var isOpen = false
 
     var body: some View {
@@ -492,15 +500,23 @@ private struct CheckpointRow: View {
                 .foregroundStyle(Color.subtle)
             }
             Spacer(minLength: 8)
-            if let from {
-                let distance = Double(checkpoint.routeDistanceM) - from
+            let distance = Double(checkpoint.routeDistanceM) - origin.routeM
+            switch origin {
+            case .walker, .leftRoute:
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text(String(format: "%.2f km", distance / 1000))
+                    Text((origin.isApproximate ? "≈ " : "") + String(format: "%.2f km", distance / 1000))
                         .font(.subheadline.weight(.semibold).monospacedDigit())
                     Text(estimate(distance)).font(.caption2).foregroundStyle(Color.subtle)
                 }
-            } else {
-                Text(String(format: "%.1f km", Double(checkpoint.routeDistanceM) / 1000))
+            case .dayStart(let number, _):
+                // Into its own day: where it falls in the day being planned.
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text(String(format: "%.1f km", distance / 1000))
+                        .font(.subheadline.monospacedDigit())
+                    Text("day \(number)").font(.caption2).foregroundStyle(Color.subtle)
+                }
+            case .tripStart:
+                Text(String(format: "km %.1f", distance / 1000))
                     .font(.subheadline.monospacedDigit())
                     .foregroundStyle(Color.subtle)
             }
@@ -528,13 +544,13 @@ private struct CheckpointRow: View {
 private struct CheckpointDetail: View {
     let checkpoint: TripPackage.Checkpoint
     let package: TripPackage
-    let from: Double?
+    let origin: StopOrigin
 
     /// What it takes to get there from where the walker is now — or, before the
-    /// walk starts, from the beginning of the route.
+    /// walk starts, from the start of the stop's day.
     private var leg: RouteProfile.Leg {
         RouteProfiles.profile(for: package)
-            .leg(fromRouteM: from ?? 0, toRouteM: Double(checkpoint.routeDistanceM))
+            .leg(fromRouteM: origin.routeM, toRouteM: Double(checkpoint.routeDistanceM))
     }
 
     var body: some View {
@@ -584,7 +600,7 @@ private struct CheckpointDetail: View {
             // Below the numbers rather than tucked into a corner of them: put
             // anywhere inside the box it lands on top of the climb figure,
             // which is the one number that runs long.
-            Text(origin)
+            Text(originText)
                 .font(.caption2)
                 .foregroundStyle(Color.subtle)
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -594,9 +610,9 @@ private struct CheckpointDetail: View {
     /// Where the numbers are measured from. Never left implicit: "4.2 km" means
     /// two different things before and after the walk starts, and a stop behind
     /// you is a different answer again.
-    private var origin: String {
-        if leg.isBehind { return "walking back from here" }
-        return from == nil ? "from the start of the route" : "from where you are"
+    private var originText: String {
+        if leg.isBehind { return origin.isApproximate ? "walking back — approximate" : "walking back from here" }
+        return origin.description
     }
 
     private func legStat(_ title: String, _ value: String) -> some View {

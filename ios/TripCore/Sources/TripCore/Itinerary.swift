@@ -73,6 +73,23 @@ public enum Itinerary {
         return entries
     }
 
+    /// The walking day a route position belongs to, with its number as the
+    /// trip list shows it. A position exactly on a boundary — the refuge where
+    /// one day ends and the next begins — belongs to the day that ends there:
+    /// it is where that day is walked to. Nil for a trip with no days.
+    public static func walkingDay(
+        containing routeM: Double, in package: TripPackage
+    ) -> (day: TripPackage.Day, number: Int)? {
+        let days = combined(package).compactMap { entry -> (TripPackage.Day, Int)? in
+            if case let .walking(day, number) = entry { return (day, number) }
+            return nil
+        }
+        guard let first = days.first else { return nil }
+        if routeM <= Double(first.0.startRouteM) { return first }
+        return days.first { routeM > Double($0.0.startRouteM) && routeM <= Double($0.0.endRouteM) }
+            ?? days.last
+    }
+
     /// How many days the walker is actually on the trail — the number that
     /// matters for food and fuel, as distinct from the length of the trip.
     public static func walkingDayCount(_ package: TripPackage) -> Int {

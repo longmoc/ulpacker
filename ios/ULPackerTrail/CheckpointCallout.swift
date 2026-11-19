@@ -15,7 +15,7 @@ struct CheckpointCallout: View {
     let checkpoint: TripPackage.Checkpoint
     /// Where the pin is on screen, so the bubble can point at it.
     let anchor: CGPoint
-    let from: Double?
+    let origin: StopOrigin
     let onOpenDetails: () -> Void
     let onDismiss: () -> Void
 
@@ -110,17 +110,20 @@ struct CheckpointCallout: View {
     private var subtitle: String {
         var parts = [checkpoint.checkpointKind.label]
         if let ele = checkpoint.ele { parts.append("\(ele) m") }
-        if let from {
-            let distance = Double(checkpoint.routeDistanceM) - from
-            // "2.4 km ahead" is the useful form while walking; the absolute
-            // route position only helps when planning.
+        let distance = Double(checkpoint.routeDistanceM) - origin.routeM
+        switch origin {
+        case .walker, .leftRoute:
+            // "2.4 km ahead" is the useful form while walking.
+            let approx = origin.isApproximate ? "≈ " : ""
             parts.append(
                 distance >= 0
-                    ? String(format: "%.2f km ahead", distance / 1000)
-                    : String(format: "%.2f km behind", -distance / 1000)
+                    ? approx + String(format: "%.2f km ahead", distance / 1000)
+                    : approx + String(format: "%.2f km behind", -distance / 1000)
             )
-        } else {
-            parts.append(String(format: "km %.1f", Double(checkpoint.routeDistanceM) / 1000))
+        case .dayStart(let number, _):
+            parts.append(String(format: "day \(number), km %.1f", distance / 1000))
+        case .tripStart:
+            parts.append(String(format: "km %.1f", distance / 1000))
         }
         return parts.joined(separator: " · ")
     }

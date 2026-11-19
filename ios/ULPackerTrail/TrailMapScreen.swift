@@ -193,7 +193,12 @@ struct TrailMapScreen: View {
                 CheckpointCallout(
                     checkpoint: callout.checkpoint,
                     anchor: callout.at,
-                    from: recorder.progress?.routeDistanceM,
+                    origin: StopOrigin.make(
+                        for: callout.checkpoint, walkerM: recorder.progress?.routeDistanceM,
+                        walkerOnRoute: isOnRoute(recorder),
+                        scopedDay: dayScope.flatMap { index in package.itinerary.first { $0.index == index } },
+                        package: package
+                    ),
                     onOpenDetails: {
                         selectedCheckpoint = callout.checkpoint
                         panelTab = .stops
@@ -211,6 +216,7 @@ struct TrailMapScreen: View {
             TrailInfoPanel(
                 package: package,
                 routeDistanceM: recorder.progress?.routeDistanceM,
+                walkerOnRoute: isOnRoute(recorder),
                 selected: $selectedCheckpoint,
                 detent: $panelDetent,
                 tab: $panelTab,

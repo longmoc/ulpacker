@@ -152,4 +152,26 @@ struct ItineraryTests {
         let zermattStart = try #require(entries.firstIndex { $0.title == "Travel to Zermatt" })
         #expect(entries[zermattStart + 3].isWalking)
     }
+
+    // MARK: - The day a position belongs to
+
+    @Test func aPositionBelongsToTheDayItIsWalkedOn() throws {
+        let package = try RouteProfileTests.package("tmb-ccw")
+        let day2 = try #require(Itinerary.walkingDay(containing: 20_000, in: package))
+        #expect(day2.day.startRouteM == 18_903)
+        #expect(day2.number == 2)
+    }
+
+    @Test func theRefugeBetweenTwoDaysBelongsToTheDayThatEndsThere() throws {
+        let package = try RouteProfileTests.package("tmb-ccw")
+        let boundary = Double(package.itinerary[0].endRouteM)
+        #expect(Itinerary.walkingDay(containing: boundary, in: package)?.number == 1)
+        #expect(Itinerary.walkingDay(containing: 0, in: package)?.number == 1)
+        #expect(Itinerary.walkingDay(containing: 1e9, in: package)?.day.index == package.itinerary.last?.index)
+    }
+
+    @Test func aTripWithNoDaysHasNoDayToBelongTo() throws {
+        let package = try RouteProfileTests.package(elevations: [100, 100, 100])
+        #expect(Itinerary.walkingDay(containing: 1, in: package) == nil)
+    }
 }
