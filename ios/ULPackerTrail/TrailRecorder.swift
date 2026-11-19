@@ -347,6 +347,12 @@ final class TrailRecorder {
         if UIApplication.shared.applicationState != .background { progress = update }
     }
 
+    /// The walking screen is showing, with the app in front. See
+    /// `LocationProvider.watched`.
+    func setWatched(_ on: Bool) {
+        location.watched = on
+    }
+
     /// The app has come forward: catch the screen up with the walk, and bring
     /// back the card if the system ended it.
     func showLatestProgress() {

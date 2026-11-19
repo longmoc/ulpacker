@@ -1153,37 +1153,91 @@ struct RouteMapView: UIViewRepresentable {
         /// a walker actually experiences as "the map is pointing my way".
         private static let courseChangeThreshold = 20.0
 
-        func updatePosition(_ coordinate: CLLocationCoordinate2D?, mode: FollowMode) {
-            guard didAddRoute,
-                  let style = mapView?.style,
-                  let source = style.source(withIdentifier: Self.positionSourceID) as? MLNShapeSource
-            else { return }
+        // MARK: Marker glide
+        //
+        // A fix lands every few seconds; a marker that hops there reads as a
+        // stutter, the more so beside a camera that eases over 0.45 s. It
+        // slides instead, over the same 0.45 s, so it stays under the centre
+        // the camera is easing to. A frame clock runs only for those 0.45 s —
+        // about 14 frames at 30 Hz per fix — and never with the screen off,
+        // where no fix reaches this view at all.
 
-            guard let coordinate else {
-                source.shape = nil
+        private static let glideSeconds = 0.45
+        /// Further than this is a jump — a resumed walk, a recentre, a fix
+        /// after a tunnel — and sliding across it would draw a path not walked.
+        private static let glideMaxM = 200.0
+
+        /// Where the marker is drawn now, mid-glide included.
+        private var shownAt: CLLocationCoordinate2D?
+        private var glideFrom: CLLocationCoordinate2D?
+        private var glideTo: CLLocationCoordinate2D?
+        private var glideStart: CFTimeInterval = 0
+        private var glideClock: CADisplayLink?
+        private var markerBearing = 0.0
+        private var tetherEnd: CLLocationCoordinate2D?
+
+        private func glideMarker(to target: CLLocationCoordinate2D) {
+            // SwiftUI redraws this view for reasons of its own; the same fix
+            // again must not restart a glide already under way.
+            if let glideTo, abs(glideTo.latitude - target.latitude) < 1e-9,
+               abs(glideTo.longitude - target.longitude) < 1e-9 {
+                if glideClock == nil { drawMarker(at: target) }
                 return
             }
+            glideTo = target
+            guard let from = shownAt,
+                  CLLocation(latitude: from.latitude, longitude: from.longitude)
+                    .distance(from: CLLocation(latitude: target.latitude, longitude: target.longitude))
+                    <= Self.glideMaxM
+            else {
+                stopGlide()
+                drawMarker(at: target)
+                return
+            }
+            glideFrom = from
+            glideStart = CACurrentMediaTime()
+            if glideClock == nil {
+                let clock = CADisplayLink(target: GlideTicker(self), selector: #selector(GlideTicker.tick))
+                clock.preferredFrameRateRange = CAFrameRateRange(minimum: 20, maximum: 30, preferred: 30)
+                clock.add(to: .main, forMode: .common)
+                glideClock = clock
+            }
+            drawMarker(at: from)
+        }
+
+        fileprivate func glideTick() {
+            guard let from = glideFrom, let to = glideTo else { stopGlide(); return }
+            let t = min(1, (CACurrentMediaTime() - glideStart) / Self.glideSeconds)
+            // Ease in and out, as the camera does, so the two arrive together.
+            let e = t * t * (3 - 2 * t)
+            drawMarker(at: CLLocationCoordinate2D(
+                latitude: from.latitude + (to.latitude - from.latitude) * e,
+                longitude: from.longitude + (to.longitude - from.longitude) * e
+            ))
+            if t >= 1 { stopGlide() }
+        }
+
+        private func stopGlide() {
+            glideClock?.invalidate()
+            glideClock = nil
+            glideFrom = nil
+        }
+
+        private func drawMarker(at coordinate: CLLocationCoordinate2D) {
+            shownAt = coordinate
+            guard let style = mapView?.style,
+                  let source = style.source(withIdentifier: Self.positionSourceID) as? MLNShapeSource
+            else { stopGlide(); return }
             let feature = MLNPointFeature()
             feature.coordinate = coordinate
-            // The walker's own heading first. The route's direction is a
-            // reasonable guess only while standing on the route; a step off it
-            // and an arrow aligned to a line you are not on points at nothing.
-            let bearing = parent.courseDegrees
-                ?? parent.routeDistanceM.flatMap { bearingAlongRoute(at: $0) }
-            feature.attributes = ["bearing": bearing ?? 0]
+            feature.attributes = ["bearing": markerBearing]
             source.shape = feature
-
-            // One marker, not two. An arrow when the route says which way to
-            // face, a plain dot when it does not — both at once read as clutter
-            // and neither is clearer for it.
-            style.layer(withIdentifier: "position-dot")?.isVisible = bearing == nil
-            style.layer(withIdentifier: "position-heading")?.isVisible = bearing != nil
 
             // A tether to the matched point. Now that the marker sits where the
             // receiver says, "Off line 17 m" is a gap you can see; without the
             // line it is a marker floating in a field for no stated reason.
             if let tether = style.source(withIdentifier: "position-tether") as? MLNShapeSource {
-                if let snapped = parent.snappedTo {
+                if let snapped = tetherEnd {
                     let points = [coordinate, snapped]
                     tether.shape = MLNPolylineFeature(
                         coordinates: points, count: UInt(points.count)
@@ -1192,6 +1246,39 @@ struct RouteMapView: UIViewRepresentable {
                     tether.shape = nil
                 }
             }
+        }
+
+        deinit { glideClock?.invalidate() }
+
+        func updatePosition(_ coordinate: CLLocationCoordinate2D?, mode: FollowMode) {
+            guard didAddRoute,
+                  let style = mapView?.style,
+                  let source = style.source(withIdentifier: Self.positionSourceID) as? MLNShapeSource
+            else { return }
+
+            guard let coordinate else {
+                stopGlide()
+                shownAt = nil
+                glideTo = nil
+                source.shape = nil
+                (style.source(withIdentifier: "position-tether") as? MLNShapeSource)?.shape = nil
+                return
+            }
+            // The walker's own heading first. The route's direction is a
+            // reasonable guess only while standing on the route; a step off it
+            // and an arrow aligned to a line you are not on points at nothing.
+            let bearing = parent.courseDegrees
+                ?? parent.routeDistanceM.flatMap { bearingAlongRoute(at: $0) }
+            markerBearing = bearing ?? 0
+            tetherEnd = parent.snappedTo
+
+            // One marker, not two. An arrow when the route says which way to
+            // face, a plain dot when it does not — both at once read as clutter
+            // and neither is clearer for it.
+            style.layer(withIdentifier: "position-dot")?.isVisible = bearing == nil
+            style.layer(withIdentifier: "position-heading")?.isVisible = bearing != nil
+
+            glideMarker(to: coordinate)
 
             guard mode != .free, let mapView else { return }
             // Hands off while the walker is looking somewhere on purpose.
@@ -1335,5 +1422,16 @@ struct RouteMapView: UIViewRepresentable {
                 animated: false
             )
         }
+    }
+}
+
+/// The frame clock holds its target strongly; this keeps it from holding the
+/// map's coordinator alive after the screen has gone.
+private final class GlideTicker: NSObject {
+    weak var owner: RouteMapView.Coordinator?
+    init(_ owner: RouteMapView.Coordinator) { self.owner = owner }
+    @objc func tick(_ link: CADisplayLink) {
+        guard let owner else { link.invalidate(); return }
+        owner.glideTick()
     }
 }

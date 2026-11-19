@@ -32,6 +32,19 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
 
     private let manager = CLLocationManager()
     private var distanceFilterM: Double = 15
+    /// Finer, while the walker is looking at the walking screen.
+    static let watchedDistanceFilterM = 5.0
+    /// The walking screen is in front of the walker. Its moments are the ones
+    /// that decide a fork, and the screen is lit anyway — by far the larger
+    /// cost — so the position may as well keep up: a fix every ~4 s at a walk
+    /// rather than ~11 s. The receiver is already at full accuracy either way;
+    /// what changes is how often it reports. Back to the plain filter the
+    /// moment the screen leaves.
+    var watched = false {
+        didSet { if watched != oldValue, !probing { manager.distanceFilter = effectiveDistanceFilterM } }
+    }
+
+    private var effectiveDistanceFilterM: Double { watched ? Self.watchedDistanceFilterM : distanceFilterM }
     /// A one-fix probe is in flight: the distance filter is off until the next
     /// fix arrives, then goes straight back.
     private var probing = false
@@ -45,6 +58,8 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
 
     /// The configuration actually in force, recorded into each activity so a
     /// field-test result can be traced to a setup rather than to a memory.
+    /// The distance filter is the walk's own, not the finer one used while the
+    /// walking screen is watched, which comes and goes.
     var nativeConfig: ActivityPackageConfig {
         ActivityPackageConfig(
             desiredAccuracy: "kCLLocationAccuracyBest",
@@ -67,7 +82,7 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
         // Distance rather than time: the OS then coalesces fixes at a low power
         // level and only wakes this process when the walker has actually moved.
         // At 15 m and walking pace that is roughly one callback every 13 s.
-        manager.distanceFilter = distanceFilterM
+        manager.distanceFilter = effectiveDistanceFilterM
 
         // Tells the OS this is human-powered movement, which is what lets it
         // choose sensible sensor duty cycles rather than assuming a vehicle.
@@ -81,7 +96,7 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
 
     func setDistanceFilter(_ metres: Double) {
         distanceFilterM = metres
-        manager.distanceFilter = metres
+        if !probing { manager.distanceFilter = effectiveDistanceFilterM }
     }
 
     // MARK: - Authorization
@@ -151,7 +166,7 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
     private func endProbe() {
         guard probing else { return }
         probing = false
-        manager.distanceFilter = distanceFilterM
+        manager.distanceFilter = effectiveDistanceFilterM
     }
 
     // MARK: - CLLocationManagerDelegate

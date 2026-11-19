@@ -22,6 +22,8 @@ struct TrailMapScreen: View {
     /// Shown when the back button is pressed mid-walk: the recording keeps going
     /// in the background, and leaving is a decision worth making on purpose.
     @State private var confirmingLeave = false
+    /// This screen is the one showing, for the finer GPS while it is watched.
+    @State private var onScreen = false
     /// The unfinished walk the walker has asked to throw away, pending a yes.
     @State private var discarding: ActivityJournal?
     /// Whether a real basemap is available for this trip. Resolved once on
@@ -63,9 +65,15 @@ struct TrailMapScreen: View {
                 if autoStart, !resolved.isActive { resolved.start() }
             }
             basemapMissing = !RouteMapView.hasUsablePack(for: package)
+            onScreen = true
+            recorder?.setWatched(scenePhase == .active)
             #if DEBUG
             applyScriptedAction()
             #endif
+        }
+        .onDisappear {
+            onScreen = false
+            recorder?.setWatched(false)
         }
     }
 
@@ -123,6 +131,9 @@ struct TrailMapScreen: View {
             if phase == .background || phase == .inactive {
                 coordinator.flushForBackgrounding()
             }
+            // Watched only while it is in front: locked, or another app up,
+            // and the GPS goes back to its walking pace.
+            recorder.setWatched(onScreen && phase == .active)
         }
         .alert("Off route", isPresented: offRouteBinding(recorder)) {
             Button("OK") { recorder.clearOffRouteAlert() }
