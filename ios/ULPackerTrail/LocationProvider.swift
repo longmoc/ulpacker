@@ -140,7 +140,8 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
     /// and the filter goes back on at once. A dead one never answers; the
     /// filter then stays off until the sky returns, and the first fix back
     /// restores it. Either way the cost is one fix per probe, and the app only
-    /// probes after a minute of silence with the screen on.
+    /// probes after a minute of silence — screen on or off: standing still in
+    /// a pocket is exactly when a dead receiver would otherwise go unnoticed.
     func probe() {
         guard isUpdating, !probing else { return }
         probing = true
