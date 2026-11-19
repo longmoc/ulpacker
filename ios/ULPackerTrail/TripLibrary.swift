@@ -124,6 +124,28 @@ final class TripLibrary {
         return package
     }
 
+    /// Remove a trip from this phone, with its offline maps. Its recorded walks
+    /// stay: they are the walker's, not the route's, and re-adding the trip
+    /// brings them back into view.
+    ///
+    /// Every file carrying the trip's id goes, whatever it is called — older
+    /// ones were named after the export, not the id.
+    func delete(_ package: TripPackage) {
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: Self.tripsDirectory, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        )) ?? []
+        for file in files where file.lastPathComponent.hasSuffix(".trippackage.json") {
+            guard let data = try? Data(contentsOf: file),
+                  let found = try? TripPackage.decode(from: data),
+                  found.tripId == package.tripId else { continue }
+            try? FileManager.default.removeItem(at: file)
+        }
+        for pack in OfflinePack.installed(in: RouteMapView.packsRoot, tripId: package.tripId) {
+            try? FileManager.default.removeItem(at: pack.directory)
+        }
+        load()
+    }
+
     private static func bundledPackages() throws -> [TripPackage] {
         let bundled = Bundle.main.urls(forResourcesWithExtension: "json", subdirectory: nil) ?? []
         let imported = (try? FileManager.default.contentsOfDirectory(

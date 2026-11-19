@@ -6,6 +6,7 @@ struct TripListView: View {
     let library: TripLibrary
     @Environment(ActiveSessionCoordinator.self) private var coordinator
     @State private var choosingFile = false
+    @State private var deleting: TripPackage?
 
     var body: some View {
         Group {
@@ -40,6 +41,16 @@ struct TripListView: View {
                             } label: {
                                 TripRow(package: package)
                             }
+                            .swipeActions(edge: .trailing) {
+                                // Not a trip with a walk on it: deleting the
+                                // route would orphan the walk it is the only
+                                // way to continue.
+                                if !hasWalk(on: package) {
+                                    Button(role: .destructive) { deleting = package } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
+                            }
                         }
                     } header: {
                         if InProgressWalk.current(coordinator) != nil { Text("Trips") }
@@ -48,6 +59,17 @@ struct TripListView: View {
             }
         }
         .navigationTitle("Trips")
+        .confirmationDialog(
+            deleting.map { "Delete \($0.trip.name)?" } ?? "",
+            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+            titleVisibility: .visible,
+            presenting: deleting
+        ) { package in
+            Button("Delete trip", role: .destructive) { library.delete(package) }
+            Button("Keep it", role: .cancel) {}
+        } message: { _ in
+            Text("The trip and its offline map are removed from this phone. Walks recorded on it are kept, and come back if the trip is added again.")
+        }
         .toolbar {
             Button { choosingFile = true } label: {
                 Label("Add trip", systemImage: "plus")
@@ -87,6 +109,14 @@ struct TripListView: View {
         }
     }
 
+    private func hasWalk(on package: TripPackage) -> Bool {
+        if let recorder = coordinator.recorder, recorder.isActive, recorder.tripId == package.tripId { return true }
+        switch coordinator.unfinished {
+        case .resumable(_, let walkPackage): return walkPackage.tripId == package.tripId
+        default: return false
+        }
+    }
+
     private var importAlert: Binding<TripLibrary.ImportResult?> {
         Binding(get: { library.lastImport }, set: { library.lastImport = $0 })
     }
@@ -98,21 +128,39 @@ private struct TripRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(package.trip.name).font(.headline)
-            Text(summary)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            // What tells two trips of the same name apart — two ways down Tây
+            // Côn Lĩnh — and what the trip is, in the planner's own words.
+            if !package.trip.description.isEmpty {
+                Text(package.trip.description)
+                    .font(.footnote)
+                    .italic()
+                    .foregroundStyle(Color.subtle)
+                    .lineLimit(2)
+            }
+            HStack(spacing: 14) {
+                stat("point.topleft.down.to.point.bottomright.curvepath", String(format: "%.1f km", package.distanceKM))
+                stat("calendar", days)
+                stat("mappin", "\(package.checkpoints.count)")
+            }
+            .font(.caption)
+            .foregroundStyle(Color.subtle)
+            .padding(.top, 2)
         }
         .padding(.vertical, 2)
     }
 
-    // Built as a plain String: interpolating into `Text` directly would resolve
-    // to LocalizedStringKey, which cannot be concatenated.
-    private var summary: String {
-        [
-            String(format: "%.1f km", package.distanceKM),
-            "\(package.itinerary.count) days",
-            "\(package.checkpoints.count) checkpoints"
-        ].joined(separator: " · ")
+    // A plain String, not interpolated into `Text`, which would make it a
+    // LocalizedStringKey.
+    private var days: String {
+        let count = package.itinerary.count
+        return count == 1 ? "1 day" : "\(count) days"
+    }
+
+    private func stat(_ symbol: String, _ value: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol).imageScale(.small)
+            Text(value).monospacedDigit()
+        }
     }
 }
 
